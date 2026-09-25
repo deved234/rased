@@ -1,0 +1,75 @@
+{
+  "author": "RASED",
+  "build": {
+    "appId": "com.rased.app",
+    "asar": true,
+    "directories": {
+      "buildResources": "resources",
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "resources/*.png"
+    ],
+    "nsis": {
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "oneClick": false,
+      "perMachine": false,
+      "shortcutName": "RASED"
+    },
+    "productName": "RASED",
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "nsis"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "description": "RASED (راصد) — local Windows watcher for new Mostaql projects over RSS. No cloud backend, no accounts.",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.1.2",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "eslint": "10.11.0",
+    "fast-xml-parser": "5.11.1",
+    "globals": "17.12.0",
+    "png-to-ico": "3.0.2",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.70.1",
+    "vite": "7.3.6",
+    "vitest": "5.0.2"
+  },
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "name": "rased",
+  "private": true,
+  "scripts": {
+    "build": "electron-vite build",
+    "dev": "electron-vite dev",
+    "dist": "npm run build && electron-builder --win nsis",
+    "icons": "node scripts/generate-icons.mjs",
+    "lint": "eslint src tests scripts electron.vite.config.ts",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+  },
+  "version": "0.1.1"
+}

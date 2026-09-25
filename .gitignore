@@ -1,0 +1,28 @@
+# RASED — never commit these
+node_modules/
+out/
+release/
+dist/
+*.log
+.DS_Store
+Thumbs.db
+# user runtime data (SQLite) must never be committed or shipped
+*.db
+*.db-*
+# vitest cache
+coverage/
+# local notes
+*.local.*
+# credentials and editor-specific state
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+# captured third-party pages and experimental research are not app source
+research/
+# internal handoff prompts and historical local build logs
+CLAUDE_REVIEW_PROMPT.md
+MUSE_SPARK_IMPLEMENTATION_PROMPT.md
+IMPLEMENTATION_REPORT.md
+IMPLEMENTATION_STATUS.md

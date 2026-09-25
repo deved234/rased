@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+  <channel>
+    <title>مستقل</title>
+    <link>https://mostaql.com/rss</link>
+    <description>test fixture</description>
+    <item>
+      <title>تطوير لوحة تحكم لمتجر إلكتروني</title>
+      <link>https://mostaql.com/go/1280144</link>
+      <description>مطلوب مطوّر لبناء لوحة تحكم واضحة وسهلة الاستخدام باستخدام React.</description>
+      <pubDate>Thu, 24 Sep 2026 13:29:11 +0000</pubDate>
+    </item>
+    <item>
+      <title>تصميم هوية بصرية &amp; شعار</title>
+      <link>https://mostaql.com/go/1267419</link>
+      <description>نحتاج مصمم محترف &lt;قوي&gt; لإنشاء هوية بصرية.</description>
+      <pubDate>Thu, 24 Sep 2026 13:13:47 +0000</pubDate>
+    </item>
+    <item>
+      <title>مشروع بلا وصف ولا تاريخ</title>
+      <link>https://mostaql.com/go/100</link>
+    </item>
+  </channel>
+</rss>
