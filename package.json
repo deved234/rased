@@ -66,6 +66,7 @@
     "dist": "npm run build && electron-builder --win nsis",
     "icons": "node scripts/generate-icons.mjs",
     "lint": "eslint src tests scripts electron.vite.config.ts",
+    "predev": "node scripts/ensure-electron.mjs",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "test": "vitest run",

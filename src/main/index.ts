@@ -507,6 +507,22 @@ function iconPath(name: string): string {
   return join(app.getAppPath(), 'resources', name)
 }
 
+// Content-Security-Policy is set here per environment, not (only) via the
+// HTML meta tag. Production keeps the strict policy baked into index.html
+// (external .css/.js only). Development needs inline styles/scripts for
+// Vite's HMR + react-refresh preamble, so it gets a relaxed policy instead.
+function applyCspPolicy(): void {
+  const dev = !!process.env['ELECTRON_RENDERER_URL']
+  const policy = dev
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self';"
+    : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self';"
+  win?.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...(details.responseHeaders ?? {}), 'Content-Security-Policy': [policy] }
+    })
+  })
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1220,
@@ -523,11 +539,17 @@ function createWindow(): void {
       sandbox: true
     }
   })
+  applyCspPolicy()
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  // Bring the window forward on launch so it is not lost behind the IDE.
+  win.once('ready-to-show', () => {
+    win?.show()
+    win?.focus()
+  })
   win.on('close', (e) => {
     if (quitRequested || !tray) return
     e.preventDefault()

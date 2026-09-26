@@ -25,6 +25,8 @@ npm ci
 npm run dev
 ```
 
+`npm run dev` يفتح نافذة Electron مستقلة (مش تبويب في المتصفح). لو ملف Electron التنفيذي ناقص بعد تثبيت المكتبات، الأمر يحمّله تلقائيًا قبل فتح النافذة؛ أول تشغيل قد يأخذ وقتًا أطول. الرابط `localhost:5173` الذي يظهر في الـTerminal هو خادم واجهة React الداخلي.
+
 أوامر الفحص والبناء:
 
 ```powershell
@@ -56,3 +58,5 @@ RASED is a local Windows app that watches the public [Mostaql](https://mostaql.c
 Download the Windows x64 installer from [Releases](https://github.com/deved234/rased/releases/latest). Node.js and SQLite are **not** required for end users. The installer is currently unsigned, so verify its source and the SHA-256 above. The first successful fetch establishes a silent baseline; later projects can trigger notifications.
 
 To develop, install Node.js 24, clone this repository, run `npm ci`, then `npm run dev`. Run `npm run typecheck`, `npm run lint`, and `npm test` before contributing. `npm run dist` builds the installer locally. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT license](LICENSE).
+
+`npm run dev` opens an Electron desktop window. If the Electron executable is missing, the dev command downloads it before launching. The printed `localhost:5173` URL is the internal React development server.
