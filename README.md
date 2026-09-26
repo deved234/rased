@@ -8,7 +8,7 @@
 
 **الإصدار الحالي: [RASED 0.2.4](https://github.com/deved234/rased/releases/tag/v0.2.4)**. راجع [سجل التغييرات](CHANGELOG.md) و[ملاحظات الإصدار والتحقق](docs/RELEASE_0.2.4.md).
 
-حمّل **`RASED Setup 0.2.4.exe`** من [صفحة الإصدارات](https://github.com/deved234/rased/releases/latest) → **Assets** وشغّله على Windows x64. لا تختار Source code إن كنت تريد تشغيل التطبيق فقط. لا تحتاج تثبيت Node.js أو SQLite. المثبّت غير موقّع رقميًا حاليًا، ولذلك قد يظهر تحذير من Windows؛ تأكد من مصدر التحميل. بصمة SHA-256 للإصدار 0.2.4 (متاحة أيضًا في ملف `SHA256SUMS.txt` مع التحميل):
+حمّل **`RASED.Setup.0.2.4.exe`** من [صفحة الإصدارات](https://github.com/deved234/rased/releases/latest) → **Assets** وشغّله على Windows x64. لا تختار Source code إن كنت تريد تشغيل التطبيق فقط. لا تحتاج تثبيت Node.js أو SQLite. المثبّت غير موقّع رقميًا حاليًا، ولذلك قد يظهر تحذير من Windows؛ تأكد من مصدر التحميل. بصمة SHA-256 للإصدار 0.2.4 (متاحة أيضًا في ملف `SHA256SUMS.txt` مع التحميل):
 
 ```text
 77B9A7624C4B31F5E170937DD5C3EB0D12FC9902835B09E4E534795CEF7BDB7D
@@ -67,7 +67,7 @@ npm run dist
 
 RASED is a local Windows app that watches the public [Mostaql](https://mostaql.com/) RSS feed for new projects. It shows projects and alerts you; you submit proposals yourself in your browser. No server or app account is required.
 
-Download **RASED Setup 0.2.4.exe** under **Assets** in [Releases](https://github.com/deved234/rased/releases/latest), rather than the Source code archives. Node.js and SQLite are **not** required for end users. The installer is currently unsigned, so verify its source and the SHA-256 above or the downloadable checksum file. Quit RASED fully from the tray before upgrading. The first successful fetch establishes a silent baseline; later projects can trigger notifications. Clicking a project notification opens your default browser.
+Download **RASED.Setup.0.2.4.exe** under **Assets** in [Releases](https://github.com/deved234/rased/releases/latest), rather than the Source code archives. Node.js and SQLite are **not** required for end users. The installer is currently unsigned, so verify its source and the SHA-256 above or the downloadable checksum file. Quit RASED fully from the tray before upgrading. The first successful fetch establishes a silent baseline; later projects can trigger notifications. Clicking a project notification opens your default browser.
 
 To develop, install Node.js 24, clone this repository, run `npm ci`, then `npm run dev`. Run `npm run typecheck`, `npm run lint`, and `npm test` before contributing. `npm run dist` builds the installer locally. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT license](LICENSE).
 
