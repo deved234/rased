@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.6 — 2026-09-26
+
+- Windows project, summary and test notifications now use native HTTPS protocol activation. Clicking opens the default browser without depending on a retained Electron object or running RASED process. Existing notifications are unchanged.
+- Package a real PNG outside ASAR for native toast branding; validate destinations and escape XML text.
+- Protocol clicks do not reliably call back into RASED, so they no longer automatically mark projects read. In-app actions still do.
+- Add native XML regression tests and update integration checks to assert the payload instead of claiming a simulated callback proves a Windows click.
+
+
 ## 0.2.5 — 2026-09-26
 
 - Added in-app updates from public GitHub Releases using electron-updater and NSIS.

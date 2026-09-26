@@ -6,17 +6,17 @@
 
 ## تحميل التطبيق لأصحابك
 
-**الإصدار الحالي: [RASED 0.2.5](https://github.com/deved234/rased/releases/tag/v0.2.5)**. راجع [سجل التغييرات](CHANGELOG.md) و[ملاحظات الإصدار والتحقق](docs/RELEASE_0.2.5.md).
+**الإصدار الحالي: [RASED 0.2.6](https://github.com/deved234/rased/releases/tag/v0.2.6)**. راجع [سجل التغييرات](CHANGELOG.md) و[ملاحظات الإصدار والتحقق](docs/RELEASE_0.2.6.md).
 
-حمّل **`RASED-Setup-0.2.5.exe`** من [صفحة الإصدارات](https://github.com/deved234/rased/releases/latest) → **Assets** وشغّله على Windows x64. لا تختار Source code إن كنت تريد تشغيل التطبيق فقط. لا تحتاج تثبيت Node.js أو SQLite. المثبّت غير موقّع رقميًا حاليًا، ولذلك قد يظهر تحذير من Windows؛ تأكد من مصدر التحميل. بصمة SHA-256 متاحة في ملف `SHA256SUMS.txt` مع التحميل، ويمكن حسابها للمقارنة بالأمر:
+حمّل **`RASED-Setup-0.2.6.exe`** من [صفحة الإصدارات](https://github.com/deved234/rased/releases/latest) → **Assets** وشغّله على Windows x64. لا تختار Source code إن كنت تريد تشغيل التطبيق فقط. لا تحتاج تثبيت Node.js أو SQLite. المثبّت غير موقّع رقميًا حاليًا، ولذلك قد يظهر تحذير من Windows؛ تأكد من مصدر التحميل. بصمة SHA-256 متاحة في ملف `SHA256SUMS.txt` مع التحميل، ويمكن حسابها للمقارنة بالأمر:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.2.5.exe'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.2.6.exe'
 ```
 
 أول فحص ناجح يحفظ المشاريع الموجودة كنقطة بداية دون تنبيهات قديمة. بعده تظهر المشاريع الجديدة في القائمة ويُرسل تنبيه Windows بحسب الفلاتر التي تختارها. يمكن إغلاق النافذة مع استمرار المتابعة من أيقونة النظام، أو إيقافها من التطبيق. البيانات والإعدادات تُحفظ محليًا في `%APPDATA%\RASED\rased.db`.
 
-للتحديث، اخرج من راصد بالكامل من قائمة أيقونة النظام، ثم شغّل المثبت الجديد. لا تحذف مجلد البيانات. شاشة البداية تُعرض عند تشغيل العملية، وليس كل مرة تستعيد النافذة من أيقونة النظام. الضغط على إشعار مشروع يفتح المتصفح الافتراضي؛ اضغط بطاقة المشروع داخل راصد لعرض تفاصيله داخل التطبيق.
+للتحديث، اخرج من راصد بالكامل من قائمة أيقونة النظام، ثم شغّل المثبت الجديد. لا تحذف مجلد البيانات. شاشة البداية تُعرض عند تشغيل العملية، وليس كل مرة تستعيد النافذة من أيقونة النظام. من 0.2.6، الإشعارات الجديدة تحمل رابط HTTPS يفتحه Windows مباشرة في المتصفح الافتراضي، حتى من مركز الإشعارات بعد خروج راصد. الإشعارات القديمة لا تتغير؛ اضغط بطاقة المشروع داخل راصد لعرض تفاصيله داخل التطبيق.
 
 **التحديث من داخل البرنامج:** 0.2.5 أول نسخة تدعم الميزة. أصحاب 0.2.4 أو أقدم يحتاجون تثبيتها يدويًا مرة واحدة. بعدها راصد يفحص GitHub عند التشغيل وكل 6 ساعات، ويمكنك من **الإعدادات → تحديثات راصد** تحميل التحديث ومتابعة تقدّمه ثم إعادة التشغيل والتثبيت. لا تحميل أو تثبيت إجباري، ولا تثبيت بمجرد إغلاق البرنامج، مع حماية الملاحظات غير المحفوظة. [تفاصيل التحديث والنشر](docs/UPDATES.md).
 
@@ -69,7 +69,7 @@ npm run dist
 
 RASED is a local Windows app that watches the public [Mostaql](https://mostaql.com/) RSS feed for new projects. It shows projects and alerts you; you submit proposals yourself in your browser. No server or app account is required.
 
-Download **RASED-Setup-0.2.5.exe** under **Assets** in [Releases](https://github.com/deved234/rased/releases/latest), rather than the Source code archives. Node.js and SQLite are **not** required for end users. The installer is currently unsigned; verify its source and the downloadable SHA256SUMS.txt. Quit RASED fully from the tray before this initial upgrade. The first successful fetch establishes a silent baseline; later projects can trigger notifications. Clicking a project notification opens your default browser.
+Download **RASED-Setup-0.2.6.exe** under **Assets** in [Releases](https://github.com/deved234/rased/releases/latest), rather than the Source code archives. Node.js and SQLite are **not** required for end users. The installer is currently unsigned; verify its source and the downloadable SHA256SUMS.txt. Quit RASED fully from the tray before this initial upgrade. The first successful fetch establishes a silent baseline; later projects can trigger notifications. Clicking a project notification opens your default browser.
 
 0.2.5 adds in-app updates: Settings → RASED updates, then Download update and Restart and update. Checks run at startup and every 6 hours; download/install are explicit, with unsaved-note protection. Users coming from 0.2.4 or older need one manual install of this first updater-capable version. See the [update/release guide](docs/UPDATES.md).
 

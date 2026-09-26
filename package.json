@@ -47,6 +47,10 @@
       {
         "from": "resources/icon.ico",
         "to": "branding/icon.ico"
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "branding/icon.png"
       }
     ]
   },
@@ -97,5 +101,5 @@
     "release": "node scripts/publish-release.mjs",
     "test:update-install": "node scripts/test-update-install.mjs"
   },
-  "version": "0.2.5"
+  "version": "0.2.6"
 }

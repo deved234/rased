@@ -184,17 +184,17 @@ try {
   await ev('window.__events=[];window.rased.onProjectsChanged(e=>window.__events.push(e))'); writeRss([{title:'New matching project',external:'91000001'}]); await ev('window.rased.resume()')
   await wait('!!document.querySelector(".pill")').catch(async e=>{console.error('Arrival debug',await ev('JSON.stringify({events:window.__events,scroll:document.querySelector(".list-scroll").scrollTop,rows:Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row),text:document.body.innerText,settings:await window.rased.getSettings()})'));throw e}); await sleep(2700)
   check('new arrival/enrichment preserves loaded ids until reveal', JSON.stringify(visible)===JSON.stringify(await ev('Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row)')))
-  check('single toast click opens its original project in browser without in-app navigation', traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
+  check('single toast contains native browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="protocol" launch="https://mostaql.com/go/91000001"') && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
   await click('.', '.pill'); await wait('document.querySelector("[data-row] article").textContent.includes("New matching project")')
   check('arrival reveal fetches new row', true)
   await ev('window.rased.pause()')
-  // Summary click uses the actual main closure and opens one newest project.
+  // The real main dispatch supplies the newest URL to Windows protocol XML.
   const toastCount = traces().filter(t=>t.kind==='toast').length
   const summaryOpens = traces().filter(t=>t.kind==='open-external').length
   const items = Array.from({length:7},(_,i)=>({title:'Summary project '+i,external:String(92000001+i)}))
   writeRss(items); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===458)'); await ev('window.rased.pause()')
   const newToasts = traces().filter(t=>t.kind==='toast').slice(toastCount)
-  check('summary click opens newest persisted project once', newToasts.length===1 && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
+  check('summary native activation targets newest persisted project once', newToasts.length===1 && newToasts[0].data.toastXml.includes('activationType="protocol" launch="https://mostaql.com/go/92000007"') && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
   const mutedToasts = traces().filter(t=>t.kind==='toast').length
   await ev('window.rased.setDnd(new Date(Date.now()+60000).toISOString())'); writeRss([{title:'Muted project',external:'93000001'}]); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===459)'); await ev('window.rased.pause()')
   check('DND suppresses actual main dispatch while discovery continues', traces().filter(t=>t.kind==='toast').length===mutedToasts && db.prepare("SELECT COUNT(*) n FROM notification_events WHERE status='suppressed'").get().n>=1)

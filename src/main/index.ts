@@ -91,6 +91,7 @@ import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
+import { browserToastXml } from './toast.js'
 
 app.setAppUserModelId('com.rased.app')
 
@@ -235,11 +236,15 @@ function projectLine(p: { title: string }): string {
 // Keep native notification objects alive until Windows closes or activates them.
 const activeNotifications = new Set<Notification>()
 
-function showToast(title: string, body: string, onClick: () => void): Promise<boolean> {
+function showToast(title: string, body: string, onClick: () => void, url: string): Promise<boolean> {
+  const toastXml = process.platform === 'win32'
+    ? browserToastXml(title, body, url, app.isPackaged ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'))
+    : undefined
   if (testHarness) {
-    testHarness.record('toast', { title, body })
-    // Invoke the real registered click closure; never open a browser from tests.
-    onClick()
+    testHarness.record('toast', { title, body, toastXml })
+    // Simulate the OS protocol destination, not a native Windows mouse click.
+    if (toastXml) testHarness.record('open-external', url)
+    else onClick()
     return Promise.resolve(true)
   }
   return new Promise((resolve) => {
@@ -251,12 +256,21 @@ function showToast(title: string, body: string, onClick: () => void): Promise<bo
       }
     }
     try {
-      const n = new Notification({ title, body, silent: true, icon: iconPath('icon.png') })
+      const n = new Notification({ title, body, silent: true, icon: iconPath('icon.png'), toastXml })
       activeNotifications.add(n)
       n.on('show', () => finish(true))
-      n.on('failed', () => { activeNotifications.delete(n); finish(false) })
+      n.on('failed', (_event, error: string) => {
+        auditUi(`notification-failed ${String(error)}`)
+        activeNotifications.delete(n)
+        finish(false)
+      })
       n.on('close', () => activeNotifications.delete(n))
-      n.once('click', () => { activeNotifications.delete(n); onClick() })
+      n.once('click', () => {
+        activeNotifications.delete(n)
+        // Protocol activation opens the browser in Windows. Calling shell here
+        // as well would open a second tab; no instance callback is required.
+        if (!toastXml) onClick()
+      })
       n.show()
       setTimeout(() => finish(true), 2000)
     } catch {
@@ -277,7 +291,7 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
     void openProjectById(id, true, url).then(result => {
       if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
     })
-  })
+  }, url)
 }
 
 async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<boolean> {
@@ -305,7 +319,7 @@ async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<
     // Even a summary without a project id stays a browser action.
     if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
     else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch(err => auditUi(`summary-browser-failed ${String(err)}`))
-  })
+  }, latestUrl ?? MOSTAQL_PROJECTS_URL)
 }
 
 /** Tagged test toast. Opens the public projects listing; touches no project, event or read state. */
@@ -321,7 +335,7 @@ async function sendTestNotification(): Promise<{ ok: boolean }> {
       if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
       else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch(err => auditUi(`test-browser-failed ${String(err)}`))
     }
-  })
+  }, MOSTAQL_PROJECTS_URL)
   return { ok }
 }
 
