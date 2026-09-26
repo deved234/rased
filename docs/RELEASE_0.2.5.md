@@ -27,4 +27,6 @@ A separate, uniquely named QA application used RASED's update controller and the
 
 The installer remains unsigned: SHA512 validation checks download integrity, not publisher identity. Signature verification was not disabled; there is no signing publisher configured until a certificate is obtained. Interrupted installations, all Windows versions, UAC environments and upgrades with every possible user state have not been exhaustively tested. Future releases must include valid `latest.yml` and matching assets.
 
+After publication, the real packaged RASED app successfully checked the public GitHub feed in a fresh temporary profile, with no updater fixture: current version 0.2.5, no newer version, no error. GitHub CI passed; all four uploaded asset digests were verified before publication.
+
 SHA256 is provided in **SHA256SUMS.txt** under Assets. Source code ZIPs are for developers; end users should download the EXE. See [update guide](https://github.com/deved234/rased/blob/v0.2.5/docs/UPDATES.md).

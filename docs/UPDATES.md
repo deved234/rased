@@ -40,6 +40,8 @@ Fork maintainers must change `build.publish.owner/repo` and app identity intenti
 - A real local QA upgrade succeeded on 2026-09-26 in `C:\Users\DAVIDA~1\AppData\Local\Temp\rased-upgrade-qa-VzBBAO`: 1.0.0 → 1.0.1, real metadata/download/checksum/NSIS/relaunch and preserved SQLite note.
 - This does not prove every Windows version, recovery from power loss during installation, or a full production RASED upgrade via a future GitHub release. Packaged production checks cover the current feed when published; future metadata must remain correct.
 
+After publishing v0.2.5, the real packaged RASED app was launched without the integration harness in a new TEMP profile (`rased-test-sS2ZJP`). A manual check through the real IPC/NSIS updater read the public GitHub feed successfully: `phase=idle`, `currentVersion=0.2.5`, `checkedAt=2026-09-26T14:21:57.683Z`, `error=null`. No fixture or overridden feed was used. GitHub's EXE digest matched local SHA256 `B51A325F2A950ED9D16CCF6446053681B513F9BFC8C14CEE2F63AEBA2E50A8BA`; all four published assets were validated before the draft became public. This is a live check for the current release, not an invented future production upgrade.
+
 The upstream `lazy-val` package declares MIT but supplies no license/copyright file in npm or its repository. Its declaration and standard MIT terms are transparently documented in `docs/legal/lazy-val-license-declaration.txt`; no copyright year or recovered upstream notice is invented. The generated notices now include updater runtime dependencies.
 
 Official implementation reference: https://www.electron.build/v26/docs/features/auto-update/.
