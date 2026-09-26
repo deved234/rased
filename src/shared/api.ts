@@ -1,4 +1,5 @@
 import type { AboutLink } from './about.js'
+import type { UpdateState } from './updates.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
@@ -46,6 +47,13 @@ export interface AppInfo {
 }
 
 export interface RasedApi {
+  getUpdateState(): Promise<UpdateState>
+  checkUpdate(): Promise<MutationResult>
+  downloadUpdate(): Promise<MutationResult>
+  installUpdate(): Promise<MutationResult>
+  confirmUpdateInstall(): Promise<MutationResult>
+  onUpdateState(cb: (state: UpdateState) => void): () => void
+  onRequestUpdateInstall(cb: () => void): () => void
   getProjects(q: ProjectQuery): Promise<Project[]>
   getProjectCount(q: Omit<ProjectQuery, 'limit' | 'offset'>): Promise<{ total: number; unread: number }>
   setReadState(id: number, read: boolean): Promise<void>

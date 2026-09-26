@@ -2,6 +2,9 @@
 // The collector lives here (outside React). Renderer is display-only.
 
 import { randomUUID } from 'node:crypto'
+import { NsisUpdater } from 'electron-updater'
+import { UpdateController } from './updates.js'
+import { testUpdater } from './testHarness.js'
 import { version as APP_VERSION } from '../../package.json'
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -121,6 +124,10 @@ const detailBudget = new DetailBudget()
 const work = new Set<Promise<unknown>>()
 let shutdownWork: Promise<void> | null = null
 let quitComplete = false
+let updates: UpdateController | null = null
+let updateInstallRequested = false
+let updateStartupTimer: NodeJS.Timeout | null = null
+let updateTimer: NodeJS.Timeout | null = null
 const testHarness = isolatedTestHarness(app.getPath('userData'), process.argv)
 
 function trackWork<T>(p: Promise<T>): Promise<T> {
@@ -930,6 +937,9 @@ async function shutdown(): Promise<void> {
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
   if (enrichTimer) clearInterval(enrichTimer)
+  if (updateStartupTimer) clearTimeout(updateStartupTimer)
+  if (updateTimer) clearInterval(updateTimer)
+  updates?.dispose()
   shutdownWork = (async () => {
   try {
     while (work.size) await Promise.allSettled([...work])
@@ -951,6 +961,21 @@ async function shutdown(): Promise<void> {
 // ---------------------------------------------------------------- IPC
 
 function registerIpc(): void {
+  const mainSender = (event: Electron.IpcMainInvokeEvent): boolean => event.sender === win?.webContents && !quitRequested
+  ipcMain.handle(IPC.getUpdateState, () => updates?.snapshot())
+  ipcMain.handle(IPC.checkUpdate, event => mainSender(event) ? updates?.check() : { ok: false, error: 'not-main' })
+  ipcMain.handle(IPC.downloadUpdate, event => mainSender(event) ? updates?.download() : { ok: false, error: 'not-main' })
+  ipcMain.handle(IPC.installUpdate, event => {
+    if (!mainSender(event) || updates?.snapshot().phase !== 'downloaded') return { ok: false, error: 'not-downloaded' }
+    updateInstallRequested = true
+    win?.webContents.send(IPC.requestUpdateInstall)
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.confirmUpdateInstall, event => {
+    if (!mainSender(event) || !updateInstallRequested) return { ok: false, error: 'not-requested' }
+    updateInstallRequested = false
+    return updates?.install()
+  })
   ipcMain.handle(IPC.confirmClose, (event, v: { quit: boolean }) => {
     if (event.sender !== win?.webContents) return
     if (v.quit === true) return shutdown()
@@ -1323,12 +1348,22 @@ async function boot(): Promise<void> {
     if (settings.language !== captureLang) saveSettings({ ...settings, language: captureLang })
   }
 
+  // Development never installs updates over a working checkout. Test mode
+  // replaces only the updater boundary inside the explicitly marked profile.
+  const updatePort = testHarness ? testUpdater(app.getPath('userData'), testHarness.record) : app.isPackaged && process.platform === 'win32' ? new NsisUpdater() : null
+  updates = new UpdateController(updatePort, APP_VERSION, state => broadcast(IPC.updateState, state), error => auditUi(`update-error ${String(error).slice(0, 200)}`))
+  if (updatePort && !testHarness) {
+    updateStartupTimer = setTimeout(() => { if (!quitRequested) void updates?.check() }, 10_000)
+    updateTimer = setInterval(() => { if (!quitRequested) void updates?.check() }, 6 * 60 * 60 * 1000)
+    updateTimer.unref()
+  }
   registerIpc()
   createWindow()
   createTray()
   app.on('before-quit', (event) => {
     if (quitComplete) return
     event.preventDefault()
+    if (updates?.snapshot().phase === 'installing') { void shutdown(); return }
     doQuit()
   })
 

@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/channels.js'
 import type { AppInfo, ImportSummary, PurgePreview, RasedApi } from '../shared/api.js'
+import type { UpdateState } from '../shared/updates.js'
 import type {
   AppSettings,
   DetailsChangedEvent,
@@ -27,6 +28,13 @@ function sub<T>(channel: string, cb: (v: T) => void): () => void {
 }
 
 const api: RasedApi = {
+  getUpdateState: () => ipcRenderer.invoke(IPC.getUpdateState) as Promise<UpdateState>,
+  checkUpdate: () => ipcRenderer.invoke(IPC.checkUpdate) as Promise<MutationResult>,
+  downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate) as Promise<MutationResult>,
+  installUpdate: () => ipcRenderer.invoke(IPC.installUpdate) as Promise<MutationResult>,
+  confirmUpdateInstall: () => ipcRenderer.invoke(IPC.confirmUpdateInstall) as Promise<MutationResult>,
+  onUpdateState: (cb) => sub(IPC.updateState, cb),
+  onRequestUpdateInstall: (cb) => sub(IPC.requestUpdateInstall, cb),
   getProjects: (q: ProjectQuery) => ipcRenderer.invoke(IPC.getProjects, q) as Promise<Project[]>,
   getProjectCount: (q) => ipcRenderer.invoke(IPC.getProjectCount, q) as Promise<{ total: number; unread: number }>,
   setReadState: (id, read) => ipcRenderer.invoke(IPC.setReadState, { id, read }) as Promise<void>,

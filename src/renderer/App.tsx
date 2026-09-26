@@ -13,10 +13,12 @@ import { ProjectDetailView } from './views/ProjectDetailView.js'
 import { SplashView } from './views/SplashView.js'
 import { CompactView } from './views/CompactView.js'
 import { SettingsView } from './views/SettingsView.js'
+import { useUpdates, UpdateBanner } from './views/UpdatesView.js'
 
 type Boot = 'loading' | 'slow' | 'error' | 'welcome' | 'ready'
 
 export function App(): React.ReactElement {
+  const updateState = useUpdates()
   const route = useHashRoute()
   const [settings, patchSettings, settingsReady] = useSettings()
   const [boot, setBoot] = React.useState<Boot>('loading')
@@ -122,6 +124,7 @@ export function App(): React.ReactElement {
   React.useEffect(() => {
     return rased.onRequestClose((e) => requestAction(() => { void rased.confirmClose(e.quit) }))
   }, [])
+  React.useEffect(() => rased.onRequestUpdateInstall(() => requestAction(() => { void rased.confirmUpdateInstall() })), [])
 
   React.useEffect(() => {
     const offS = rased.onOpenSettings(() => go({ name: 'settings', section: null }))
@@ -185,6 +188,7 @@ export function App(): React.ReactElement {
         onToggleCollapse={() => void patchSettings({ ui: { ...settings.ui, sidebarCollapsed: !settings.ui.sidebarCollapsed } })}
       />
       <div className="main">
+        <UpdateBanner lang={lang} state={updateState} />
         <Topbar
           lang={lang}
           title={title}

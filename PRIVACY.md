@@ -10,6 +10,10 @@
 
 يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة؛ قد يرى الموقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور مستقل.
 
+## تحديثات البرنامج
+
+تتصل نسخة Windows المجمّعة بـ GitHub ومضيفي ملفات الإصدارات تلقائيًا عند التشغيل وكل 6 ساعات للتحقق من التحديثات، وباختيارك لتحميلها. قد تستقبل هذه الخدمات عنوان IP ومعلومات الاتصال والطلب؛ لا تُرسل قاعدة المشاريع أو الملاحظات أو الفلاتر. ملف التحديث يُحفظ في ذاكرة تخزين مؤقت محلية. التثبيت بطلبك ويعيد تشغيل التطبيق، ولا يحدث بمجرد إغلاقه.
+
 ## أمان التخزين والإشعارات
 
 قاعدة البيانات والنسخ الاحتياطية ليست مشفرة على مستوى التطبيق. من يستطيع الوصول إلى حساب Windows أو ملفاتك قد يقرأها. قد تظهر عناوين المشاريع في إشعارات Windows وسجل النظام؛ يمكنك تعطيل التنبيهات والصوت أو استخدام عدم الإزعاج. لا تضع كلمات مرور أو معلومات حساسة في الملاحظات.
@@ -35,6 +39,10 @@ Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters
 ## External connections
 
 Your device contacts Mostaql directly for RSS and detail pages as needed. The site and network providers may receive your IP address, request timing, connection metadata and User-Agent. Project, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or Mostaql password.
+
+## Software updates
+
+Packaged Windows builds automatically contact GitHub and release-asset hosts at startup and every 6 hours to check for updates, and on your request to download them. These services may receive your IP and request/connection metadata; projects, notes and filters are not uploaded. Downloads are cached locally. Installation requires your request and restarts the app; merely quitting does not install an update.
 
 ## Storage and notifications
 

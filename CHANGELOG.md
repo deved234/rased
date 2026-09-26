@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.5 — 2026-09-26
+
+- Added in-app updates from public GitHub Releases using electron-updater and NSIS.
+- Added automatic startup/6-hour checks, a bilingual settings page and banner, release notes, opt-in download/progress and explicit restart/install.
+- Preserved dirty-note approval and graceful SQLite shutdown. Disabled installation on ordinary quit and automatic downloads.
+- Added matching update metadata/blockmaps, a publication helper that verifies asset digests, updater privacy disclosures and runtime license notices.
+- Validated 94 unit tests, 56 packaged-app integration assertions and a real isolated QA NSIS upgrade/relaunch with preserved SQLite data. See [update guide](docs/UPDATES.md) for limits.
+- Users on 0.2.4 or older need one manual installation of this first updater-enabled release.
+
 ## 0.2.4 — 2026-09-26
 
 This release includes the local changes since the previously published 0.1.1.

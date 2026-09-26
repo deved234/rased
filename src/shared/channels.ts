@@ -44,6 +44,13 @@ export const IPC = {
   getAppInfo: 'rased:get-app-info',
   openAboutLink: 'rased:open-about-link',
   confirmClose: 'rased:confirm-close',
+  getUpdateState: 'rased:get-update-state',
+  checkUpdate: 'rased:check-update',
+  downloadUpdate: 'rased:download-update',
+  installUpdate: 'rased:install-update',
+  confirmUpdateInstall: 'rased:confirm-update-install',
+  updateState: 'rased:update-state',
+  requestUpdateInstall: 'rased:request-update-install',
   // main -> renderer events
   projectsChanged: 'rased:projects-changed',
   healthChanged: 'rased:health-changed',

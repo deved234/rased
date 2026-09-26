@@ -12,11 +12,12 @@ function gather(name, base = process.cwd()) {
   let text = ''
   for (const file of ['LICENSE', 'LICENSE.txt', 'LICENSE.md', 'license', 'license.txt', 'COPYING', 'OFL.txt']) if (existsSync(join(dir, file))) { text = readFileSync(join(dir, file), 'utf8'); break }
   if (!text && name === '@nodable/entities') text = readFileSync('docs/legal/entities-LICENSE.txt', 'utf8')
+  if (!text && name === 'lazy-val') text = readFileSync('docs/legal/lazy-val-license-declaration.txt', 'utf8')
   if (!text) throw Error('Missing license: ' + id)
   parts.push(id + '\n' + (p.homepage ?? p.repository?.url ?? '') + '\n\n' + text)
   for (const dependency of Object.keys(p.dependencies ?? {})) gather(dependency, dir)
 }
-for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-sans-arabic']) gather(name)
+for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-sans-arabic', 'electron-updater']) gather(name)
 writeFileSync('resources/legal/THIRD_PARTY_NOTICES.txt', parts.join('\n\n' + '='.repeat(72) + '\n\n'))
 writeFileSync('resources/legal/LICENSE', readFileSync('LICENSE'))
 for (const [key, file] of [['terms', 'TERMS.md'], ['privacy', 'PRIVACY.md']]) {

@@ -1,5 +1,6 @@
 import React from 'react'
 import { LegalView } from './LegalView.js'
+import { UpdatesView, updatesTitle } from './UpdatesView.js'
 import { rased } from '../api.js'
 import { DEVELOPER_NAME, type AboutLink } from '@shared/about.js'
 import logo from '../assets/logo.svg'
@@ -13,9 +14,9 @@ import { useNow } from '../hooks.js'
 import { ConfirmDialog, FieldError, Toggle } from '../components/ui.js'
 import { KeywordTokens } from '../components/FilterDrawer.js'
 
-type Section = 'watching' | 'notifications' | 'appearance' | 'data' | 'about' | 'legal'
+type Section = 'watching' | 'notifications' | 'appearance' | 'data' | 'about' | 'legal' | 'updates'
 
-const SECTIONS: Section[] = ['watching', 'notifications', 'appearance', 'data', 'about', 'legal']
+const SECTIONS: Section[] = ['watching', 'notifications', 'appearance', 'data', 'updates', 'about', 'legal']
 
 function sectionTitle(s: Section, lang: Lang): string {
   const t = STRINGS[lang]
@@ -24,6 +25,7 @@ function sectionTitle(s: Section, lang: Lang): string {
   if (s === 'appearance') return t.settingsAppearance
   if (s === 'data') return t.settingsData
   if (s === 'legal') return lang === 'ar' ? 'الشروط والخصوصية' : 'Terms & privacy'
+  if (s === 'updates') return updatesTitle(lang)
   return t.settingsAbout
 }
 
@@ -476,6 +478,7 @@ export function SettingsView({
         )}
 
         {active === 'legal' && <LegalView lang={lang} />}
+        {active === 'updates' && <UpdatesView lang={lang} />}
 
         {active === 'about' && (
           <div className="about-page">

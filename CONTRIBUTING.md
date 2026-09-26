@@ -15,3 +15,5 @@ Project map: `src/main` owns Electron, polling, IPC and notification dispatch; `
 Keep Mostaql access limitations and independent branding explicit. Do not describe public RSS or MIT as permission for automated access; consult [legal review](docs/legal/LEGAL_REVIEW.md). Please redact personal notes and diagnostics before attaching them to public issues.
 
 The app is licensed under [MIT](LICENSE). By submitting a contribution, you agree that your contribution is licensed under the same terms.
+
+For updater changes, read [UPDATES.md](docs/UPDATES.md). Keep downloading and installation explicit, retain the dirty-note guard and graceful shutdown, and never allow renderer-controlled feeds or bundle publishing tokens. `npm run test:update-install` performs a real isolated QA NSIS upgrade on Windows and can take several minutes; it does not use a normal RASED install/profile. Publishing is a separate explicit `npm run release` command after validation/build/commit/push; `dist` never publishes.
