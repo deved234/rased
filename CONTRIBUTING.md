@@ -8,4 +8,10 @@ RASED is a local Windows app that watches the public Mostaql RSS feed. Contribut
 4. Keep the collector respectful of Mostaql: no login scraping, no bypassing protection, and always honor backoff and `Retry-After`.
 5. Do not commit credentials, user databases, generated `out/` or `release/` files, or captured third-party pages.
 
+For UI changes, check Arabic RTL and English LTR, keyboard focus and dirty-note navigation. Use `npm run build` then `npm run test:e2e` for real Electron/preload/SQLite integration checks. This test uses a new temporary profile and substitutes network/OS boundaries; it does not prove a manually clicked Windows toast. Windows CI runs typecheck, lint, unit tests and build on pushes and pull requests. Installer packaging and interactive desktop checks are separate local checks.
+
+Project map: `src/main` owns Electron, polling, IPC and notification dispatch; `src/preload` exposes the restricted API; `src/renderer` contains React; `src/collector` fetches/parses source data; `src/storage` owns SQLite; `src/shared` contains contracts and shared rules. Runtime data is in the user's application-data directory, never in the repository. See [release notes](docs/RELEASE_0.2.4.md) for current behavior and limits.
+
+Keep Mostaql access limitations and independent branding explicit. Do not describe public RSS or MIT as permission for automated access; consult [legal review](docs/legal/LEGAL_REVIEW.md). Please redact personal notes and diagnostics before attaching them to public issues.
+
 The app is licensed under [MIT](LICENSE). By submitting a contribution, you agree that your contribution is licensed under the same terms.

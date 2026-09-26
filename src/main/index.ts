@@ -2,6 +2,8 @@
 // The collector lives here (outside React). Renderer is display-only.
 
 import { randomUUID } from 'node:crypto'
+import { version as APP_VERSION } from '../../package.json'
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   app,
@@ -10,38 +12,61 @@ import {
   Menu,
   Notification,
   shell,
+  dialog,
   ipcMain,
   powerMonitor,
-  nativeImage
+  nativeImage,
+  screen,
+  type Session
 } from 'electron'
 import { IPC } from '../shared/channels.js'
+import { ABOUT_LINKS, type AboutLink } from '../shared/about.js'
 import {
   defaultSettings,
+  sanitizeFilterDefinition,
+  sanitizeSavedFilter,
   sanitizeSettings,
+  sanitizeUserStatePatch,
   type AppSettings,
+  type MutationResult,
   type ProjectQuery,
+  type ProjectFull,
   type RefreshResult,
+  type SavedFilter,
   type SourceHealth
 } from '../shared/types.js'
+import type { ImportSummary, PurgePreview } from '../shared/api.js'
 import { openDatabase, closeDatabase, type Db } from '../storage/db.js'
 import {
   countProjects,
+  countPurgeable,
   createPendingEvents,
   deleteClassificationWait,
+  deleteSavedFilterRow,
   getProjectById,
+  getProjectDetailsRow,
   getSettingRaw,
   getSourceState,
   getUnenrichedNewIds,
-  listDiagnostics,
-  listProjects,
+  getUserState,
   listClassificationWaits,
+  listDiagnostics,
+  listEventsByStatus,
+  listProjects,
+  listSavedFilters,
   markAllRead,
   markEnrichmentPending,
+  markEvents,
+  purgeHistory,
+  queryProjectsPage,
   recordDiagnostic,
+  runInTransaction,
+  saveSavedFilterRow,
   setReadState,
   setSettingRaw,
   saveSourceState,
-  updateEnrichment
+  updateEnrichment,
+  updateUserState
 } from '../storage/repositories.js'
 import { fetchRss, parseRssItems, RSS_URL } from '../collector/rss.js'
 import { normalizeItems, SOURCE } from '../collector/normalize.js'
@@ -56,9 +81,13 @@ import {
 } from '../collector/scheduler.js'
 import { applyFailedCycle, applySuccessfulCycle, evaluateLateProject } from '../collector/pipeline.js'
 import { EnrichmentQueue, type DetailFetchKind } from '../collector/enrichment.js'
-import { evaluateFilter, toFilterable } from '../collector/filters.js'
+import { DetailsFetcher, resetStaleLoadingDetails } from './details.js'
+import { DetailBudget } from '../collector/detailBudget.js'
+import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './policies.js'
+import { isolatedTestHarness } from './testHarness.js'
+import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
-import { isAllowedProjectUrl, resolveProjectUrl } from './links.js'
+import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 
 app.setAppUserModelId('com.rased.app')
 
@@ -67,6 +96,8 @@ const runId = randomUUID()
 let db: Db | null = null
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
+/** compact follower window (Phase 6); null until opened */
+let compactWin: BrowserWindow | null = null
 let settings: AppSettings = defaultSettings()
 let sched: SchedulerState = initialSchedulerState()
 let paused = false
@@ -86,6 +117,30 @@ let hintShown = false
 const uncertainWaits = new Map<number, number>()
 let activeRss: AbortController | null = null
 let flushing: Promise<void> | null = null
+const detailBudget = new DetailBudget()
+const work = new Set<Promise<unknown>>()
+let shutdownWork: Promise<void> | null = null
+let quitComplete = false
+const testHarness = isolatedTestHarness(app.getPath('userData'), process.argv)
+
+function trackWork<T>(p: Promise<T>): Promise<T> {
+  work.add(p)
+  void p.then(() => work.delete(p), (err) => {
+    work.delete(p)
+    auditUi(`async-failed ${String(err).slice(0, 150)}`)
+  })
+  return p
+}
+
+function broadcast(channel: string, payload: unknown): void {
+  for (const window of [win, compactWin]) {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(channel, payload)
+  }
+}
+
+function notificationAllowed(): boolean {
+  return notificationsAllowed(settings, Date.now(), quitRequested)
+}
 
 const singleInstance = app.requestSingleInstanceLock()
 
@@ -106,11 +161,12 @@ function saveSettings(s: AppSettings): void {
   settings = s
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
   applyAutoStart()
-  win?.webContents.send(IPC.settingsChanged, s)
+  broadcast(IPC.settingsChanged, s)
   updateTray()
 }
 
 function applyAutoStart(): void {
+  if (testHarness) return
   try {
     app.setLoginItemSettings({ openAtLogin: settings.runAtStartup })
   } catch {
@@ -147,14 +203,20 @@ function snapshotHealth(): SourceHealth {
 }
 
 function emitHealth(): void {
-  win?.webContents.send(IPC.healthChanged, snapshotHealth())
+  broadcast(IPC.healthChanged, snapshotHealth())
   updateTray()
 }
 
-function emitProjects(newIds: number[]): void {
+function emitProjects(newIds: number[], changedIds: number[] = []): void {
   episode++
   const summary = db ? countProjects(db, {}) : null
-  win?.webContents.send(IPC.projectsChanged, { episode, newIds, summary })
+  win?.webContents.send(IPC.projectsChanged, { episode, newIds, changedIds, summary })
+  compactWin?.webContents.send(IPC.projectsChanged, { episode, newIds, changedIds, summary })
+}
+
+function emitDetails(projectIds: number[]): void {
+  win?.webContents.send(IPC.detailsChanged, { projectIds })
+  compactWin?.webContents.send(IPC.detailsChanged, { projectIds })
 }
 
 // ---------------------------------------------------------------- notifications (OS)
@@ -163,7 +225,16 @@ function projectLine(p: { title: string }): string {
   return p.title.length > 90 ? `${p.title.slice(0, 90)}…` : p.title
 }
 
+// Keep native notification objects alive until Windows closes or activates them.
+const activeNotifications = new Set<Notification>()
+
 function showToast(title: string, body: string, onClick: () => void): Promise<boolean> {
+  if (testHarness) {
+    testHarness.record('toast', { title, body })
+    // Invoke the real registered click closure; never open a browser from tests.
+    onClick()
+    return Promise.resolve(true)
+  }
   return new Promise((resolve) => {
     let done = false
     const finish = (v: boolean): void => {
@@ -173,10 +244,12 @@ function showToast(title: string, body: string, onClick: () => void): Promise<bo
       }
     }
     try {
-      const n = new Notification({ title, body, silent: true })
+      const n = new Notification({ title, body, silent: true, icon: iconPath('icon.png') })
+      activeNotifications.add(n)
       n.on('show', () => finish(true))
-      n.on('failed', () => finish(false))
-      n.on('click', () => onClick())
+      n.on('failed', () => { activeNotifications.delete(n); finish(false) })
+      n.on('close', () => activeNotifications.delete(n))
+      n.once('click', () => { activeNotifications.delete(n); onClick() })
       n.show()
       setTimeout(() => finish(true), 2000)
     } catch {
@@ -192,10 +265,15 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
   if (p.uncertain) tags.push(lang === 'ar' ? 'تصنيف غير مؤكد' : 'uncertain category')
   const title = tags.length > 0 ? `${projectLine(p.project)} (${tags.join('، ')})` : projectLine(p.project)
   const body = p.project.descriptionExcerpt.slice(0, 180)
-  return showToast(title, body, () => void openProjectById(p.project.id, true))
+  const { id, url } = p.project
+  return showToast(title, body, () => {
+    void openProjectById(id, true, url).then(result => {
+      if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
+    })
+  })
 }
 
-async function sendSummary(p: SummaryPayload): Promise<boolean> {
+async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<boolean> {
   const lang = settings.language
   const n = p.projects.length
   const title =
@@ -208,13 +286,36 @@ async function sendSummary(p: SummaryPayload): Promise<boolean> {
         : `${n} new Mostaql projects`
   const lines = p.projects.slice(0, 3).map((x) => `• ${projectLine(x)}`)
   if (n > 3) lines.push(lang === 'ar' ? `و ${n - 3} أخرى…` : `and ${n - 3} more…`)
+  lines.push(lang === 'ar' ? 'اضغط لفتح أحدث مشروع في المتصفح.' : 'Click to open the newest project in your browser.')
+  const latestUrl = p.projects.find(project => project.id === latestId)?.url
   return showToast(title, lines.join('\n'), () => {
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.show()
-      win.focus()
+    if (latestId !== null) {
+      void openProjectById(latestId, true, latestUrl).then(result => {
+        if (!result.ok) auditUi(`notification-browser-failed id=${latestId} ${result.error}`)
+      })
+      return
+    }
+    // Even a summary without a project id stays a browser action.
+    if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
+    else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch(err => auditUi(`summary-browser-failed ${String(err)}`))
+  })
+}
+
+/** Tagged test toast. Opens the public projects listing; touches no project, event or read state. */
+async function sendTestNotification(): Promise<{ ok: boolean }> {
+  const lang = settings.language
+  const title = lang === 'ar' ? 'إشعار تجريبي — راصد' : 'Test notification — RASED'
+  const body =
+    lang === 'ar'
+      ? 'اضغط لفتح صفحة مشاريع مستقل. تجربة فقط — لا مشروع حقيقي ولا حدث اكتشاف.'
+      : 'Click to open the Mostaql projects page. Test only — no real project, no discovery event.'
+  const ok = await showToast(title, body, () => {
+    if (isAllowedTestUrl(MOSTAQL_PROJECTS_URL)) {
+      if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
+      else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch(err => auditUi(`test-browser-failed ${String(err)}`))
     }
   })
+  return { ok }
 }
 
 async function flushNotifications(batchKeyForGap: string | null): Promise<void> {
@@ -226,17 +327,46 @@ async function flushNotifications(batchKeyForGap: string | null): Promise<void> 
 
 async function flushPending(batchKeyForGap: string | null): Promise<void> {
   if (!db) return
+  const d: Db = db
+  const nowIso = new Date().toISOString()
+  // DND gate: absolute timestamp, survives restart via settings. Expired DND
+  // clears itself and dispatch proceeds. Suppressed events are never resent.
+  const until = settings.doNotDisturbUntil ? Date.parse(settings.doNotDisturbUntil) : NaN
+  if (Number.isFinite(until)) {
+    if (Date.now() < until) {
+      const pend = listEventsByStatus(d, 'pending')
+      if (pend.length > 0) {
+        markEvents(d, pend.map((p) => p.id), 'suppressed', null, nowIso)
+        recordDiagnostic(d, {
+          at: nowIso,
+          endpointKind: 'notify',
+          status: 'dnd-suppressed',
+          durationMs: 0,
+          itemCount: pend.length,
+          errorCategory: null,
+          detail: `DND until ${settings.doNotDisturbUntil}`
+        })
+      }
+      return
+    }
+    saveSettings({ ...settings, doNotDisturbUntil: null })
+  }
   const out = await dispatchPending(
-    db,
-    { sessionId, nowIso: new Date().toISOString(), recovering: lastRecovering, batchKey: batchKeyForGap },
+    d,
+    { sessionId, nowIso, recovering: lastRecovering, batchKey: batchKeyForGap },
     {
       sendSingle,
-      sendSummary,
-      shouldSend: (p) => settings.notificationsEnabled && (evaluateFilter(toFilterable(p), settings.notifyFilter) === 'match' || (!p.categoryConfirmed && settings.notifyUncertainCategory && evaluateFilter(toFilterable(p), settings.notifyFilter) === 'uncertain')),
-      onBeep: () => { if (settings.soundEnabled) win?.webContents.send(IPC.playBeep) }
+      sendSummary: (payload) => sendSummary(payload, pickLatestProjectId(payload.projects)),
+      shouldSend: (p) => {
+        if (!notificationAllowed()) return false
+        if (getUserState(d, p.id).hiddenAt !== null) return false
+        const v = evaluateFilter(toFilterable(p), settings.notifyFilter)
+        return v === 'match' || (!p.categoryConfirmed && settings.notifyUncertainCategory && v === 'uncertain')
+      },
+      onBeep: () => { if (notificationAllowed() && settings.soundEnabled) { testHarness?.record('beep', true); win?.webContents.send(IPC.playBeep) } }
     }
   )
-  if (out.singles > 0 || out.summaries > 0 || out.skipped > 0) emitProjects([])
+  if (out.singles > 0 || out.summaries > 0 || out.skipped > 0) emitProjects([], [])
 }
 
 // ---------------------------------------------------------------- collector loop
@@ -267,7 +397,7 @@ function sweepUncertain(nowMs: number): number[] {
   if (settings.notifyUncertainCategory && settings.notificationsEnabled) {
     for (const pid of expired) {
       const p = getProjectById(db, pid)
-      if (p && !p.categoryConfirmed && evaluateFilter(toFilterable(p), settings.notifyFilter) === 'uncertain') toNotify.push(pid)
+      if (p && !p.categoryConfirmed && !getUserState(db, pid).hiddenAt && evaluateFilter(toFilterable(p), settings.notifyFilter) === 'uncertain') toNotify.push(pid)
     }
     if (toNotify.length > 0) createPendingEvents(db, toNotify, 'new_project', new Date().toISOString())
   }
@@ -275,6 +405,7 @@ function sweepUncertain(nowMs: number): number[] {
 }
 
 async function runCycle(): Promise<RefreshResult> {
+  if (quitRequested) return { ok: false, started: false, reason: 'paused' }
   if (!db) return { ok: false, started: false, reason: 'no-db' }
   if (paused) return { ok: false, started: false, reason: 'paused' }
   if (inFlight) return { ok: false, started: false, reason: 'busy' }
@@ -284,7 +415,7 @@ async function runCycle(): Promise<RefreshResult> {
   activeRss = new AbortController()
   emitHealth()
   try {
-    const res = await fetchRss(RSS_URL, { signal: activeRss.signal })
+    const res = await fetchRss(RSS_URL, { signal: activeRss.signal, fetchImpl: testHarness?.fetchImpl })
     if (paused || quitRequested || (!res.ok && res.kind === 'cancelled')) return { ok: false, started: true, reason: 'paused' }
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
@@ -354,10 +485,10 @@ async function runCycle(): Promise<RefreshResult> {
     }
     const swept = sweepUncertain(nowMs)
     const gapKey = lastRecovering ? `gap:${getSourceState(db, SOURCE).lastSuccessAt ?? nowIso}` : null
-    if (out.insertedIds.length > 0 || out.updatedIds.length > 0) emitProjects(out.insertedIds)
+    if (out.insertedIds.length > 0 || out.updatedIds.length > 0) emitProjects(out.insertedIds, out.updatedIds)
     await flushNotifications(gapKey)
-    if (swept.length > 0) emitProjects(swept)
-    void enrichQueue.pump()
+    if (swept.length > 0) emitProjects([], swept)
+    void trackWork(enrichQueue.pump())
     return { ok: true, started: true }
   } finally {
     inFlight = false
@@ -373,7 +504,7 @@ function scheduleNext(): void {
     clearTimeout(timer)
     timer = null
   }
-  if (paused || !db) {
+  if (paused || quitRequested || !db) {
     nextAttemptAtMs = null
     emitHealth()
     return
@@ -387,7 +518,7 @@ function scheduleNext(): void {
   emitHealth()
   timer = setTimeout(() => {
     lastRecovering = wasGap()
-    void runCycle()
+    void trackWork(runCycle())
   }, delay)
 }
 
@@ -409,7 +540,9 @@ function persistScheduler(): void {
 // ---------------------------------------------------------------- enrichment
 
 const enrichQueue = new EnrichmentQueue({
-  gateOpen: () => !paused && !inFlight && !isBackingOff(sched, Date.now()),
+  fetchImpl: testHarness?.fetchImpl,
+  budget: detailBudget,
+  gateOpen: () => !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
   onTransportFailure: (kind: DetailFetchKind | 'http5xx' | 'forbidden' | 'rate_limited', retryAfterMs: number | null) => {
     const mapped: FailureKind =
       kind === 'forbidden' ? 'forbidden' : kind === 'rate_limited' ? 'rate_limited' : kind === 'http5xx' ? 'http5xx' : kind === 'timeout' ? 'timeout' : 'network'
@@ -472,7 +605,7 @@ const enrichQueue = new EnrichmentQueue({
           uncertainWaits.delete(projectId)
           deleteClassificationWait(db, projectId)
           lastRecovering = false
-          void flushNotifications(null).then(() => emitProjects([projectId]))
+          void trackWork(flushNotifications(null).then(() => emitProjects([projectId], [projectId])))
           return
         }
       } else {
@@ -480,30 +613,67 @@ const enrichQueue = new EnrichmentQueue({
         deleteClassificationWait(db, projectId)
       }
     }
-    emitProjects([projectId])
+    emitProjects([], [projectId])
   }
+})
+
+// ---------------------------------------------------------------- full details
+
+function detailTransportFailure(kind: DetailFetchKind | 'http5xx' | 'forbidden' | 'rate_limited', retryAfterMs: number | null): void {
+  const mapped: FailureKind =
+    kind === 'forbidden' ? 'forbidden' : kind === 'rate_limited' ? 'rate_limited' : kind === 'http5xx' ? 'http5xx' : kind === 'timeout' ? 'timeout' : 'network'
+  sched = noteFailure(sched, { kind: mapped, retryAfterMs, nowMs: Date.now() })
+  persistScheduler()
+  scheduleNext()
+  emitHealth()
+}
+
+const detailsFetcher = new DetailsFetcher(() => db, {
+  fetchImpl: testHarness?.fetchImpl,
+  budget: detailBudget,
+  gateOpen: () => !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
+  onMetadata: (projectId, data) => {
+    if (!db || !getProjectById(db, projectId)) return
+    const p = getProjectById(db, projectId)!
+    enrichQueue.drop(projectId)
+    updateEnrichment(db, projectId, {
+      ...data, categoryConfirmed: data.categoryConfirmed || p.categoryConfirmed,
+      categorySlug: data.categorySlug ?? p.categorySlug, categoryName: data.categoryName ?? p.categoryName,
+      skills: data.skills.length ? data.skills : p.skills, budgetMin: data.budgetMin ?? p.budgetMin,
+      budgetMax: data.budgetMax ?? p.budgetMax, currency: data.currency ?? p.currency,
+      budgetRaw: data.budgetRaw ?? p.budgetRaw, status: 'ready'
+    }, new Date().toISOString())
+    emitProjects([], [projectId])
+  },
+  onTransportFailure: detailTransportFailure,
+  onSettled: (projectId: number) => emitDetails([projectId])
 })
 
 // ---------------------------------------------------------------- open project
 
-async function openProjectById(id: number, fromNotification: boolean): Promise<{ ok: boolean; error?: string }> {
-  if (!db) return { ok: false, error: 'no-db' }
-  const url = resolveProjectUrl(db, id)
+async function openProjectById(id: number, fromNotification: boolean, notificationUrl?: string): Promise<{ ok: boolean; error?: string }> {
+  if (quitRequested) return { ok: false, error: 'quitting' }
+  const openedDb = db
+  // Native toast closures carry their original URL even if history was purged.
+  // IPC callers never supply this argument; all destinations still pass the allow-list.
+  const url = notificationUrl ?? (openedDb ? resolveProjectUrl(openedDb, id) : null)
   if (!url || !isAllowedProjectUrl(url)) return { ok: false, error: 'bad-url' }
   try {
-    await shell.openExternal(url)
+    if (testHarness) testHarness.record('open-external', url)
+    else await shell.openExternal(url)
   } catch {
     return { ok: false, error: 'open-failed' }
   }
-  setReadState(db, id, true)
+  if (!quitRequested && openedDb && db === openedDb && openedDb.isOpen && getProjectById(openedDb, id)) setReadState(openedDb, id, true)
   auditUi(`open-project id=${id}${fromNotification ? ' via-notification' : ''}`)
-  emitProjects(fromNotification ? [id] : [])
+  emitProjects([], [id])
   return { ok: true }
 }
 
 // ---------------------------------------------------------------- window/tray
 
 function iconPath(name: string): string {
+  if (app.isPackaged && name === 'icon.ico') return join(process.resourcesPath, 'branding', name)
   return join(app.getAppPath(), 'resources', name)
 }
 
@@ -511,15 +681,34 @@ function iconPath(name: string): string {
 // HTML meta tag. Production keeps the strict policy baked into index.html
 // (external .css/.js only). Development needs inline styles/scripts for
 // Vite's HMR + react-refresh preamble, so it gets a relaxed policy instead.
-function applyCspPolicy(): void {
-  const dev = !!process.env['ELECTRON_RENDERER_URL']
-  const policy = dev
-    ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self';"
-    : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self';"
-  win?.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+function cspPolicy(): string {
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    return "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self';"
+  }
+  return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self';"
+}
+
+function applyCspPolicy(session: Session): void {
+  const policy = cspPolicy()
+  session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: { ...(details.responseHeaders ?? {}), 'Content-Security-Policy': [policy] }
     })
+  })
+}
+
+function attachWindowChrome(window: BrowserWindow): void {
+  window.setAppDetails({ appId: 'com.rased.app', appIconPath: iconPath('icon.ico'), appIconIndex: 0, relaunchDisplayName: 'RASED' })
+  const emit = (): void => { if (!window.isDestroyed()) window.webContents.send(IPC.windowState, { maximized: window.isMaximized() }) }
+  window.on('maximize', emit)
+  window.on('unmaximize', emit)
+}
+
+function guardNavigation(window: BrowserWindow): void {
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.on('will-navigate', (event, target) => {
+    const trusted = window.webContents.getURL().split('#')[0]
+    if (target.split('#')[0] !== trusted) event.preventDefault()
   })
 }
 
@@ -531,15 +720,24 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#14171c',
     autoHideMenuBar: true,
-    icon: iconPath('icon.png'),
+    icon: iconPath('icon.ico'),
+    frame: false,
+    show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
-  applyCspPolicy()
+  applyCspPolicy(win.webContents.session)
+  guardNavigation(win)
+  attachWindowChrome(win)
+  win.webContents.on('will-prevent-unload', () => {
+    // Preserve dirty drafts for renderer-initiated close/reload as well.
+    win?.webContents.send(IPC.requestClose, { quit: settings.ui.closeBehavior === 'quit' })
+  })
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -551,16 +749,16 @@ function createWindow(): void {
     win?.focus()
   })
   win.on('close', (e) => {
+    testHarness?.record('native-close', { quitRequested, tray: !!tray })
     if (quitRequested || !tray) return
     e.preventDefault()
-    win?.hide()
-    if (!hintShown) {
-      hintShown = true
-      tray.displayBalloon({
-        title: 'RASED',
-        content: settings.language === 'ar' ? 'راصد مستمر في الخلفية. الخروج الكامل من قائمة الأيقونة.' : 'RASED keeps watching in the background. Quit from the tray menu.'
-      })
+    // closeBehavior 'quit' ends the app; default 'tray' hides to background.
+    if (settings.ui.closeBehavior === 'quit') {
+      win?.webContents.send(IPC.requestClose, { quit: true })
+      return
     }
+    win?.webContents.send(IPC.requestClose, { quit: false })
+
   })
   win.on('closed', () => {
     win = null
@@ -605,12 +803,100 @@ function createTray(): void {
   updateTray()
 }
 
+// ---------------------------------------------------------------- compact follower window
+
+/** Saved bounds are honored only when fully visible on a current display. */
+function saneCompactBounds(): { x: number; y: number; width: number; height: number } | undefined {
+  const b = settings.compactBounds
+  if (!b) return undefined
+  try {
+    const cx = b.x + b.width / 2
+    const cy = b.y + b.height / 2
+    const visible = screen.getAllDisplays().some((d) => {
+      const w = d.workArea
+      return b.x >= w.x && b.y >= w.y && b.x + b.width <= w.x + w.width && b.y + b.height <= w.y + w.height && cx >= w.x && cy >= w.y
+    })
+    if (visible) return b
+  } catch {
+    /* fall through to default placement */
+  }
+  return undefined
+}
+
+let compactBoundsTimer: NodeJS.Timeout | null = null
+
+function persistCompactBounds(): void {
+  if (!compactWin) return
+  if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+  compactBoundsTimer = setTimeout(() => {
+    if (!compactWin) return
+    try {
+      const b = compactWin.getBounds()
+      saveSettings({
+        ...settings,
+        compactBounds: {
+          x: Math.round(b.x),
+          y: Math.round(b.y),
+          width: Math.min(1200, Math.max(240, Math.round(b.width))),
+          height: Math.min(1200, Math.max(300, Math.round(b.height)))
+        }
+      })
+    } catch {
+      /* bounds are best-effort */
+    }
+  }, 500)
+}
+
+function openCompact(): void {
+  if (compactWin) {
+    if (compactWin.isMinimized()) compactWin.restore()
+    compactWin.show()
+    compactWin.focus()
+    return
+  }
+  const saved = saneCompactBounds()
+  compactWin = new BrowserWindow({
+    width: saved?.width ?? 380,
+    height: saved?.height ?? 560,
+    minWidth: 280,
+    minHeight: 360,
+    x: saved?.x,
+    y: saved?.y,
+    backgroundColor: settings.ui.theme === 'light' ? '#faf7f0' : '#14171c',
+    autoHideMenuBar: true,
+    alwaysOnTop: settings.ui.compactAlwaysOnTop,
+    icon: iconPath('icon.ico'),
+    frame: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  })
+  if (compactWin) applyCspPolicy(compactWin.webContents.session)
+  guardNavigation(compactWin)
+  attachWindowChrome(compactWin)
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    void compactWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/compact`)
+  } else {
+    void compactWin.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'compact' })
+  }
+  compactWin.on('move', persistCompactBounds)
+  compactWin.on('resize', persistCompactBounds)
+  compactWin.on('closed', () => {
+    compactWin = null
+  })
+  if (compactWin) applyCspPolicy(compactWin.webContents.session)
+}
+
 // ---------------------------------------------------------------- commands
 
 async function doPause(): Promise<SourceHealth> {
   paused = true
   activeRss?.abort()
   enrichQueue.abortActive()
+  detailsFetcher.abortActive()
   if (timer) {
     clearTimeout(timer)
     timer = null
@@ -630,12 +916,24 @@ async function doResume(): Promise<SourceHealth> {
 }
 
 function doQuit(): void {
+  if (quitRequested) return
+  if (win && !win.isDestroyed()) win.webContents.send(IPC.requestClose, { quit: true })
+  else void shutdown()
+}
+
+async function shutdown(): Promise<void> {
+  if (shutdownWork) return shutdownWork
   quitRequested = true
+  paused = true
   activeRss?.abort()
   enrichQueue.abortActive()
+  detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
   if (enrichTimer) clearInterval(enrichTimer)
+  shutdownWork = (async () => {
   try {
+    while (work.size) await Promise.allSettled([...work])
+    if (flushing) await Promise.allSettled([flushing])
     if (db) {
       const st = getSourceState(db, SOURCE)
       saveSourceState(db, { ...st, runId });
@@ -643,13 +941,28 @@ function doQuit(): void {
     }
   } finally {
     db = null
+    quitComplete = true
     app.quit()
   }
+  })()
+  return shutdownWork
 }
 
 // ---------------------------------------------------------------- IPC
 
 function registerIpc(): void {
+  ipcMain.handle(IPC.confirmClose, (event, v: { quit: boolean }) => {
+    if (event.sender !== win?.webContents) return
+    if (v.quit === true) return shutdown()
+    win?.hide()
+    if (!hintShown) {
+      hintShown = true
+      tray?.displayBalloon({
+        title: 'RASED',
+        content: settings.language === 'ar' ? 'راصد مستمر في الخلفية. الخروج الكامل من قائمة الأيقونة.' : 'RASED keeps watching in the background. Quit from the tray menu.'
+      })
+    }
+  })
   ipcMain.handle(IPC.getProjects, (_e, q: ProjectQuery) => {
     if (!db) return []
     const limit = Math.min(200, Math.max(1, Math.floor(q.limit) || 50))
@@ -674,7 +987,7 @@ function registerIpc(): void {
           const p = getProjectById(db, id)
           if (p) enrichQueue.enqueue(id, p.url)
         }
-        void enrichQueue.pump()
+        void trackWork(enrichQueue.pump())
       }
     }
     return rows
@@ -692,20 +1005,23 @@ function registerIpc(): void {
     if (!db || !Number.isInteger(v.id) || typeof v.read !== 'boolean') return
     setReadState(db, v.id, v.read)
     auditUi(`set-read id=${v.id} read=${v.read}`)
-    emitProjects([])
+    emitProjects([], [v.id])
   })
   ipcMain.handle(IPC.markAllRead, () => {
     if (!db) return 0
+    const changed = (db.prepare('SELECT id FROM projects WHERE read_at IS NULL').all() as unknown as { id: number }[]).map(p => p.id)
     const n = markAllRead(db)
     auditUi(`mark-all-read n=${n}`)
-    emitProjects([])
+    emitProjects([], changed)
     return n
   })
   ipcMain.handle(IPC.getSettings, () => settings)
   ipcMain.handle(IPC.updateSettings, (_e, patch: Partial<AppSettings>) => {
-    const next = sanitizeSettings({ ...settings, ...patch })
+    const p = (patch ?? {}) as Partial<AppSettings>
+    const next = mergeSettings(settings, p)
     const intervalChanged = next.pollIntervalMs !== settings.pollIntervalMs
     saveSettings(next)
+    compactWin?.setAlwaysOnTop(next.ui.compactAlwaysOnTop)
     if (intervalChanged) scheduleNext()
     emitHealth()
     return next
@@ -713,15 +1029,251 @@ function registerIpc(): void {
   ipcMain.handle(IPC.getHealth, () => snapshotHealth())
   ipcMain.handle(IPC.pause, () => doPause())
   ipcMain.handle(IPC.resume, () => doResume())
-  ipcMain.handle(IPC.refresh, () => runCycle())
+  ipcMain.handle(IPC.refresh, () => trackWork(runCycle()))
   ipcMain.handle(IPC.openProject, (_e, v: { id: number }) => {
     if (!Number.isInteger(v.id)) return { ok: false, error: 'bad-id' }
+    return openProjectById(v.id, false)
+  })
+  ipcMain.handle(IPC.openProjectExternal, (_e, v: { id: number }) => {
+    if (!v || !Number.isSafeInteger(v.id) || v.id <= 0) return { ok: false, error: 'bad-id' }
     return openProjectById(v.id, false)
   })
   ipcMain.handle(IPC.getDiagnostics, (_e, v: { limit?: number }) => {
     if (!db) return []
     const limit = Math.min(200, Math.max(1, Math.floor(v?.limit ?? 50) || 50))
     return listDiagnostics(db, limit)
+  })
+
+  // ---- v2: personal data, details, saved filters, DND, data management ----
+  ipcMain.handle(IPC.getProject, (_e, v: { id: number }) => {
+    if (!db || !Number.isInteger(v.id)) return null
+    const p = getProjectById(db, v.id)
+    if (!p) return null
+    const u = getUserState(db, v.id)
+    const out: ProjectFull = {
+      ...p,
+      saved: u.savedAt !== null,
+      hidden: u.hiddenAt !== null,
+      personalStatus: u.status,
+      hasNote: u.note !== '',
+      note: u.note
+    }
+    return out
+  })
+  ipcMain.handle(IPC.getProjectDetails, (_e, v: { id: number }) => {
+    if (!db || !Number.isInteger(v.id)) return null
+    if (!getProjectById(db, v.id)) return null
+    return getProjectDetailsRow(db, v.id)
+  })
+  ipcMain.handle(IPC.requestProjectDetails, (_e, v: { id: number; force?: boolean }) => {
+    if (!db || !Number.isInteger(v.id)) return null
+    const p = getProjectById(db, v.id)
+    if (!p) return null
+    const row = detailsFetcher.request(v.id, p.url, v.force === true)
+    void trackWork(detailsFetcher.pump())
+    return row
+  })
+  ipcMain.handle(IPC.updateProjectUserState, (_e, v: { id: number; patch: unknown }) => {
+    if (!db) return { ok: false, error: 'no-db' } satisfies MutationResult
+    if (!Number.isInteger(v.id)) return { ok: false, error: 'bad-id' } satisfies MutationResult
+    const patch = sanitizeUserStatePatch(v.patch)
+    if (!patch || Object.keys(patch).length === 0) return { ok: false, error: 'bad-patch' } satisfies MutationResult
+    const d: Db = db
+    const applied = runInTransaction(d, () => updateUserState(d, v.id, patch))
+    if (!applied) return { ok: false, error: 'unknown-project' } satisfies MutationResult
+    auditUi(`user-state id=${v.id} ${Object.keys(patch).join(',')}`)
+    emitProjects([], [v.id])
+    return { ok: true } satisfies MutationResult
+  })
+  ipcMain.handle(IPC.getSavedFilters, () => (db ? listSavedFilters(db) : []))
+  ipcMain.handle(IPC.createSavedFilter, (_e, v: { name: unknown; definition: unknown }) => {
+    if (!db) return { ok: false, error: 'no-db' }
+    if (typeof v.name !== 'string' || v.name.trim().length === 0 || v.name.trim().length > 80) {
+      return { ok: false, error: 'bad-name' }
+    }
+    const def = sanitizeFilterDefinition(v.definition)
+    const now = new Date().toISOString()
+    const taken = new Set(listSavedFilters(db).map((f) => f.id))
+    let id = `sf_${randomUUID().replace(/-/g, '').slice(0, 12)}`
+    while (taken.has(id)) id = `sf_${randomUUID().replace(/-/g, '').slice(0, 12)}`
+    const row: SavedFilter = { id, name: v.name.trim(), definition: def, createdAt: now, updatedAt: now }
+    saveSavedFilterRow(db, row)
+    auditUi(`filter-create ${id}`)
+    return { ok: true, id }
+  })
+  ipcMain.handle(IPC.updateSavedFilter, (_e, v: { id: unknown; name: unknown; definition: unknown }) => {
+    if (!db) return { ok: false, error: 'no-db' }
+    if (typeof v.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(v.id)) return { ok: false, error: 'bad-id' }
+    if (typeof v.name !== 'string' || v.name.trim().length === 0 || v.name.trim().length > 80) {
+      return { ok: false, error: 'bad-name' }
+    }
+    const existing = listSavedFilters(db).find((f) => f.id === v.id)
+    if (!existing) return { ok: false, error: 'not-found' }
+    saveSavedFilterRow(db, {
+      id: v.id,
+      name: v.name.trim(),
+      definition: sanitizeFilterDefinition(v.definition),
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString()
+    })
+    auditUi(`filter-update ${v.id}`)
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.deleteSavedFilter, (_e, v: { id: unknown }) => {
+    if (!db) return { ok: false, error: 'no-db' }
+    if (typeof v.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(v.id)) return { ok: false, error: 'bad-id' }
+    if (!deleteSavedFilterRow(db, v.id)) return { ok: false, error: 'not-found' }
+    auditUi(`filter-delete ${v.id}`)
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.previewFilterCount, (_e, v: { definition: unknown }) => {
+    if (!db) return { total: 0, unread: 0 }
+    const def = sanitizeFilterDefinition(v.definition)
+    const { total, unread } = queryProjectsPage(db, def, { limit: 0, offset: 0 })
+    return { total, unread }
+  })
+  ipcMain.handle(IPC.queryProjectsPage, (_e, v: { definition: unknown; limit: unknown; offset: unknown }) => {
+    if (!db) return { rows: [], total: 0, unread: 0 }
+    const def = sanitizeFilterDefinition(v.definition)
+    const limit = Math.min(200, Math.max(1, Math.floor(v.limit as number) || 50))
+    const offset = Math.max(0, Math.floor(v.offset as number) || 0)
+    if (def.categoryFilter.mode === 'selected' || def.budgetMin !== null || def.budgetMax !== null || !def.includeUnknownBudget) {
+      const ids = getUnenrichedNewIds(db, 50).slice(0, 5)
+      markEnrichmentPending(db, ids)
+      for (const id of ids) { const p = getProjectById(db, id); if (p) enrichQueue.enqueue(id, p.url) }
+      void trackWork(enrichQueue.pump())
+    }
+    return queryProjectsPage(db, def, { limit, offset })
+  })
+  ipcMain.handle(IPC.testNotification, () => sendTestNotification())
+  ipcMain.handle(IPC.testSound, () => {
+    win?.webContents.send(IPC.playBeep)
+  })
+  ipcMain.handle(IPC.setDnd, (_e, v: { untilIso: unknown }) => {
+    let until: string | null = null
+    if (typeof v.untilIso === 'string' && v.untilIso.length <= 40) {
+      const t = Date.parse(v.untilIso)
+      if (!Number.isNaN(t) && t > Date.now()) until = new Date(t).toISOString()
+    }
+    saveSettings({ ...settings, doNotDisturbUntil: until })
+    auditUi(until ? `dnd-until ${until}` : 'dnd-off')
+    emitHealth()
+    return settings
+  })
+  ipcMain.handle(IPC.openDataFolder, () => {
+    void shell.openPath(app.getPath('userData')).then((err) => {
+      if (err && db) {
+        recordDiagnostic(db, {
+          at: new Date().toISOString(),
+          endpointKind: 'app',
+          status: 'open-data-folder-failed',
+          durationMs: 0,
+          itemCount: null,
+          errorCategory: 'os',
+          detail: err.slice(0, 200)
+        })
+      }
+    })
+    return { ok: true } satisfies MutationResult
+  })
+  ipcMain.handle(IPC.exportSettings, () => {
+    if (!win) return { ok: false, error: 'no-window' }
+    const chosen = dialog.showSaveDialogSync(win, {
+      defaultPath: 'rased-settings.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (!chosen) return { ok: false }
+    try {
+      writeFileSync(chosen, JSON.stringify(settingsExportPayload(), null, 2), 'utf-8')
+    } catch {
+      return { ok: false, error: 'write-failed' }
+    }
+    auditUi('settings-export')
+    return { ok: true, path: chosen }
+  })
+  ipcMain.handle(IPC.validateImport, () => validateSettingsImport())
+  ipcMain.handle(IPC.applyImport, (_e, v: { mode: unknown; applyStartup: unknown }) => applySettingsImport(v.mode, v.applyStartup === true))
+  ipcMain.handle(IPC.purgeHistoryPreview, (_e, v: { cutoffIso: unknown }) => {
+    if (!db) return { ok: false, error: 'no-db' } satisfies PurgePreview
+    if (typeof v.cutoffIso !== 'string' || Number.isNaN(Date.parse(v.cutoffIso))) {
+      return { ok: false, error: 'bad-cutoff' } satisfies PurgePreview
+    }
+    return { ok: true, affected: countPurgeable(db, new Date(v.cutoffIso).toISOString(), PURGE_KINDS) } satisfies PurgePreview
+  })
+  ipcMain.handle(IPC.purgeHistoryApply, (_e, v: { cutoffIso: unknown }) => {
+    if (!db) return { ok: false, error: 'no-db' } satisfies PurgePreview
+    if (typeof v.cutoffIso !== 'string' || Number.isNaN(Date.parse(v.cutoffIso))) {
+      return { ok: false, error: 'bad-cutoff' } satisfies PurgePreview
+    }
+    const d: Db = db
+    const backupDir = join(app.getPath('userData'), 'backups')
+    const backupPath = join(backupDir, `rased-backup-${Date.now()}.db`)
+    try {
+      mkdirSync(backupDir, { recursive: true })
+      // VACUUM INTO is an online, consistent backup — never copy a live WAL file.
+      d.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`)
+    } catch {
+      return { ok: false, error: 'backup-failed' } satisfies PurgePreview
+    }
+    const iso = new Date(v.cutoffIso).toISOString()
+    const victims = d.prepare(`SELECT p.id FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id WHERE p.first_seen_at < ? AND u.saved_at IS NULL AND COALESCE(u.note,'')='' AND COALESCE(u.personal_status,'none') NOT IN ('interested','submitted')`).all(iso) as unknown as { id: number }[]
+    for (const { id } of victims) { detailsFetcher.drop(id); enrichQueue.drop(id); uncertainWaits.delete(id) }
+    const { deleted } = runInTransaction(d, () => purgeHistory(d, iso, PURGE_KINDS))
+    auditUi(`purge deleted=${deleted} backup=${backupPath}`)
+    recordDiagnostic(d, {
+      at: new Date().toISOString(),
+      endpointKind: 'app',
+      status: 'purge',
+      durationMs: 0,
+      itemCount: deleted,
+      errorCategory: null,
+      detail: backupPath.slice(-120)
+    })
+    emitProjects([], victims.map(p => p.id))
+    return { ok: true, affected: deleted, deleted, backupPath } satisfies PurgePreview & { deleted?: number }
+  })
+  ipcMain.handle(IPC.windowControl, (event, value: { action?: unknown } | null) => {
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (!target || (target !== win && target !== compactWin)) return
+    if (value?.action === 'minimize') target.minimize()
+    else if (value?.action === 'maximize') { if (target.isMaximized()) target.unmaximize(); else target.maximize() }
+    else if (value?.action === 'close') target.close() // existing draft guard/tray policy remains authoritative
+  })
+  ipcMain.handle(IPC.getWindowState, (event) => {
+    const target = BrowserWindow.fromWebContents(event.sender)
+    return { maximized: target?.isMaximized() ?? false, minimized: target?.isMinimized() ?? false }
+  })
+  ipcMain.handle(IPC.openAboutLink, async (_event, value: unknown): Promise<MutationResult> => {
+    const link = value && typeof value === 'object' ? (value as { link?: unknown }).link : null
+    if (typeof link !== 'string' || !Object.hasOwn(ABOUT_LINKS, link)) return { ok: false, error: 'bad-link' }
+    try {
+      const url = ABOUT_LINKS[link as AboutLink]
+      if (testHarness) testHarness.record('open-external', url)
+      else await shell.openExternal(url)
+      return { ok: true }
+    } catch { return { ok: false, error: 'open-failed' } }
+  })
+  ipcMain.handle(IPC.getAppInfo, () => ({ version: APP_VERSION, platform: process.platform, arch: process.arch }))
+  ipcMain.handle(IPC.openCompact, () => {
+    openCompact()
+  })
+  ipcMain.handle(IPC.closeCompact, () => {
+    compactWin?.close()
+  })
+  ipcMain.handle(IPC.setAlwaysOnTop, (_e, v: { on: unknown }) => {
+    const on = v.on === true
+    saveSettings({ ...settings, ui: { ...settings.ui, compactAlwaysOnTop: on } })
+    compactWin?.setAlwaysOnTop(on)
+  })
+  ipcMain.handle(IPC.showProjectInMain, (_e, v: { id: number }) => {
+    if (!Number.isInteger(v.id)) return
+    // Compact never navigates itself: the main window owns the route.
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
+    win?.webContents.send(IPC.navigate, { hash: `#/project/${v.id}` })
   })
 }
 
@@ -743,6 +1295,7 @@ async function boot(): Promise<void> {
 
   db = openDatabase(join(app.getPath('userData'), 'rased.db'))
   settings = loadSettings()
+  if (testHarness) paused = true
   const savedState = getSourceState(db, SOURCE)
   const savedBackoff = savedState.backoffUntil ? Date.parse(savedState.backoffUntil) : NaN
   if (Number.isFinite(savedBackoff) && savedBackoff > Date.now()) {
@@ -761,6 +1314,8 @@ async function boot(): Promise<void> {
   // Crash recovery for notification bookkeeping (never auto-resends).
   recordDiagnosticSafe()
   recoverPreviousSession(db, sessionId, new Date().toISOString())
+  // Rows stuck in details-loading can never complete; make them retryable.
+  resetStaleLoadingDetails(db)
 
   // Optional capture harness (screenshots): env-gated, no production surface.
   const captureLang = process.env['RASED_CAPTURE_LANG']
@@ -771,6 +1326,11 @@ async function boot(): Promise<void> {
   registerIpc()
   createWindow()
   createTray()
+  app.on('before-quit', (event) => {
+    if (quitComplete) return
+    event.preventDefault()
+    doQuit()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -779,6 +1339,7 @@ async function boot(): Promise<void> {
   powerMonitor.on('suspend', () => {
     activeRss?.abort()
     enrichQueue.abortActive()
+    detailsFetcher.abortActive()
     if (timer) {
       clearTimeout(timer)
       timer = null
@@ -787,7 +1348,7 @@ async function boot(): Promise<void> {
   powerMonitor.on('resume', () => {
     if (paused) return
     lastRecovering = true
-    setTimeout(() => void runCycle(), 2000)
+    setTimeout(() => void trackWork(runCycle()), 2000)
     scheduleNext()
   })
 
@@ -795,10 +1356,12 @@ async function boot(): Promise<void> {
     if (paused) return
     const swept = sweepUncertain(Date.now())
     if (swept.length > 0) {
-      emitProjects(swept)
-      void flushNotifications(null)
+      // Expired uncertain waits that just became notifiable: new to attention.
+      emitProjects(swept, swept)
+      void trackWork(flushNotifications(null))
     }
-    void enrichQueue.pump()
+    void trackWork(detailsFetcher.pump())
+    void trackWork(enrichQueue.pump())
   }, 2500)
   enrichTimer.unref?.()
 
@@ -815,7 +1378,7 @@ function auditUi(detail: string): void {
   try {
     recordDiagnostic(db, {
       at: new Date().toISOString(),
-      endpointKind: 'ui',
+      endpointKind: 'app',
       status: 'action',
       durationMs: 0,
       itemCount: null,
@@ -824,6 +1387,141 @@ function auditUi(detail: string): void {
     })
   } catch {
     /* audit must never break the action */
+  }
+}
+
+// ---- settings export/import (validated, versioned, no secrets) -----------
+
+const SETTINGS_EXPORT_VERSION = 1
+const MAX_IMPORT_BYTES = 1024 * 1024
+const PURGE_KINDS = ['initial', 'live', 'recovered']
+
+/** Whitelisted settings keys that may cross the export boundary. */
+function settingsExportPayload(): {
+  format: string
+  version: number
+  settings: Record<string, unknown>
+  savedFilters: SavedFilter[]
+} {
+  return {
+    format: 'rased-settings',
+    version: SETTINGS_EXPORT_VERSION,
+    settings: {
+      language: settings.language,
+      pollIntervalMs: settings.pollIntervalMs,
+      notificationsEnabled: settings.notificationsEnabled,
+      soundEnabled: settings.soundEnabled,
+      runAtStartup: settings.runAtStartup,
+      notifyFilter: settings.notifyFilter,
+      displayFilter: settings.displayFilter,
+      displayQuery: settings.displayQuery,
+      linkDisplayAndNotifyFilters: settings.linkDisplayAndNotifyFilters,
+      notifyUncertainCategory: settings.notifyUncertainCategory,
+      showUnreadOnly: settings.showUnreadOnly,
+      ui: settings.ui
+    },
+    savedFilters: db ? listSavedFilters(db) : []
+  }
+}
+
+let pendingImport: { settings: Partial<AppSettings>; filters: SavedFilter[] } | null = null
+
+function validateSettingsImport(): ImportSummary {
+  pendingImport = null
+  if (!win || !db) return { ok: false, error: 'no-window' }
+  const chosen = dialog.showOpenDialogSync(win, {
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  if (!chosen || chosen.length === 0) return { ok: false }
+  const path = chosen[0] as string
+  let raw: Buffer
+  try {
+    if (statSync(path).size > MAX_IMPORT_BYTES) return { ok: false, error: 'too-large' }
+    raw = readFileSync(path)
+  } catch {
+    return { ok: false, error: 'read-failed' }
+  }
+  let doc: unknown
+  try {
+    doc = JSON.parse(raw.toString('utf-8')) as unknown
+  } catch {
+    return { ok: false, error: 'invalid-json' }
+  }
+  if (typeof doc !== 'object' || doc === null) return { ok: false, error: 'bad-schema' }
+  const o = doc as Record<string, unknown>
+  if (o['format'] !== 'rased-settings' || o['version'] !== SETTINGS_EXPORT_VERSION) return { ok: false, error: 'bad-schema' }
+  if (o['settings'] !== undefined && (typeof o['settings'] !== 'object' || o['settings'] === null)) {
+    return { ok: false, error: 'bad-schema' }
+  }
+  if (!Array.isArray(o['savedFilters'])) return { ok: false, error: 'bad-schema' }
+  const full = sanitizeSettings(o['settings'] ?? {})
+  const present = typeof o['settings'] === 'object' && o['settings'] !== null ? Object.keys(o['settings'] as object) : []
+  const allowed: (keyof AppSettings)[] = [
+    'language',
+    'pollIntervalMs',
+    'notificationsEnabled',
+    'soundEnabled',
+    'runAtStartup',
+    'notifyFilter',
+    'displayFilter',
+    'displayQuery',
+    'linkDisplayAndNotifyFilters',
+    'notifyUncertainCategory',
+    'showUnreadOnly',
+    'ui'
+  ]
+  const partial: Partial<AppSettings> = {}
+  const settingsKeys: string[] = []
+  for (const k of allowed) {
+    if (present.includes(k)) {
+      ;(partial as Record<string, unknown>)[k] = full[k]
+      settingsKeys.push(k)
+    }
+  }
+  const filters: SavedFilter[] = []
+  for (const entry of o['savedFilters'] as unknown[]) {
+    const f = sanitizeSavedFilter(entry)
+    if (!f) return { ok: false, error: 'bad-filter' }
+    filters.push(f)
+  }
+  const currentIds = new Set(listSavedFilters(db as Db).map((f) => f.id))
+  pendingImport = { settings: partial, filters }
+  return {
+    ok: true,
+    settingsKeys,
+    filtersAdded: filters.filter((f) => !currentIds.has(f.id)).length,
+    filtersReplaced: filters.filter((f) => currentIds.has(f.id)).length,
+    startupRequested: (partial as { runAtStartup?: boolean }).runAtStartup === true
+  }
+}
+
+function applySettingsImport(mode: unknown, applyStartup: boolean): ImportSummary {
+  const cached = pendingImport
+  pendingImport = null
+  if (!cached || !db) return { ok: false, error: 'no-validated-import' }
+  if (mode !== 'merge' && mode !== 'replace') return { ok: false, error: 'bad-mode' }
+  const d: Db = db
+  const partial = { ...cached.settings }
+  // runAtStartup needs an explicit opt-in at import time; never implied.
+  if (!applyStartup) delete partial.runAtStartup
+  const next = sanitizeSettings({ ...settings, ...partial, doNotDisturbUntil: null })
+  if (next.linkDisplayAndNotifyFilters) next.notifyFilter = next.displayQuery.categoryFilter
+  next.displayFilter = next.displayQuery.categoryFilter
+  const currentIds = new Set(listSavedFilters(d).map((f) => f.id))
+  runInTransaction(d, () => {
+    saveSettings(next)
+    if (mode === 'replace') {
+      d.exec('DELETE FROM saved_filters;')
+    }
+    for (const f of cached.filters) saveSavedFilterRow(d, f)
+  })
+  auditUi(`settings-import mode=${mode} filters=${cached.filters.length}`)
+  return {
+    ok: true,
+    settingsKeys: Object.keys(partial),
+    filtersAdded: cached.filters.filter((f) => !currentIds.has(f.id)).length,
+    filtersReplaced: mode === 'merge' ? cached.filters.filter((f) => currentIds.has(f.id)).length : 0
   }
 }
 

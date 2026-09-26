@@ -11,7 +11,7 @@ import type {
   ProjectQuery
 } from '../shared/types.js'
 import { utcNowIso } from './db.js'
-import { evaluateFilter, toFilterable } from '../collector/filters.js'
+import { matchesDefinition } from '../shared/filters.js'
 
 export interface UpsertInput {
   source: string
@@ -167,64 +167,14 @@ export function upsertProjectsBatch(
 }
 
 export function listProjects(db: Db, q: ProjectQuery): Project[] {
-  if (q.displayFilter) {
-    const rows = listProjects(db, { ...q, displayFilter: undefined, limit: 1_000_000, offset: 0 })
-    return rows.filter((p) => evaluateFilter(toFilterable(p), q.displayFilter!) !== 'nomatch').slice(q.offset, q.offset + q.limit)
-  }
-  const where: string[] = []
-  const params: (string | number)[] = []
-  if (q.unreadOnly) where.push('read_at IS NULL')
-  if (q.search && q.search.trim()) {
-    where.push('(title LIKE ? ESCAPE \'\\\' OR description_excerpt LIKE ? ESCAPE \'\\\' OR url LIKE ? ESCAPE \'\\\' )')
-    const like = `%${q.search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-    params.push(like, like, like)
-  }
-  if (q.categories && q.categories.length > 0) {
-    const parts: string[] = []
-    const cats = q.categories.filter((c) => c !== '__uncertain')
-    if (cats.length > 0) {
-      parts.push(`category_slug IN (${cats.map(() => '?').join(',')})`)
-      params.push(...cats)
-    }
-    if (q.categories.includes('__uncertain')) parts.push('category_slug IS NULL')
-    where.push(`(${parts.join(' OR ')})`)
-  }
-  const sql =
-    'SELECT * FROM projects' +
-    (where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '') +
-    ' ORDER BY first_seen_at DESC, id DESC LIMIT ? OFFSET ?;'
-  const rows = db.prepare(sql).all(...params, q.limit, q.offset) as unknown as ProjectRow[]
-  return rows.map(mapProject)
+  // v1 shape, unified v2 engine: every constraint applies before pagination.
+  const def = legacyToFilterDef(q)
+  return queryProjectsPage(db, def, { limit: q.limit, offset: q.offset }).rows
 }
 
 export function countProjects(db: Db, q: Omit<ProjectQuery, 'limit' | 'offset'>): { total: number; unread: number } {
-  if (q.displayFilter) {
-    const rows = listProjects(db, { ...q, displayFilter: undefined, limit: 1_000_000, offset: 0 })
-      .filter((p) => evaluateFilter(toFilterable(p), q.displayFilter!) !== 'nomatch')
-    return { total: rows.length, unread: rows.filter((p) => !p.readAt).length }
-  }
-  const where: string[] = []
-  const params: (string | number)[] = []
-  if (q.unreadOnly) where.push('read_at IS NULL')
-  if (q.search && q.search.trim()) {
-    where.push('(title LIKE ? ESCAPE \'\\\' OR description_excerpt LIKE ? ESCAPE \'\\\' OR url LIKE ? ESCAPE \'\\\' )')
-    const like = `%${q.search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-    params.push(like, like, like)
-  }
-  if (q.categories && q.categories.length > 0) {
-    const parts: string[] = []
-    const cats = q.categories.filter((c) => c !== '__uncertain')
-    if (cats.length > 0) {
-      parts.push(`category_slug IN (${cats.map(() => '?').join(',')})`)
-      params.push(...cats)
-    }
-    if (q.categories.includes('__uncertain')) parts.push('category_slug IS NULL')
-    where.push(`(${parts.join(' OR ')})`)
-  }
-  const suffix = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : ''
-  const total = (db.prepare(`SELECT COUNT(*) AS n FROM projects${suffix};`).get(...params) as { n: number }).n
-  const unreadWhere = [...where, 'read_at IS NULL'].join(' AND ')
-  const unread = (db.prepare(`SELECT COUNT(*) AS n FROM projects WHERE ${unreadWhere};`).get(...params) as { n: number }).n
+  const def = legacyToFilterDef(q)
+  const { total, unread } = queryProjectsPage(db, def, { limit: 0, offset: 0 })
   return { total, unread }
 }
 
@@ -468,4 +418,275 @@ export function recordDiagnostic(db: Db, e: DiagnosticEntry): void {
 
 export function listDiagnostics(db: Db, limit: number): DiagnosticEntry[] {
   return db.prepare('SELECT at, endpoint_kind AS endpointKind, status, duration_ms AS durationMs, item_count AS itemCount, error_category AS errorCategory, detail FROM diagnostics ORDER BY id DESC LIMIT ?;').all(limit) as unknown as DiagnosticEntry[]
+}
+
+// ---- v2: personal state, details cache, saved filters, tombstones --------
+
+import type {
+  DetailProvenance,
+  DetailStatus,
+  FilterDefinition,
+  PageResult,
+  PersonalStatus,
+  ProjectDetails,
+  ProjectUserState,
+  ProjectWithUser,
+  SavedFilter
+} from '../shared/types.js'
+import { defaultFilterDefinition, sanitizeFilterDefinition } from '../shared/types.js'
+
+export function getUserState(db: Db, projectId: number): ProjectUserState {
+  const row = db.prepare('SELECT project_id, saved_at, hidden_at, personal_status, note, updated_at FROM project_user_state WHERE project_id = ?;').get(projectId) as
+    | { project_id: number; saved_at: string | null; hidden_at: string | null; personal_status: PersonalStatus; note: string; updated_at: string }
+    | undefined
+  if (!row) {
+    return { projectId, savedAt: null, hiddenAt: null, status: 'none', note: '', updatedAt: utcNowIso() }
+  }
+  return { projectId: row.project_id, savedAt: row.saved_at, hiddenAt: row.hidden_at, status: row.personal_status, note: row.note, updatedAt: row.updated_at }
+}
+
+export interface UserStatePatch {
+  saved?: boolean
+  hidden?: boolean
+  status?: PersonalStatus
+  note?: string
+}
+
+/** Caller must have sanitized the patch. Returns false when the project is unknown. */
+export function updateUserState(db: Db, projectId: number, patch: UserStatePatch, now = utcNowIso()): boolean {
+  const exists = db.prepare('SELECT id FROM projects WHERE id = ?;').get(projectId) as { id: number } | undefined
+  if (!exists) return false
+  const cur = getUserState(db, projectId)
+  const savedAt = patch.saved === undefined ? cur.savedAt : patch.saved ? (cur.savedAt ?? now) : null
+  const hiddenAt = patch.hidden === undefined ? cur.hiddenAt : patch.hidden ? (cur.hiddenAt ?? now) : null
+  db.prepare(
+    `INSERT INTO project_user_state (project_id, saved_at, hidden_at, personal_status, note, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(project_id) DO UPDATE SET saved_at = excluded.saved_at, hidden_at = excluded.hidden_at,
+       personal_status = excluded.personal_status, note = excluded.note, updated_at = excluded.updated_at;`
+  ).run(projectId, savedAt, hiddenAt, patch.status ?? cur.status, patch.note ?? cur.note, now)
+  return true
+}
+
+export function getProjectDetailsRow(db: Db, projectId: number): ProjectDetails {
+  const row = db.prepare('SELECT project_id, description_text, provenance, fetched_at, status, error_code FROM project_details WHERE project_id = ?;').get(projectId) as
+    | { project_id: number; description_text: string | null; provenance: DetailProvenance | null; fetched_at: string | null; status: DetailStatus; error_code: string | null }
+    | undefined
+  if (!row) {
+    return { projectId, text: null, provenance: null, fetchedAt: null, status: 'not_requested', errorCode: null }
+  }
+  return { projectId: row.project_id, text: row.description_text, provenance: row.provenance, fetchedAt: row.fetched_at, status: row.status, errorCode: row.error_code }
+}
+
+export interface DetailsUpdate {
+  text: string | null
+  provenance: DetailProvenance | null
+  fetchedAt: string | null
+  status: DetailStatus
+  errorCode: string | null
+}
+
+export function upsertProjectDetails(db: Db, projectId: number, u: DetailsUpdate): void {
+  db.prepare(
+    `INSERT INTO project_details (project_id, description_text, provenance, fetched_at, status, error_code)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(project_id) DO UPDATE SET description_text = excluded.description_text, provenance = excluded.provenance,
+       fetched_at = excluded.fetched_at, status = excluded.status, error_code = excluded.error_code;`
+  ).run(projectId, u.text, u.provenance, u.fetchedAt, u.status, u.errorCode)
+}
+
+// ---- saved filters --------------------------------------------------------
+
+export function listSavedFilters(db: Db): SavedFilter[] {
+  const rows = db.prepare('SELECT id, name, definition_json, created_at, updated_at FROM saved_filters ORDER BY updated_at DESC;').all() as unknown as {
+    id: string
+    name: string
+    definition_json: string
+    created_at: string
+    updated_at: string
+  }[]
+  const out: SavedFilter[] = []
+  for (const r of rows) {
+    try {
+      const def = JSON.parse(r.definition_json) as unknown
+      out.push({ id: r.id, name: r.name, definition: sanitizeFilterDefinition(def), createdAt: r.created_at, updatedAt: r.updated_at })
+    } catch {
+      /* skip corrupt rows rather than breaking the list */
+    }
+  }
+  return out
+}
+
+export function saveSavedFilterRow(db: Db, f: SavedFilter): void {
+  db.prepare(
+    'INSERT INTO saved_filters (id, name, definition_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, definition_json = excluded.definition_json, updated_at = excluded.updated_at;'
+  ).run(f.id, f.name, JSON.stringify(f.definition), f.createdAt, f.updatedAt)
+}
+
+export function deleteSavedFilterRow(db: Db, id: string): boolean {
+  const r = db.prepare('DELETE FROM saved_filters WHERE id = ?;').run(id)
+  return Number(r.changes) > 0
+}
+
+// ---- tombstones ------------------------------------------------------------
+
+export function addTombstones(db: Db, source: string, externalIds: string[], now = utcNowIso()): void {
+  if (externalIds.length === 0) return
+  const stmt = db.prepare('INSERT INTO tombstones (source, external_id, deleted_at) VALUES (?, ?, ?) ON CONFLICT(source, external_id) DO UPDATE SET deleted_at = excluded.deleted_at;')
+  for (const eid of externalIds) stmt.run(source, eid, now)
+}
+
+export function filterOutTombstoned<T extends { source: string; externalId: string }>(db: Db, items: T[]): T[] {
+  if (items.length === 0) return items
+  const bySource = new Map<string, T[]>()
+  for (const it of items) {
+    const arr = bySource.get(it.source) ?? []
+    arr.push(it)
+    bySource.set(it.source, arr)
+  }
+  const out: T[] = []
+  for (const [source, arr] of bySource) {
+    const rows = db.prepare(`SELECT external_id FROM tombstones WHERE source = ? AND external_id IN (${arr.map(() => '?').join(',')});`).all(source, ...arr.map((a) => a.externalId)) as unknown as {
+      external_id: string
+    }[]
+    const dead = new Set(rows.map((r) => r.external_id))
+    for (const it of arr) if (!dead.has(it.externalId)) out.push(it)
+  }
+  return out
+}
+
+/** Non-destructive count twin of purgeHistory (same WHERE, no writes). */
+export function countPurgeable(db: Db, cutoffIso: string, kinds: string[]): number {
+  if (kinds.length === 0) return 0
+  const row = db.prepare(
+    `SELECT COUNT(*) AS n FROM projects p
+     LEFT JOIN project_user_state u ON u.project_id = p.id
+     WHERE p.discovery_kind IN (${kinds.map(() => '?').join(',')})
+       AND p.first_seen_at < ?
+       AND (u.saved_at IS NULL OR u.project_id IS NULL)
+       AND (u.note IS NULL OR u.note = '' OR u.project_id IS NULL)
+       AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'));`
+  ).get(...kinds, cutoffIso) as { n: number }
+  return row.n
+}/** Destructive twin of countPurgeable: deletes + tombstones, returns deleted count. */
+export function purgeHistory(db: Db, cutoffIso: string, kinds: string[]): { deleted: number } {
+  if (kinds.length === 0) return { deleted: 0 }
+  const rows = db.prepare(
+    `SELECT p.source AS source, p.external_id AS external_id, p.id AS id FROM projects p
+     LEFT JOIN project_user_state u ON u.project_id = p.id
+     WHERE p.discovery_kind IN (${kinds.map(() => '?').join(',')})
+       AND p.first_seen_at < ?
+       AND (u.saved_at IS NULL OR u.project_id IS NULL)
+       AND (u.note IS NULL OR u.note = '' OR u.project_id IS NULL)
+       AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'));`
+  ).all(...kinds, cutoffIso) as unknown as { source: string; external_id: string; id: number }[]
+  if (rows.length === 0) return { deleted: 0 }
+  const now = utcNowIso()
+  const bySource = new Map<string, string[]>()
+  for (const r of rows) {
+    const arr = bySource.get(r.source) ?? []
+    arr.push(r.external_id)
+    bySource.set(r.source, arr)
+  }
+  for (const [source, eids] of bySource) addTombstones(db, source, eids, now)
+  let deleted = 0
+  for (let offset = 0; offset < rows.length; offset += 500) {
+    const chunk = rows.slice(offset, offset + 500)
+    deleted += Number(db.prepare(`DELETE FROM projects WHERE id IN (${chunk.map(() => '?').join(',')});`).run(...chunk.map(r => r.id)).changes)
+  }
+  return { deleted }
+}
+
+// ---- unified query engine ---------------------------------------------------
+
+interface PrefilterRow extends ProjectRow {
+  saved_at: string | null
+  hidden_at: string | null
+  personal_status: PersonalStatus | null
+}
+
+function mapWithUser(row: PrefilterRow): ProjectWithUser {
+  return {
+    ...mapProject(row),
+    saved: row.saved_at !== null,
+    hidden: row.hidden_at !== null,
+    personalStatus: row.personal_status ?? 'none',
+    hasNote: false // filled below when needed; list queries skip note bodies
+  }
+}
+
+/**
+ * Single predicate path for list AND count: SQL pre-filters
+ * (scope/unread/status/search), then the shared category+keyword evaluator,
+ * budget overlap and sort in JS, then pagination. Nothing filters after paging.
+ */
+export function queryProjectsPage(db: Db, def: FilterDefinition, page: { limit: number; offset: number }): PageResult {
+  const where: string[] = []
+  const params: (string | number)[] = []
+  if (def.scope === 'hidden') {
+    where.push('u.hidden_at IS NOT NULL')
+  } else {
+    where.push('(u.hidden_at IS NULL OR u.project_id IS NULL)')
+    if (def.scope === 'saved') where.push('u.saved_at IS NOT NULL')
+  }
+  if (def.unreadOnly) where.push('p.read_at IS NULL')
+  if (def.statuses.length > 0) {
+    where.push(`COALESCE(u.personal_status, 'none') IN (${def.statuses.map(() => '?').join(',')})`)
+    params.push(...def.statuses)
+  }
+  const sql =
+    'SELECT p.*, u.saved_at AS saved_at, u.hidden_at AS hidden_at, u.personal_status AS personal_status FROM projects p LEFT JOIN project_user_state u ON u.project_id = p.id' +
+    (where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '') +
+    ' ORDER BY p.first_seen_at DESC, p.id DESC;'
+  const pre = db.prepare(sql).all(...params) as unknown as PrefilterRow[]
+  const kept: ProjectWithUser[] = []
+  for (const row of pre) {
+    const base = mapWithUser(row)
+    if (!matchesDefinition(base, def)) continue
+    kept.push(base)
+  }
+  if (def.sort === 'latestPublished') {
+    kept.sort((a, b) => {
+      const pa = a.publishedAt ? Date.parse(a.publishedAt) : NaN
+      const pb = b.publishedAt ? Date.parse(b.publishedAt) : NaN
+      const aNaN = Number.isNaN(pa)
+      const bNaN = Number.isNaN(pb)
+      if (aNaN && bNaN) return b.id - a.id
+      if (aNaN) return 1
+      if (bNaN) return -1
+      if (pb !== pa) return pb - pa
+      return b.id - a.id
+    })
+  }
+  const total = kept.length
+  const unread = kept.filter((p) => !p.readAt).length
+  const rows = kept.slice(page.offset, page.offset + page.limit)
+  // note bodies stay out of list payloads; flag presence cheaply
+  if (rows.length > 0) {
+    const notes = db.prepare(`SELECT project_id FROM project_user_state WHERE project_id IN (${rows.map(() => '?').join(',')}) AND note != '';`).all(...rows.map((r) => r.id)) as unknown as {
+      project_id: number
+    }[]
+    const withNote = new Set(notes.map((n) => n.project_id))
+    for (const r of rows) r.hasNote = withNote.has(r.id)
+  }
+  return { rows, total, unread }
+}
+
+/** Legacy v1 query shape, mapped onto the unified engine (keeps old tests green). */
+export function legacyToFilterDef(q: { unreadOnly?: boolean; search?: string; categories?: string[]; displayFilter?: FilterDefinition['categoryFilter'] }): FilterDefinition {
+  const d = defaultFilterDefinition()
+  d.unreadOnly = q.unreadOnly === true
+  d.search = typeof q.search === 'string' ? q.search : ''
+  if (q.displayFilter) {
+    d.categoryFilter = q.displayFilter
+  } else if (q.categories) {
+    d.categoryFilter = {
+      mode: 'selected',
+      categories: q.categories.filter((c) => c !== '__uncertain'),
+      keywordsAny: [],
+      keywordsAll: [],
+      excludeKeywords: []
+    }
+  }
+  return d
 }

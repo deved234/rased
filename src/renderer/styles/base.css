@@ -1,0 +1,47 @@
+/* RASED v2 base: reset, typography, focus, scrollbars, motion, utilities.
+   Logical properties everywhere for RTL/LTR. No inline styles in components. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+html { font-size: calc(14px * var(--tscale, 1)); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow: hidden;
+}
+#root { height: 100%; }
+
+button { font: inherit; color: inherit; }
+input, select, textarea { font: inherit; color: var(--text); }
+
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+::selection { background: var(--accent-dim); color: #fff; }
+
+/* theme-matched scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* utilities */
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.small { font-size: 0.86rem; }
+.num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: embed; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sr-only {
+  position: absolute; inline-size: 1px; block-size: 1px;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}

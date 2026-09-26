@@ -3,6 +3,7 @@
 // breadcrumb category link, JSON-LD occupationalCategory, skill tag links,
 // budget range — and validated. Never invents a category from keywords.
 import { parseRetryAfterMs } from './rss.js'
+import { DetailBudget } from './detailBudget.js'
 
 export interface EnrichmentData {
   categorySlug: string | null
@@ -204,6 +205,7 @@ export interface EnrichmentJob {
 }
 
 export interface EnrichmentQueueDeps {
+  budget?: DetailBudget
   fetchImpl?: typeof fetch
   nowMs?: () => number
   /** false pauses the queue (app paused, backing off) without dropping jobs */
@@ -217,11 +219,14 @@ export class EnrichmentQueue {
   private busy = false
   private lastStartMs = 0
   private activeController: AbortController | null = null
+  private activeProjectId: number | null = null
+  private dropped = new Set<number>()
   private readonly deps: Required<Omit<EnrichmentQueueDeps, 'onTransportFailure' | 'onDone'>> &
     Pick<EnrichmentQueueDeps, 'onTransportFailure' | 'onDone'>
 
   constructor(deps: EnrichmentQueueDeps = {}) {
     this.deps = {
+      budget: deps.budget ?? new DetailBudget(DETAIL_MIN_GAP_MS),
       fetchImpl: deps.fetchImpl ?? fetch,
       nowMs: deps.nowMs ?? Date.now,
       gateOpen: deps.gateOpen ?? (() => true),
@@ -247,6 +252,7 @@ export class EnrichmentQueue {
 
   drop(projectId: number): void {
     this.jobs = this.jobs.filter((j) => j.projectId !== projectId)
+    if (this.activeProjectId === projectId) { this.dropped.add(projectId); this.activeController?.abort() }
   }
 
   pendingIds(): number[] {
@@ -259,14 +265,17 @@ export class EnrichmentQueue {
     if (!this.deps.gateOpen()) return false
     const now = this.deps.nowMs()
     if (now - this.lastStartMs < DETAIL_MIN_GAP_MS) return false
+    if (!this.deps.budget.claim(now)) return false
     const job = this.jobs.shift()
     if (!job) return false
     this.busy = true
     this.lastStartMs = now
     const controller = new AbortController()
     this.activeController = controller
+    this.activeProjectId = job.projectId
     try {
       const res = await fetchDetail(job.url, { fetchImpl: this.deps.fetchImpl, signal: controller.signal })
+      if (this.dropped.has(job.projectId)) return true
       if (res.kind === 'cancelled') {
         this.jobs.unshift(job)
         return true
@@ -287,6 +296,9 @@ export class EnrichmentQueue {
       }
     } finally {
       this.activeController = null
+      this.activeProjectId = null
+      this.dropped.delete(job.projectId)
+      this.deps.budget.release()
       this.busy = false
     }
     return true

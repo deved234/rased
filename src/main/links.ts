@@ -5,6 +5,13 @@
 import { getProjectById } from '../storage/repositories.js'
 import type { Db } from '../storage/db.js'
 
+/** Public projects listing — the only external URL the test notification may open. */
+export const MOSTAQL_PROJECTS_URL = 'https://mostaql.com/projects'
+
+export function isAllowedTestUrl(raw: string): boolean {
+  return raw === MOSTAQL_PROJECTS_URL
+}
+
 export function isAllowedProjectUrl(raw: string): boolean {
   let u: URL
   try {

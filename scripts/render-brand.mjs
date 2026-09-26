@@ -1,0 +1,6 @@
+// Render the code-native compass SVG once; derive every raster icon from it.
+import {app,BrowserWindow} from 'electron';
+import {readFileSync,writeFileSync,mkdtempSync} from 'node:fs';
+import {join,resolve} from 'node:path';import {tmpdir} from 'node:os';
+app.setPath('userData',mkdtempSync(join(tmpdir(),'rased-icons-')));
+app.whenReady().then(async()=>{const w=new BrowserWindow({width:512,height:512,useContentSize:true,frame:false,show:false,transparent:true,backgroundColor:'#00000000',webPreferences:{offscreen:true,backgroundThrottling:false,sandbox:true,contextIsolation:true,nodeIntegration:false}});const svg=readFileSync(resolve('resources/logo.svg'),'utf8');await w.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<style>html,body{margin:0;width:512px;height:512px;background:transparent;overflow:hidden}</style>'+svg));await w.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');const img=await w.capturePage();for(const [file,size] of [['resources/icon-master.png',512],['resources/icon.png',256],['resources/tray.png',32],['src/renderer/assets/logo.png',96]])writeFileSync(resolve(file),img.resize({width:size,height:size,quality:'best'}).toPNG());w.destroy();app.exit(0)}).catch(e=>{console.error(e);app.exit(1)});

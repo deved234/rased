@@ -1,5 +1,5 @@
 {
-  "author": "RASED",
+  "author": "david atef",
   "build": {
     "appId": "com.rased.app",
     "asar": true,
@@ -31,9 +31,20 @@
           "target": "nsis"
         }
       ]
-    }
+    },
+    "extraResources": [
+      {
+        "from": "resources/legal",
+        "to": "legal"
+      },
+      {
+        "from": "resources/icon.ico",
+        "to": "branding/icon.ico"
+      }
+    ]
   },
   "dependencies": {
+    "@fontsource/noto-sans-arabic": "^5.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -50,6 +61,7 @@
     "eslint": "10.11.0",
     "fast-xml-parser": "5.11.1",
     "globals": "17.12.0",
+    "playwright-core": "^1.63.0",
     "png-to-ico": "3.0.2",
     "typescript": "5.9.2",
     "typescript-eslint": "8.70.1",
@@ -70,7 +82,9 @@
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test:e2e": "node scripts/e2e-cdp.mjs",
+    "prebuild": "node scripts/prepare-legal.mjs"
   },
-  "version": "0.1.1"
+  "version": "0.2.4"
 }

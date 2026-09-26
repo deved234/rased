@@ -7,7 +7,18 @@
     <title>RASED — راصد</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static boot splash: paints before JS parses, replaced by React on
+           mount. Styled only by the bundled stylesheet (CSP-safe, no inline
+           styles). React then reports the actual local bootstrap milestones. -->
+      <div class="splash" aria-hidden="true">
+        <div class="splash-mark"><img src="./assets/logo.svg" alt="" /></div>
+        <h1>RASED</h1>
+        <p class="splash-tagline">فرص جديدة، في مكان واحد</p>
+        <div class="splash-startup"><p class="muted">جارٍ تجهيز راصد…</p><div class="bar"><i></i></div></div>
+        <span class="splash-foot">على جهازك · بدون حساب · بدون سيرفر</span>
+      </div>
+    </div>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

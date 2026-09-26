@@ -10,7 +10,7 @@ export function playBeep(): void {
       if (!AC) return
       ctx = new AC()
     }
-    if (ctx.state === 'suspended') void ctx.resume()
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => { /* next user action can retry */ })
     const t0 = ctx.currentTime
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()

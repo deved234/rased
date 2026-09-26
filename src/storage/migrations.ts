@@ -81,6 +81,37 @@ const MIGRATIONS: string[] = [
     deadline_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_classification_deadline ON pending_classifications(deadline_at);
+  `,
+  /* 3 */ `
+  CREATE TABLE IF NOT EXISTS project_user_state (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    saved_at TEXT NULL,
+    hidden_at TEXT NULL,
+    personal_status TEXT NOT NULL DEFAULT 'none',
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS project_details (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    description_text TEXT NULL,
+    provenance TEXT NULL,
+    fetched_at TEXT NULL,
+    status TEXT NOT NULL DEFAULT 'not_requested',
+    error_code TEXT NULL
+  );
+  CREATE TABLE IF NOT EXISTS saved_filters (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    definition_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS tombstones (
+    source TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    deleted_at TEXT NOT NULL,
+    PRIMARY KEY (source, external_id)
+  );
   `
 ]
 

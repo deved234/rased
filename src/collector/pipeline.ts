@@ -4,17 +4,19 @@
 import type { Db } from '../storage/db.js'
 import {
   createPendingEvents,
+  filterOutTombstoned,
   getSourceState,
+  getUserState,
   runInTransaction,
+  saveClassificationWaits,
   saveSourceState,
   upsertProjectsBatch,
   recordDiagnostic,
-  getProjectById,
-  saveClassificationWaits
+  getProjectById
 } from '../storage/repositories.js'
 import type { NormalizedItem } from './normalize.js'
 import { SOURCE } from './normalize.js'
-import { evaluateFilter, toFilterable } from './filters.js'
+import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import type { AppSettings } from '../shared/types.js'
 import { RECOVER_GAP_MS } from './scheduler.js'
 
@@ -61,7 +63,8 @@ export function applySuccessfulCycle(
 
   if (!state.baselineComplete) {
     return runInTransaction(db, () => {
-      const { insertedIds } = upsertProjectsBatch(db, items, { now: ctx.nowIso, discoveryKind: 'initial' })
+      const live = filterOutTombstoned(db, items)
+      const { insertedIds } = upsertProjectsBatch(db, live, { now: ctx.nowIso, discoveryKind: 'initial' })
       saveSourceState(db, {
         ...state,
         baselineComplete: true,
@@ -96,7 +99,8 @@ export function applySuccessfulCycle(
 
   return runInTransaction(db, () => {
     const kind = recovering ? 'recovered' : 'live'
-    const { insertedIds, updatedIds } = upsertProjectsBatch(db, items, { now: ctx.nowIso, discoveryKind: kind })
+    const live = filterOutTombstoned(db, items)
+    const { insertedIds, updatedIds } = upsertProjectsBatch(db, live, { now: ctx.nowIso, discoveryKind: kind })
     const notifyProjectIds: number[] = []
     const uncertainWaits = new Map<number, number>()
     const enrichIds: number[] = []
@@ -180,6 +184,9 @@ export function evaluateLateProject(
 ): 'notify' | 'silent' {
   const p = getProjectById(db, projectId)
   if (!p || !settings.notificationsEnabled) return 'silent'
+  // Hidden projects never notify at re-evaluation; the pending event (if any)
+  // is suppressed at dispatch instead of deleted.
+  if (getUserState(db, projectId).hiddenAt !== null) return 'silent'
   const verdict = evaluateFilter(toFilterable(p), settings.notifyFilter)
   if (verdict === 'match') {
     createPendingEvents(db, [projectId], 'new_project', nowIso)

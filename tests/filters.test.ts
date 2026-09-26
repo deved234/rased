@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateFilter, foldForSearch, type FilterableProject } from '../src/collector/filters.js'
+import { evaluateFilter, foldForSearch, type FilterableProject } from '../src/shared/filters.js'
 import { defaultCategoryFilter } from '../src/shared/types.js'
 
 const base: FilterableProject = {

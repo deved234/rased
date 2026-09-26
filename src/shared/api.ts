@@ -1,17 +1,49 @@
+import type { AboutLink } from './about.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
 import type {
+  AppSettings,
+  DetailsChangedEvent,
   DiagnosticEntry,
+  FilterDefinition,
+  MutationResult,
+  NavigateEvent,
   NotifyEvent,
   OpenProjectResult,
+  PageResult,
   Project,
+  ProjectDetails,
+  ProjectFull,
   ProjectQuery,
+  ProjectUserState,
   RefreshResult,
   RendererProjectEvent,
-  SourceHealth,
-  AppSettings
+  SavedFilter,
+  SourceHealth
 } from './types.js'
+
+export interface ImportSummary {
+  ok: boolean
+  error?: string
+  settingsKeys?: string[]
+  filtersAdded?: number
+  filtersReplaced?: number
+  startupRequested?: boolean
+}
+
+export interface PurgePreview {
+  ok: boolean
+  error?: string
+  affected?: number
+  backupPath?: string | null
+}
+
+export interface AppInfo {
+  version: string
+  platform: string
+  arch: string
+}
 
 export interface RasedApi {
   getProjects(q: ProjectQuery): Promise<Project[]>
@@ -25,10 +57,44 @@ export interface RasedApi {
   resume(): Promise<SourceHealth>
   refresh(): Promise<RefreshResult>
   openProject(id: number): Promise<OpenProjectResult>
+  openProjectExternal(id: number): Promise<OpenProjectResult>
   getDiagnostics(limit?: number): Promise<DiagnosticEntry[]>
+  // v2
+  getProject(id: number): Promise<ProjectFull | null>
+  getProjectDetails(id: number): Promise<ProjectDetails | null>
+  requestProjectDetails(id: number, force?: boolean): Promise<ProjectDetails | null>
+  updateProjectUserState(id: number, patch: Partial<Pick<ProjectUserState, 'status'>> & { saved?: boolean; hidden?: boolean; note?: string }): Promise<MutationResult>
+  getSavedFilters(): Promise<SavedFilter[]>
+  createSavedFilter(name: string, definition: FilterDefinition): Promise<MutationResult & { id?: string }>
+  updateSavedFilter(id: string, name: string, definition: FilterDefinition): Promise<MutationResult>
+  deleteSavedFilter(id: string): Promise<MutationResult>
+  previewFilterCount(definition: FilterDefinition): Promise<{ total: number; unread: number }>
+  queryProjectsPage(definition: FilterDefinition, limit: number, offset: number): Promise<PageResult>
+  testNotification(): Promise<OpenProjectResult>
+  testSound(): Promise<void>
+  setDnd(untilIso: string | null): Promise<AppSettings>
+  openDataFolder(): Promise<MutationResult>
+  exportSettings(): Promise<MutationResult & { path?: string }>
+  validateImport(): Promise<ImportSummary>
+  applyImport(mode: 'merge' | 'replace', applyStartup: boolean): Promise<ImportSummary>
+  purgeHistoryPreview(cutoffIso: string): Promise<PurgePreview>
+  purgeHistoryApply(cutoffIso: string): Promise<PurgePreview & { deleted?: number }>
+  openCompact(): Promise<void>
+  closeCompact(): Promise<void>
+  setAlwaysOnTop(on: boolean): Promise<void>
+  showProjectInMain(id: number): Promise<void>
+  windowControl(action: 'minimize' | 'maximize' | 'close'): Promise<void>
+  getWindowState(): Promise<{ maximized: boolean; minimized: boolean }>
+  onWindowState(cb: (state: { maximized: boolean }) => void): () => void
+  getAppInfo(): Promise<AppInfo>
+  openAboutLink(link: AboutLink): Promise<MutationResult>
+  confirmClose(quit: boolean): Promise<void>
+  onRequestClose(cb: (e: { quit: boolean }) => void): () => void
   onProjectsChanged(cb: (e: RendererProjectEvent) => void): () => void
   onHealthChanged(cb: (h: SourceHealth) => void): () => void
   onSettingsChanged(cb: (s: AppSettings) => void): () => void
+  onDetailsChanged(cb: (e: DetailsChangedEvent) => void): () => void
+  onNavigate(cb: (e: NavigateEvent) => void): () => void
   onPlayBeep(cb: () => void): () => void
   onOpenSettings(cb: () => void): () => void
 }
