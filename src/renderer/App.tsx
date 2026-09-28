@@ -10,6 +10,7 @@ import { Sidebar, Statusbar, Topbar, togglePause } from './components/shell.js'
 import { ProjectsView, emptyMemory, type ListMemory } from './views/ProjectsView.js'
 import { SavedFiltersView } from './views/SavedFiltersView.js'
 import { ProjectDetailView } from './views/ProjectDetailView.js'
+import { ProposalView } from './views/ProposalView.js'
 import { SplashView } from './views/SplashView.js'
 import { CompactView } from './views/CompactView.js'
 import { SettingsView } from './views/SettingsView.js'
@@ -36,7 +37,7 @@ export function App(): React.ReactElement {
   const returnRoute = React.useRef<Route>({ name: 'projects' })
   const lastListRoute = React.useRef<Route>({ name: 'projects' })
   if (route.name === 'projects' || route.name === 'saved') lastListRoute.current = route
-  if (route.name !== 'project') returnRoute.current = lastListRoute.current
+  if (route.name !== 'project' && route.name !== 'proposal') returnRoute.current = lastListRoute.current
   const lang = settings.language
   const t = STRINGS[lang]
   const health = useHealth(boot === 'ready')
@@ -168,7 +169,7 @@ export function App(): React.ReactElement {
   }
 
   const title =
-    route.name === 'saved' ? t.navSaved : route.name === 'filters' ? t.navFilters : route.name === 'settings' ? t.navSettings : route.name === 'project' ? t.projectDetails : t.allProjects
+    route.name === 'saved' ? t.navSaved : route.name === 'filters' ? t.navFilters : route.name === 'settings' ? t.navSettings : route.name === 'project' ? t.projectDetails : route.name === 'proposal' ? (lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant') : t.allProjects
 
   const pause = (): void => {
     void togglePause(health)
@@ -200,7 +201,9 @@ export function App(): React.ReactElement {
           onResume={pause}
           onRefresh={refresh}
         />
-        {route.name === 'project' ? (
+        {route.name === 'proposal' ? (
+          <ProposalView key={route.id} lang={lang} projectId={route.id} />
+        ) : route.name === 'project' ? (
           <ProjectDetailView key={route.id} lang={lang} projectId={route.id} onBack={() => go(returnRoute.current)} />
         ) : route.name === 'saved' ? (
           <ProjectsView key="saved"

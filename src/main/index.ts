@@ -93,6 +93,9 @@ import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 import { browserToastXml, supportsUrgentToasts } from './toast.js'
+import { deleteGeminiKey, generateGeminiProposal, getProposalPreview, getProposalProfile, hasGeminiKey, saveGeminiKey, saveProposalProfile } from './proposals.js'
+import { deleteProposalDraft, getProposalDraft, saveProposalDraft } from '../storage/proposalDrafts.js'
+import type { ProposalDraft } from '../shared/proposals.js'
 
 app.setAppUserModelId('com.rased.app')
 
@@ -121,6 +124,7 @@ let episode = 0
 let hintShown = false
 const uncertainWaits = new Map<number, number>()
 let activeRss: AbortController | null = null
+let activeProposal: AbortController | null = null
 let flushing: Promise<void> | null = null
 const detailBudget = new DetailBudget()
 const work = new Set<Promise<unknown>>()
@@ -948,6 +952,7 @@ async function shutdown(): Promise<void> {
   quitRequested = true
   paused = true
   activeRss?.abort()
+  activeProposal?.abort()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
@@ -977,6 +982,41 @@ async function shutdown(): Promise<void> {
 
 function registerIpc(): void {
   const mainSender = (event: Electron.IpcMainInvokeEvent): boolean => event.sender === win?.webContents && !quitRequested
+  const proposalId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0
+  const proposalNotes = (value: unknown): value is string => typeof value === 'string' && value.length <= 2000
+  ipcMain.handle(IPC.getProposalSetup, event => mainSender(event) && db ? { hasKey: hasGeminiKey(app.getPath('userData')), profile: getProposalProfile(db) } : null)
+  ipcMain.handle(IPC.saveGeminiKey, (event, v: { key?: unknown }) => ({ ok: mainSender(event) && saveGeminiKey(app.getPath('userData'), v?.key) }))
+  ipcMain.handle(IPC.deleteGeminiKey, event => { if (!mainSender(event)) return { ok: false }; deleteGeminiKey(app.getPath('userData')); return { ok: true } })
+  ipcMain.handle(IPC.saveProposalProfile, (event, v: { profile?: unknown }) => ({ ok: !!(mainSender(event) && db && saveProposalProfile(db, v?.profile)) }))
+  ipcMain.handle(IPC.getProposalPreview, (event, v: { id?: unknown; projectNotes?: unknown }) => mainSender(event) && db && proposalId(v?.id) && proposalNotes(v?.projectNotes) ? getProposalPreview(db, v.id, v.projectNotes) : null)
+  ipcMain.handle(IPC.generateProposal, async (event, v: { id?: unknown; projectNotes?: unknown; fingerprint?: unknown }) => {
+    if (!mainSender(event) || !db || !proposalId(v?.id) || !proposalNotes(v?.projectNotes) || typeof v?.fingerprint !== 'string') return { ok: false, error: 'bad-request' }
+    if (activeProposal) return { ok: false, error: 'busy' }
+    const preview = getProposalPreview(db, v.id, v.projectNotes)
+    if (!preview || preview.fingerprint !== v.fingerprint) return { ok: false, error: 'preview-changed' }
+    const controller = new AbortController()
+    activeProposal = controller
+    let timedOut = false
+    const timeout = setTimeout(() => { timedOut = true; controller.abort() }, 45_000)
+    try {
+      const draft = await generateGeminiProposal(app.getPath('userData'), preview, controller.signal, testHarness?.geminiFetchImpl)
+      if (quitRequested) return { ok: false, error: 'cancelled' }
+      saveProposalDraft(db, draft)
+      return { ok: true, draft }
+    } catch (err) {
+      const code = timedOut ? 'timeout' : err instanceof Error && /^(cancelled|key-unavailable|key-rejected|rate-limited|model-unavailable|invalid-response|provider-http-\d+)$/.test(err.message) ? err.message : 'network-error'
+      return { ok: false, error: code }
+    } finally { clearTimeout(timeout); if (activeProposal === controller) activeProposal = null }
+  })
+  ipcMain.handle(IPC.cancelProposal, event => { if (mainSender(event)) activeProposal?.abort() })
+  ipcMain.handle(IPC.getProposalDraft, (event, v: { id?: unknown }) => mainSender(event) && db && proposalId(v?.id) ? getProposalDraft(db, v.id) : null)
+  ipcMain.handle(IPC.saveProposalDraft, (event, v: { draft?: ProposalDraft }) => {
+    const draft = v?.draft
+    if (!mainSender(event) || !db || !draft || !proposalId(draft.projectId) || !getProjectById(db, draft.projectId) || typeof draft.proposal !== 'string' || draft.proposal.length > 12000 || !Array.isArray(draft.assumptions) || !Array.isArray(draft.questions)) return { ok: false, error: 'bad-draft' }
+    saveProposalDraft(db, { projectId: draft.projectId, proposal: draft.proposal, assumptions: draft.assumptions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), questions: draft.questions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), updatedAt: new Date().toISOString() })
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.deleteProposalDraft, (event, v: { id?: unknown }) => { if (!mainSender(event) || !db || !proposalId(v?.id)) return { ok: false }; deleteProposalDraft(db, v.id); return { ok: true } })
   ipcMain.handle(IPC.getUpdateState, () => updates?.snapshot())
   ipcMain.handle(IPC.checkUpdate, event => mainSender(event) ? updates?.check() : { ok: false, error: 'not-main' })
   ipcMain.handle(IPC.downloadUpdate, event => mainSender(event) ? updates?.download() : { ok: false, error: 'not-main' })

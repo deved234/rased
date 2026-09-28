@@ -28,6 +28,16 @@ function sub<T>(channel: string, cb: (v: T) => void): () => void {
 }
 
 const api: RasedApi = {
+  getProposalSetup: () => ipcRenderer.invoke(IPC.getProposalSetup),
+  saveGeminiKey: (key) => ipcRenderer.invoke(IPC.saveGeminiKey, { key }),
+  deleteGeminiKey: () => ipcRenderer.invoke(IPC.deleteGeminiKey),
+  saveProposalProfile: (profile) => ipcRenderer.invoke(IPC.saveProposalProfile, { profile }),
+  getProposalPreview: (id, projectNotes) => ipcRenderer.invoke(IPC.getProposalPreview, { id, projectNotes }),
+  generateProposal: (id, projectNotes, fingerprint) => ipcRenderer.invoke(IPC.generateProposal, { id, projectNotes, fingerprint }),
+  cancelProposal: () => ipcRenderer.invoke(IPC.cancelProposal),
+  getProposalDraft: (id) => ipcRenderer.invoke(IPC.getProposalDraft, { id }),
+  saveProposalDraft: (draft) => ipcRenderer.invoke(IPC.saveProposalDraft, { draft }),
+  deleteProposalDraft: (id) => ipcRenderer.invoke(IPC.deleteProposalDraft, { id }),
   getUpdateState: () => ipcRenderer.invoke(IPC.getUpdateState) as Promise<UpdateState>,
   checkUpdate: () => ipcRenderer.invoke(IPC.checkUpdate) as Promise<MutationResult>,
   downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate) as Promise<MutationResult>,

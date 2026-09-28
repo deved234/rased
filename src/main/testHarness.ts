@@ -8,6 +8,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 export function isolatedTestHarness(profile: string, argv: string[]): null | {
   fetchImpl: typeof fetch
+  geminiFetchImpl: typeof fetch
   record: (kind: string, data: unknown) => void
 } {
   const rel = relative(resolve(tmpdir()), resolve(profile))
@@ -23,7 +24,12 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
     const rss = String(url).endsWith('/rss')
     return new Response(readFileSync(join(profile, rss ? 'rss-fixture.xml' : 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': rss ? 'application/rss+xml' : 'text/html' } })
   }) as typeof fetch
-  return { fetchImpl, record }
+  const geminiFetchImpl = (async (url, options) => {
+    if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    record('gemini-generate', String(url))
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ proposal: 'A focused proposal for the review project.', assumptions: ['Confirm scope'], questions: ['What is the deadline?'] }) }] } }] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return { fetchImpl, geminiFetchImpl, record }
 }
 
 /** Only constructed after isolatedTestHarness validated the opt-in TEMP marker. */

@@ -1,6 +1,6 @@
 # Proposal Assistant / مساعد العروض — concept, not implemented
 
-Status: reviewed product/technical plan only. RASED remains at version 0.2.6; no AI feature implementation, installer, release, or provider account has been created. Gemini is the **only provider for the first implementation**. Keep it separate from the pending notification-priority change until the user reviews this plan and requests implementation.
+Status: implemented in the local development tree on 2026-09-28. RASED remains at version 0.2.6 and no installer, release or remote push has been created for this feature. Gemini is the only provider. The current fixed model is `gemini-2.5-flash`, selected after a live key test succeeded while 3.5/3.8 Flash returned HTTP 503. The text below includes the original design intent; see the implementation notes at the end for final behavior.
 
 ## What the feature should do
 
@@ -55,3 +55,12 @@ The first version is *context-guided LLM drafting*, not RAG. Retrieval-augmented
 3. Choose whether MVP should save generated drafts automatically on-device or only after pressing Save. Default proposal: autosave locally, with a Delete drafts action and an explicit note that drafts remain in the unencrypted application database.
 
 Primary references: [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage), [Mostaql terms](https://mostaql.com/p/terms), [Gemini API terms](https://ai.google.dev/gemini-api/terms), [Gemini API keys](https://ai.google.dev/gemini-api/docs/api-key), [Gemini model catalogue](https://ai.google.dev/gemini-api/docs/models), [supported regions](https://ai.google.dev/gemini-api/docs/available-regions).
+
+## Implementation notes — 2026-09-28
+
+- Settings → Proposal Assistant stores a user-supplied API key as Windows-encrypted `gemini-key.enc` under the RASED user-data folder. It is not in SQLite, exports, diagnostics, source control or the installer. Users can replace/delete it. The saved freelancer profile is plain local SQLite data and can be cleared.
+- A project-details button opens `#/proposal/:id`. The page previews the project title, available description with completeness label, category, skills, budget, profile and optional proposal-specific notes. The existing private project note is excluded. An explicit checkbox and Generate click are needed for each request.
+- Main process re-reads the project/profile and verifies the preview fingerprint before sending one HTTPS request to Gemini. One in-flight request is allowed; Cancel and shutdown abort it. A 45-second timeout applies. No automatic retry or silent model fallback occurs.
+- Gemini returns JSON fields `proposal`, `assumptions`, `questions`. The draft is saved per project in a new SQLite table and can be edited, explicitly re-saved, copied, deleted, or opened on Mostaql in the external browser. Data purging preserves projects with a proposal draft. Submission remains manual. Generated content and local edits are not encrypted in SQLite or backups.
+- The first implementation is context-guided generation, not RAG; no embeddings or portfolio retrieval. The user's profile and proposal-specific notes are sent only when explicitly previewed and approved.
+- Automated tests use a fake key and mocked fetch. A one-off live smoke check used synthetic text and the user's key; no key was committed or written into a fixture. Model listing returned 200; 3.8/3.5 Flash generation returned 503, while 2.5 Flash returned 200. A real UI-to-provider generation check is still recommended before a public release.

@@ -561,11 +561,13 @@ export function countPurgeable(db: Db, cutoffIso: string, kinds: string[]): numb
   const row = db.prepare(
     `SELECT COUNT(*) AS n FROM projects p
      LEFT JOIN project_user_state u ON u.project_id = p.id
+     LEFT JOIN proposal_drafts d ON d.project_id = p.id
      WHERE p.discovery_kind IN (${kinds.map(() => '?').join(',')})
        AND p.first_seen_at < ?
        AND (u.saved_at IS NULL OR u.project_id IS NULL)
        AND (u.note IS NULL OR u.note = '' OR u.project_id IS NULL)
-       AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'));`
+       AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'))
+       AND d.project_id IS NULL;`
   ).get(...kinds, cutoffIso) as { n: number }
   return row.n
 }/** Destructive twin of countPurgeable: deletes + tombstones, returns deleted count. */
@@ -574,11 +576,13 @@ export function purgeHistory(db: Db, cutoffIso: string, kinds: string[]): { dele
   const rows = db.prepare(
     `SELECT p.source AS source, p.external_id AS external_id, p.id AS id FROM projects p
      LEFT JOIN project_user_state u ON u.project_id = p.id
+     LEFT JOIN proposal_drafts d ON d.project_id = p.id
      WHERE p.discovery_kind IN (${kinds.map(() => '?').join(',')})
        AND p.first_seen_at < ?
        AND (u.saved_at IS NULL OR u.project_id IS NULL)
        AND (u.note IS NULL OR u.note = '' OR u.project_id IS NULL)
-       AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'));`
+       AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'))
+       AND d.project_id IS NULL;`
   ).all(...kinds, cutoffIso) as unknown as { source: string; external_id: string; id: number }[]
   if (rows.length === 0) return { deleted: 0 }
   const now = utcNowIso()

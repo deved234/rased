@@ -6,7 +6,7 @@ import { STRINGS, type Lang } from '../i18n.js'
 import { budgetLabel, fullDate, timeAgo } from '../format.js'
 import { ConfirmDialog, EmptyState, SkeletonList } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
-import { registerNavigationBlocker, requestAction } from '../router.js'
+import { go, registerNavigationBlocker, requestAction } from '../router.js'
 
 function statusLabel(s: PersonalStatus, lang: Lang): string {
   const t = STRINGS[lang]
@@ -267,6 +267,9 @@ export function ProjectDetailView({
           {actionError && <p role="alert" className="field-err">{actionError}</p>}
           <button className="btn primary" onClick={() => void openExternal()}>
             <Icon name="external" size={16} /> {t.openExternal}
+          </button>
+          <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
+            {lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant'}
           </button>
           <div className="row-actions">
             <button className="btn sm" onClick={() => void rased.updateProjectUserState(project.id, { saved: !project.saved }).then(() => load())} aria-pressed={project.saved}>

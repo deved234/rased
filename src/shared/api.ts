@@ -1,5 +1,6 @@
 import type { AboutLink } from './about.js'
 import type { UpdateState } from './updates.js'
+import type { ProposalDraft, ProposalPreview, ProposalProfile, ProposalResult } from './proposals.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
@@ -47,6 +48,16 @@ export interface AppInfo {
 }
 
 export interface RasedApi {
+  getProposalSetup(): Promise<{ hasKey: boolean; profile: ProposalProfile }>
+  saveGeminiKey(key: string): Promise<MutationResult>
+  deleteGeminiKey(): Promise<MutationResult>
+  saveProposalProfile(profile: ProposalProfile): Promise<MutationResult>
+  getProposalPreview(id: number, projectNotes: string): Promise<ProposalPreview | null>
+  generateProposal(id: number, projectNotes: string, fingerprint: string): Promise<ProposalResult>
+  cancelProposal(): Promise<void>
+  getProposalDraft(id: number): Promise<ProposalDraft | null>
+  saveProposalDraft(draft: ProposalDraft): Promise<MutationResult>
+  deleteProposalDraft(id: number): Promise<MutationResult>
   getUpdateState(): Promise<UpdateState>
   checkUpdate(): Promise<MutationResult>
   downloadUpdate(): Promise<MutationResult>

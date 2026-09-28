@@ -18,9 +18,9 @@
 
 المعلومات قد تكون ناقصة أو قديمة، وقد تتأخر التنبيهات أو لا تصل. راجع المشروع الأصلي قبل تقديم عرض أو اتخاذ قرار. لا نضمن الرصد اللحظي أو السبق أو قبول العروض أو استمرار الخدمة.
 
-## مساعد العروض المخطط له
+## مساعد العروض
 
-عند طرح الميزة الاختيارية، سيستخدم راصد Gemini لإعداد مسودة عرض فقط بعد طلبك. راجع المسودة وعدّلها قبل نسخها وتقديمها بنفسك على مستقل؛ قد تكون غير دقيقة أو تتضمن خبرات أو وعودًا لم تقدمها. لا ينشئ راصد حساب مستقل ولا يقدم عروضًا آليًا. استخدام Gemini ومفتاحك يخضع لشروط Google، ومنها متطلبات السن والمنطقة والخطة المتاحة: https://ai.google.dev/gemini-api/terms . ولا تمنح هذه الميزة حقوقًا إضافية في محتوى المشاريع.
+في النسخة التطويرية يمكنك طلب مسودة عرض من Gemini بعد معاينة البيانات والموافقة على إرسالها. راجع المسودة وعدّلها قبل نسخها وتقديمها بنفسك على مستقل؛ قد تكون غير دقيقة أو تتضمن خبرات أو وعودًا لم تقدمها. لا ينشئ راصد حساب مستقل ولا يقدم عروضًا آليًا. استخدام Gemini ومفتاحك يخضع لشروط Google، ومنها متطلبات السن والمنطقة والخطة المتاحة: https://ai.google.dev/gemini-api/terms . ولا تمنح هذه الميزة حقوقًا إضافية في محتوى المشاريع.
 
 ## الترخيص والمسؤولية
 
@@ -28,7 +28,7 @@
 
 ## التحديث والتواصل
 
-تصف هذه الصياغة الإصدار الحالي وتوضح مسبقًا سلوك مساعد عروض اختياري مخطط له؛ ذكر الميزة لا يعني توافرها في الإصدار المنشور. راجع النص عند الترقية. للبلاغات المتعلقة بالكود أو الحقوق استخدم مستودع GitHub أو LinkedIn للمطور. لا تنشر بيانات حساسة في البلاغات العامة.
+مساعد العروض متاح في نسخة التطوير الحالية، وليس في الإصدار المنشور 0.2.6. راجع النص عند الترقية. للبلاغات المتعلقة بالكود أو الحقوق استخدم مستودع GitHub أو LinkedIn للمطور. لا تنشر بيانات حساسة في البلاغات العامة.
 
 ---
 
@@ -52,9 +52,9 @@ Do not evade blocks or challenges, flood the source, or abuse the platform. The 
 
 Information may be incomplete or stale and alerts may be delayed or missed. Check the original project before submitting a proposal or making decisions. Instant discovery, priority over competitors, successful proposals and continued availability are not guaranteed.
 
-## Planned Proposal Assistant
+## Proposal Assistant
 
-When this optional feature is released, RASED will use Gemini to draft a proposal only at your request. Review and edit the draft before copying and submitting it yourself on Mostaql; it can contain mistakes, invented experience or unsupported promises. RASED does not create a Mostaql account or submit proposals automatically. Use of Gemini and your key is subject to Google terms, including age, regional and service-tier restrictions: https://ai.google.dev/gemini-api/terms . This feature grants no additional rights to project content.
+In the development build you can ask Gemini to draft a proposal after previewing and approving the data sent. Review and edit the draft before copying and submitting it yourself on Mostaql; it can contain mistakes, invented experience or unsupported promises. RASED does not create a Mostaql account or submit proposals automatically. Use of Gemini and your key is subject to Google terms, including age, regional and service-tier restrictions: https://ai.google.dev/gemini-api/terms . This feature grants no additional rights to project content.
 
 ## License and liability
 
@@ -62,4 +62,4 @@ The software is provided under MIT, reproduced in Licenses. It is provided as is
 
 ## Updates and contact
 
-These disclosures describe the current version and explain a planned optional Proposal Assistant in advance; mentioning it does not mean it is available in the published build. Review the text after upgrades. Contact the developer through the GitHub repository or LinkedIn for code or rights concerns. Do not post sensitive information in public reports.
+The Proposal Assistant is available in the current development build, not in published version 0.2.6. Review the text after upgrades. Contact the developer through the GitHub repository or LinkedIn for code or rights concerns. Do not post sensitive information in public reports.

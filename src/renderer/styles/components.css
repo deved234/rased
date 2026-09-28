@@ -190,3 +190,16 @@
 .update-progress progress { inline-size: 100%; block-size: 8px; accent-color: var(--accent); }
 .update-notes { border-block-start: 1px solid var(--border); margin-block: 20px; padding-block-start: 12px; }
 .update-notes p { white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 320px; overflow-y: auto; line-height: 1.8; }
+.proposal-page { overflow: auto; padding: 28px; display: grid; gap: 20px; align-content: start; max-width: 1000px; width: 100%; margin-inline: auto; }
+.proposal-page > .btn, .proposal-card > .btn { justify-self: start; }
+.proposal-hero h2 { margin: 10px 0 4px; }
+.proposal-card { border: 1px solid var(--border); border-radius: 16px; background: var(--panel); padding: 22px; display: grid; gap: 13px; }
+.proposal-card h3, .proposal-card h4 { margin: 0; }
+.proposal-card details { padding: 12px; border: 1px solid var(--border, #3a4450); border-radius: 10px; }
+.proposal-card summary { cursor: pointer; }
+.proposal-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; font: inherit; }
+.proposal-fields { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.proposal-editor { min-height: 270px; width: 100%; }
+.proposal-consent { display: flex; align-items: center; gap: 8px; }
+.proposal-field { display: grid; gap: 6px; margin-block: 10px; }
+.proposal-field .textarea { min-height: 80px; }

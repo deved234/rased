@@ -6,6 +6,7 @@ export type Route =
   | { name: 'saved' }
   | { name: 'filters' }
   | { name: 'project'; id: number }
+  | { name: 'proposal'; id: number }
   | { name: 'settings'; section: string | null }
   | { name: 'compact' }
 
@@ -19,6 +20,7 @@ export function parseHash(hash: string): Route {
   if (first === 'filters') return { name: 'filters' }
   if (first === 'compact') return { name: 'compact' }
   if (first === 'project' && second && /^\d+$/.test(second)) return { name: 'project', id: Number(second) }
+  if (first === 'proposal' && second && /^\d+$/.test(second)) return { name: 'proposal', id: Number(second) }
   if (first === 'settings') return { name: 'settings', section: second ?? null }
   return { name: 'projects' }
 }
@@ -30,6 +32,7 @@ export function routeHash(r: Route): string {
     case 'filters': return '#/filters'
     case 'compact': return '#/compact'
     case 'project': return `#/project/${r.id}`
+    case 'proposal': return `#/proposal/${r.id}`
     case 'settings': return r.section ? `#/settings/${r.section}` : '#/settings'
   }
 }

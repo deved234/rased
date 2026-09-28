@@ -112,6 +112,15 @@ const MIGRATIONS: string[] = [
     deleted_at TEXT NOT NULL,
     PRIMARY KEY (source, external_id)
   );
+  `,
+  /* 4 */ `
+  CREATE TABLE IF NOT EXISTS proposal_drafts (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    proposal TEXT NOT NULL,
+    assumptions_json TEXT NOT NULL DEFAULT '[]',
+    questions_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  );
   `
 ]
 

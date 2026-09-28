@@ -59,7 +59,7 @@ npm run dist
 - احترام `Retry-After` وفترات التهدئة عند الأخطاء أو تقييد الطلبات. لا تسجيل دخول، ولا إرسال عروض آلي، ولا تجاوز لحماية الموقع.
 - توقيت نشر المشروع في RSS واستجابة الشبكة خارج سيطرة التطبيق؛ لا يمكن ضمان وصول التنبيه لحظيًا أو قبل كل المنافسين.
 
-**ميزة مخططة وغير متاحة في الإصدار المنشور:** [مساعد كتابة العروض باستخدام Gemini](docs/PROPOSAL_ASSISTANT_CONCEPT.md). ستكون بطلب المستخدم فقط وبمفتاح API خاص به؛ راجع [الخصوصية](PRIVACY.md) قبل استخدامها عند طرحها. لم تُضف اتصالات Gemini للتطبيق بعد.
+**في نسخة التطوير فقط، ولم تُنشر بعد في الإصدار 0.2.6:** [مساعد كتابة العروض باستخدام Gemini](docs/PROPOSAL_ASSISTANT_CONCEPT.md). من تفاصيل المشروع افتح «مساعد العروض»، وأضف مفتاحك وملفك المهني من الإعدادات، ثم راجع البيانات قبل الضغط على «توليد». تحفظ المسودة محليًا ويمكن تعديلها ونسخها؛ تقديمها على مستقل يدوي. راجع [الخصوصية](PRIVACY.md) قبل الاستخدام. لا يصدر تحديث أو مثبّت جديد إلا بطلب منفصل.
 
 مؤسس ومطوّر راصد: **david atef** — [GitHub](https://github.com/deved234) · [LinkedIn](https://www.linkedin.com/in/david-atef/).
 
@@ -79,7 +79,7 @@ To develop, install Node.js 24, clone this repository, run `npm ci`, then `npm r
 
 `npm run dev` opens an Electron desktop window. If the Electron executable is missing, the dev command downloads it before launching. The printed `localhost:5173` URL is the internal React development server.
 
-**Planned, not in the published build:** [Gemini Proposal Assistant](docs/PROPOSAL_ASSISTANT_CONCEPT.md). It will use each user's own API key and make requests only when explicitly asked to generate a draft. See the [privacy disclosure](PRIVACY.md); the app currently makes no Gemini requests.
+**Development build only, not published in 0.2.6:** [Gemini Proposal Assistant](docs/PROPOSAL_ASSISTANT_CONCEPT.md). From a project, open the assistant, add your own key and real freelancer profile in Settings, review the outgoing data, then explicitly generate an editable local draft. Submission on Mostaql remains manual. See the [privacy disclosure](PRIVACY.md). No new installer or release has been made.
 
 
 ## الشروط والخصوصية والحقوق
