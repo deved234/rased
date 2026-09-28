@@ -4,11 +4,11 @@
 
 ## وظيفة البرنامج
 
-راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل، وتنظيم المشاريع وإظهار التنبيهات. قد يطلب صفحات التفاصيل العامة لإكمال المعلومات. تقديم العروض والتعاقد والدفع يتم بواسطتك على مستقل؛ البرنامج لا يدخل حسابك ولا يرسل عروضًا آلية.
+راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات؛ تفاصيل طلبات خمسات الكاملة تُفتح على موقعها في المتصفح. تقديم العروض والتواصل والتعاقد والدفع يتم بواسطتك على المنصة المعنية؛ البرنامج لا يدخل حسابك ولا يرسل عروضًا أو ردودًا آلية.
 
 ## علاقة المنصة وحقوق المحتوى
 
-مستقل وحسوب وعلاماتهما ومحتوى المشاريع تخص أصحابها. ظهور محتوى عام أو وجود RSS ليس تصريحًا بإعادة نشره أو بجلب آلي غير محدود. لا تمنح هذه الصفحات إذنًا من المنصة. احترم شروط المصدر والقيود المحلية وحقوق أصحاب المحتوى؛ لا تستخدم راصد لتجاوز الحماية أو جمع معلومات خاصة أو إعادة بيع محتوى المشاريع.
+مستقل وخمسات وحسوب وعلاماتهم ومحتوى المستخدمين تخص أصحابها. ظهور محتوى عام أو وجود RSS ليس تصريحًا بإعادة نشره أو بجلب آلي غير محدود. لا تمنح هذه الصفحات إذنًا من أي منصة. احترم شروط كل مصدر والقيود المحلية وحقوق أصحاب المحتوى؛ لا تستخدم راصد لتجاوز الحماية أو جمع معلومات خاصة أو إعادة بيع المحتوى.
 
 ## استخدام مسؤول
 
@@ -20,7 +20,7 @@
 
 ## مساعد العروض
 
-في النسخة التطويرية يمكنك طلب مسودة عرض من Gemini بعد معاينة البيانات والموافقة على إرسالها. راجع المسودة وعدّلها قبل نسخها وتقديمها بنفسك على مستقل؛ قد تكون غير دقيقة أو تتضمن خبرات أو وعودًا لم تقدمها. لا ينشئ راصد حساب مستقل ولا يقدم عروضًا آليًا. استخدام Gemini ومفتاحك يخضع لشروط Google، ومنها متطلبات السن والمنطقة والخطة المتاحة: https://ai.google.dev/gemini-api/terms . ولا تمنح هذه الميزة حقوقًا إضافية في محتوى المشاريع.
+يمكنك طلب مسودة عرض من Gemini لمشروع مستقل بعد معاينة البيانات والموافقة على إرسالها. راجع المسودة وعدّلها قبل نسخها وتقديمها بنفسك؛ قد تكون غير دقيقة أو تتضمن خبرات أو وعودًا لم تقدمها. لا ينشئ راصد حساب مستقل ولا يقدم عروضًا آليًا. استخدام Gemini ومفتاحك يخضع لشروط Google، ومنها متطلبات السن والمنطقة والخطة المتاحة: https://ai.google.dev/gemini-api/terms . ولا تمنح هذه الميزة حقوقًا إضافية في محتوى المشاريع.
 
 ## الترخيص والمسؤولية
 
@@ -28,7 +28,7 @@
 
 ## التحديث والتواصل
 
-مساعد العروض متاح في نسخة التطوير الحالية، وليس في الإصدار المنشور 0.2.6. راجع النص عند الترقية. للبلاغات المتعلقة بالكود أو الحقوق استخدم مستودع GitHub أو LinkedIn للمطور. لا تنشر بيانات حساسة في البلاغات العامة.
+مساعد العروض ورصد خمسات متاحان بدءًا من 0.3.0. راجع النص عند الترقية. للبلاغات المتعلقة بالكود أو الحقوق استخدم مستودع GitHub أو LinkedIn للمطور. لا تنشر بيانات حساسة في البلاغات العامة.
 
 ---
 
@@ -38,11 +38,11 @@
 
 ## Purpose
 
-RASED is a local tool for following the public Mostaql RSS feed, organizing projects and showing alerts. It may fetch public detail pages to complete information. You submit proposals, contract and pay on Mostaql yourself. RASED does not access your account or submit automated proposals.
+RASED is a local tool for following the public Mostaql RSS feed and Khamsat unavailable-service requests listing, organizing results and showing alerts. It may fetch public Mostaql detail pages; full Khamsat request details open on Khamsat in your browser. You reply, submit proposals, contract and pay yourself on the relevant platform. RASED does not access your accounts or submit automated proposals or replies.
 
 ## Platform and content rights
 
-Mostaql, Hsoub, their marks and project content belong to their respective owners. Public availability or an RSS feed does not establish permission for republication or unrestricted automated access. These documents do not grant platform permission. Respect source terms, applicable law and content rights; do not bypass protection, collect private information or resell project content.
+Mostaql, Khamsat, Hsoub, their marks and user content belong to their respective owners. Public availability or an RSS feed does not establish permission for republication or unrestricted automated access. These documents do not grant permission from either platform. Respect each source’s terms, applicable law and content rights; do not bypass protection, collect private information or resell content.
 
 ## Responsible use
 
@@ -54,7 +54,7 @@ Information may be incomplete or stale and alerts may be delayed or missed. Chec
 
 ## Proposal Assistant
 
-In the development build you can ask Gemini to draft a proposal after previewing and approving the data sent. Review and edit the draft before copying and submitting it yourself on Mostaql; it can contain mistakes, invented experience or unsupported promises. RASED does not create a Mostaql account or submit proposals automatically. Use of Gemini and your key is subject to Google terms, including age, regional and service-tier restrictions: https://ai.google.dev/gemini-api/terms . This feature grants no additional rights to project content.
+You can ask Gemini to draft a proposal for a Mostaql project after previewing and approving the data sent. Review and edit the draft before copying and submitting it yourself; it can contain mistakes, invented experience or unsupported promises. RASED does not create a Mostaql account or submit proposals automatically. Use of Gemini and your key is subject to Google terms, including age, regional and service-tier restrictions: https://ai.google.dev/gemini-api/terms . This feature grants no additional rights to project content.
 
 ## License and liability
 
@@ -62,4 +62,4 @@ The software is provided under MIT, reproduced in Licenses. It is provided as is
 
 ## Updates and contact
 
-The Proposal Assistant is available in the current development build, not in published version 0.2.6. Review the text after upgrades. Contact the developer through the GitHub repository or LinkedIn for code or rights concerns. Do not post sensitive information in public reports.
+The Proposal Assistant and Khamsat monitoring are available from 0.3.0. Review the text after upgrades. Contact the developer through the GitHub repository or LinkedIn for code or rights concerns. Do not post sensitive information in public reports.

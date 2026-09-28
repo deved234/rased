@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — 2026-09-28
+
+- Added read-only monitoring of the public Khamsat unavailable-service requests listing. It has an independent five-second poller, silent first scan, publication-time freshness checks, error backoff, source filtering, title-keyword alerts and browser-opening notifications.
+- Added a Gemini Proposal Assistant for Mostaql projects. Users provide their own API key and freelancer profile, review the data sent, then explicitly generate and edit a locally saved draft. No automatic submission.
+- Improved Windows notification priority hints and added guidance for Focus Assist/Do not disturb. Windows and fullscreen applications still control whether a toast appears.
+- Updated bilingual terms and privacy disclosures for Khamsat connections and optional Gemini requests. See [release notes](docs/RELEASE_0.3.0.md) for validation and limitations.
+
 ## 0.2.6 — 2026-09-26
 
 - Windows project, summary and test notifications now use native HTTPS protocol activation. Clicking opens the default browser without depending on a retained Electron object or running RASED process. Existing notifications are unchanged.

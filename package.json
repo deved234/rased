@@ -60,7 +60,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
-  "description": "RASED (راصد) — local Windows watcher for new Mostaql projects over RSS. No cloud backend, no accounts.",
+  "description": "RASED (راصد) — local Windows watcher for Mostaql projects and Khamsat requests. No cloud backend or app account.",
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.6",
@@ -101,5 +101,5 @@
     "release": "node scripts/publish-release.mjs",
     "test:update-install": "node scripts/test-update-install.mjs"
   },
-  "version": "0.2.6"
+  "version": "0.3.0"
 }

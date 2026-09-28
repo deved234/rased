@@ -1,6 +1,6 @@
-# Proposal Assistant / مساعد العروض — concept, not implemented
+# Proposal Assistant / مساعد العروض — concept and implementation notes
 
-Status: implemented in the local development tree on 2026-09-28. RASED remains at version 0.2.6 and no installer, release or remote push has been created for this feature. Gemini is the only provider. The current fixed model is `gemini-2.5-flash`, selected after a live key test succeeded while 3.5/3.8 Flash returned HTTP 503. The text below includes the original design intent; see the implementation notes at the end for final behavior.
+Status: implemented and included in RASED 0.3.0 on 2026-09-28. Gemini is the only provider. The current fixed model is `gemini-2.5-flash`, selected after a live key test succeeded while other tested model endpoints returned HTTP 503. The text below includes the original design intent; see the implementation notes at the end for final behavior.
 
 ## What the feature should do
 

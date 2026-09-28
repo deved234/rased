@@ -65,10 +65,11 @@ export function ProjectRow({
         </p>
       )}
       <div className="meta">
+        <span className="tag">{p.source === 'khamsat' ? (lang === 'ar' ? 'خمسات' : 'Khamsat') : (lang === 'ar' ? 'مستقل' : 'Mostaql')}</span>
         {isNew && <span className="tag fresh">{t.newBadge}</span>}
         {!p.readAt && !isNew && <span className="tag fresh">{t.unreadBadge}</span>}
-        <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />
-        {budget ? (
+        {p.source !== 'khamsat' && <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />}
+        {p.source === 'khamsat' ? null : budget ? (
           <span className="tag num" dir="ltr">
             {budget}
           </span>

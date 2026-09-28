@@ -72,6 +72,7 @@ export interface RasedApi {
   getSettings(): Promise<AppSettings>
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   getHealth(): Promise<SourceHealth>
+  getKhamsatHealth(): Promise<SourceHealth>
   pause(): Promise<SourceHealth>
   resume(): Promise<SourceHealth>
   refresh(): Promise<RefreshResult>
@@ -112,6 +113,7 @@ export interface RasedApi {
   onRequestClose(cb: (e: { quit: boolean }) => void): () => void
   onProjectsChanged(cb: (e: RendererProjectEvent) => void): () => void
   onHealthChanged(cb: (h: SourceHealth) => void): () => void
+  onKhamsatHealthChanged(cb: (h: SourceHealth) => void): () => void
   onSettingsChanged(cb: (s: AppSettings) => void): () => void
   onDetailsChanged(cb: (e: DetailsChangedEvent) => void): () => void
   onNavigate(cb: (e: NavigateEvent) => void): () => void

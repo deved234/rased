@@ -1,6 +1,10 @@
-# Pending changes for a future grouped release
+# Changes grouped into RASED 0.3.0
 
-The released version remains **0.2.6**. This work is source-only: do not change `package.json` version, create a new installer, Git tag, or GitHub release until the user explicitly asks to group and publish changes. `npm run build` and the development integration test only generated local `out/` artifacts.
+These changes were prepared and validated for the grouped 0.3.0 release. See [release notes](RELEASE_0.3.0.md) for the final scope and remaining limits.
+
+## Khamsat requests monitoring
+
+RASED monitors Khamsat's public unavailable-service requests listing with an independent five-second scheduler, source health, backoff, silent baseline, publication-time freshness checks, persistent deduplication and Windows alerts. The list has source filtering; Settings has a Khamsat enable switch and title-only include/exclude keywords. Notifications open the request in the browser. Full request descriptions are not available through the tested public detail fetch, so the UI shows only verified list data and the Proposal Assistant stays limited to Mostaql. See [Khamsat implementation and live measurement](KHAMSAT_MONITORING.md).
 
 ## Notification visibility during fullscreen video and games
 
@@ -8,6 +12,6 @@ RASED now asks Electron for `urgency: 'critical'` on native Windows notification
 
 Settings → Notifications now explains the OS limitation in Arabic and English and offers a button for the fixed, Microsoft-documented `ms-settings:quiethours` Focus Assist page. The app does not change Windows settings on behalf of the user. On Windows 10, the useful manual options are to turn Focus Assist off while gaming/fullscreen, or use Priority only and add RASED if Windows lists it. Alarms only, disabled app banners, an exclusive fullscreen game, and OS policy can still hide a toast. On Windows 11, check System → Notifications → Do not disturb and its automatic rules for games and fullscreen, plus the permission for urgent RASED notifications if offered. No guarantee of visibility above every fullscreen surface is made.
 
-Verification: typecheck, lint and 98 unit tests passed, including Windows build boundary and XML scenario tests. The Electron/preload/React integration test passed 57 assertions, including the new guidance button, fixed settings destination, and critical-priority request. It does not simulate an actual fullscreen game, Focus Assist, or Windows 11 urgent-notification permission. The current device is Windows 10 build 19045. Manual QA on both Windows 10 fullscreen/Focus Assist and a supporting Windows 11 device is needed before claiming those scenarios work.
+Verification for the grouped release: typecheck, lint and 108 unit tests passed, including Windows build boundary and XML scenario tests. The Electron/preload/React integration test passed 69 assertions, including the guidance button, fixed settings destination, and critical-priority request. It does not simulate an actual fullscreen game, Focus Assist, or Windows 11 urgent-notification permission. The test device was Windows 10 build 19045. Manual QA on both Windows 10 fullscreen/Focus Assist and a supporting Windows 11 device is needed before claiming those scenarios work.
 
 Sources: [Microsoft notification content and urgent scenario](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/app-notifications/app-notifications-content), [Microsoft on Quiet Hours suppressing notifications in games/fullscreen](https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/notifications-not-show-action-notification-center), [Microsoft Settings URI list](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-settings), [Electron Notification urgency](https://www.electronjs.org/docs/latest/api/notification).

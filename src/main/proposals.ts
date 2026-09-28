@@ -53,7 +53,7 @@ export function saveProposalProfile(db: Db, value: unknown): ProposalProfile | n
 
 export function getProposalPreview(db: Db, projectId: number, projectNotes: string): ProposalPreview | null {
   const project = getProjectById(db, projectId)
-  if (!project) return null
+  if (!project || project.source !== 'mostaql') return null
   const details = getProjectDetailsRow(db, projectId)
   const description = details.text || project.descriptionExcerpt
   const base = {

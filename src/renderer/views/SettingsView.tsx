@@ -105,6 +105,11 @@ export function SettingsView({
   const [purgeMsg, setPurgeMsg] = React.useState<string | null>(null)
   const [appInfo, setAppInfo] = React.useState<{ version: string; platform: string; arch: string } | null>(null)
   const [aboutError, setAboutError] = React.useState<string | null>(null)
+  const [khamsatAny, setKhamsatAny] = React.useState(settings.khamsatKeywordsAny.join(', '))
+  const [khamsatExclude, setKhamsatExclude] = React.useState(settings.khamsatExcludeKeywords.join(', '))
+  React.useEffect(() => setKhamsatAny(settings.khamsatKeywordsAny.join(', ')), [settings.khamsatKeywordsAny.join(',')])
+  React.useEffect(() => setKhamsatExclude(settings.khamsatExcludeKeywords.join(', ')), [settings.khamsatExcludeKeywords.join(',')])
+  const splitKeywords = (value: string): string[] => value.split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 100)
   const openAboutLink = async (link: AboutLink): Promise<void> => {
     try {
       const result = await rased.openAboutLink(link)
@@ -145,7 +150,7 @@ export function SettingsView({
         </div>
 
         {active === 'watching' && (
-          <div className="set-group">
+          <><div className="set-group">
             <h2>{t.settingsWatching}</h2>
             <div className="set-row">
               <label>{t.settingsInterval}</label>
@@ -183,6 +188,14 @@ export function SettingsView({
               <span className="hint">{t.autoSaveNote}</span>
             </div>
           </div>
+          <div className="set-group">
+            <h2>{lang === 'ar' ? 'رصد خمسات' : 'Khamsat monitoring'}</h2>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'طلبات الخدمات غير الموجودة' : 'Unlisted service requests'}</label>
+              <Toggle checked={settings.khamsatEnabled} onChange={(v) => void patchSettings({ khamsatEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد خمسات' : 'Enable Khamsat monitoring'} />
+            </div>
+            <p className="hint">{lang === 'ar' ? 'يُفحص عنوان الطلب ورابطه وتاريخ نشره كل 5 ثوانٍ؛ عند تعذر الوصول يتباطأ الفحص تلقائيًا. الوصف الكامل يُقرأ من موقع خمسات.' : 'Checks request titles, links and publication times every 5 seconds, with automatic backoff on errors. Read the full description on Khamsat.'}</p>
+          </div></>
         )}
 
         {active === 'notifications' && (
@@ -226,6 +239,23 @@ export function SettingsView({
                   <span className="hint">{t.windowsNotificationHint}</span>
                 </div>
               )}
+            </div>
+
+            <div className="set-group">
+              <h2>{lang === 'ar' ? 'تنبيهات خمسات' : 'Khamsat notifications'}</h2>
+              <div className="set-row">
+                <label>{lang === 'ar' ? 'تنبيهات الطلبات الجديدة' : 'New request alerts'}</label>
+                <Toggle checked={settings.khamsatNotificationsEnabled} onChange={(v) => void patchSettings({ khamsatNotificationsEnabled: v })} label={lang === 'ar' ? 'تفعيل تنبيهات خمسات' : 'Enable Khamsat alerts'} />
+              </div>
+              <div className="set-row">
+                <label htmlFor="khamsat-any">{lang === 'ar' ? 'أي كلمة من' : 'Any keyword'}</label>
+                <input id="khamsat-any" className="input" value={khamsatAny} onChange={e => setKhamsatAny(e.target.value)} onBlur={() => void patchSettings({ khamsatKeywordsAny: splitKeywords(khamsatAny) })} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
+              </div>
+              <div className="set-row">
+                <label htmlFor="khamsat-exclude">{lang === 'ar' ? 'استبعاد كلمات' : 'Exclude keywords'}</label>
+                <input id="khamsat-exclude" className="input" value={khamsatExclude} onChange={e => setKhamsatExclude(e.target.value)} onBlur={() => void patchSettings({ khamsatExcludeKeywords: splitKeywords(khamsatExclude) })} />
+              </div>
+              <p className="hint">{lang === 'ar' ? 'فلترة خمسات تعتمد على عنوان الطلب فقط حاليًا. اترك حقل «أي كلمة» فارغًا للتنبيه بكل الطلبات.' : 'Khamsat filtering currently uses request titles only. Leave “Any keyword” blank for all requests.'}</p>
             </div>
 
             <div className="set-group">

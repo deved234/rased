@@ -54,6 +54,11 @@ export interface AppSettings {
   /** polling interval chosen by the user; backoff/Retry-After override it */
   pollIntervalMs: 2000 | 5000 | 15000
   notificationsEnabled: boolean
+  khamsatEnabled: boolean
+  khamsatNotificationsEnabled: boolean
+  /** Khamsat has no verified categories or description in the public list. */
+  khamsatKeywordsAny: string[]
+  khamsatExcludeKeywords: string[]
   soundEnabled: boolean
   runAtStartup: boolean
   /** filter used for notifications */
@@ -133,6 +138,7 @@ export interface ProjectDetails {
 
 /** Full list-query definition. Every constraint applies before pagination AND count. */
 export interface FilterDefinition {
+  source: 'all' | 'mostaql' | 'khamsat'
   scope: FilterScope
   unreadOnly: boolean
   /** empty = any status (stored NULL counts as 'none') */
@@ -244,6 +250,10 @@ export function defaultSettings(): AppSettings {
     language: 'ar',
     pollIntervalMs: 5000,
     notificationsEnabled: true,
+    khamsatEnabled: true,
+    khamsatNotificationsEnabled: true,
+    khamsatKeywordsAny: [],
+    khamsatExcludeKeywords: [],
     soundEnabled: true,
     runAtStartup: false,
     notifyFilter: defaultCategoryFilter(),
@@ -274,6 +284,7 @@ export function defaultUiPreferences(): UiPreferences {
 
 export function defaultFilterDefinition(): FilterDefinition {
   return {
+    source: 'all',
     scope: 'all',
     unreadOnly: false,
     statuses: [],
@@ -299,6 +310,10 @@ export function sanitizeSettings(input: unknown): AppSettings {
     language: lang,
     pollIntervalMs: poll,
     notificationsEnabled: typeof o['notificationsEnabled'] === 'boolean' ? o['notificationsEnabled'] : true,
+    khamsatEnabled: o['khamsatEnabled'] !== false,
+    khamsatNotificationsEnabled: o['khamsatNotificationsEnabled'] !== false,
+    khamsatKeywordsAny: stringList(o['khamsatKeywordsAny']),
+    khamsatExcludeKeywords: stringList(o['khamsatExcludeKeywords']),
     soundEnabled: typeof o['soundEnabled'] === 'boolean' ? o['soundEnabled'] : true,
     runAtStartup: typeof o['runAtStartup'] === 'boolean' ? o['runAtStartup'] : false,
     notifyFilter: sanitizeFilter(o['notifyFilter']),
@@ -377,6 +392,7 @@ export function sanitizeFilterDefinition(v: unknown): FilterDefinition {
   let budgetMax = sanitizeBudgetBound(o['budgetMax'])
   if (budgetMin !== null && budgetMax !== null && budgetMin > budgetMax) budgetMax = budgetMin
   return {
+    source: o['source'] === 'mostaql' || o['source'] === 'khamsat' ? o['source'] : 'all',
     scope: scope === 'saved' || scope === 'hidden' ? scope : 'all',
     unreadOnly: o['unreadOnly'] === true,
     statuses,

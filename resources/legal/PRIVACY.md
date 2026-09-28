@@ -8,11 +8,11 @@
 
 ## الاتصالات الخارجية
 
-يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة؛ قد يرى الموقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور مستقل.
+يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات عند تفعيل رصدها. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات لا يحتاج تسجيل دخول ولا يجلب نص الطلب الكامل من صفحة التفاصيل.
 
 ## مساعد العروض وGemini
 
-ميزة التطوير الاختيارية لا تجري طلبًا عند الرصد أو فتح المشروع. بعد معاينة البيانات وتحديد الموافقة والضغط على «توليد» فقط، يرسل جهازك مباشرة إلى Google Gemini عنوان المشروع ووصفه المتاح ومصدر اكتماله وتصنيفه ومهاراته وميزانيته وبيانات الملف المهني التي تحفظها ونصًا إضافيًا تكتبه لهذا العرض. لا تُرسل ملاحظتك الشخصية المحفوظة على المشروع تلقائيًا. يعود رد بمسودة وافتراضات وأسئلة وتُحفظ المسودة محليًا في SQLite، ويمكنك تعديلها أو حذفها. قد يصل Google عنوان IP وبيانات الطلب والمدخلات والمخرجات. لا ترسل معلومات سرية أو شخصية إلا إذا كنت مخولًا بمشاركتها. الإصدار المنشور 0.2.6 لا يحتوي هذه الميزة.
+ميزة مساعد العروض الاختيارية لا تجري طلبًا عند الرصد أو فتح المشروع. بعد معاينة البيانات وتحديد الموافقة والضغط على «توليد» فقط، يرسل جهازك مباشرة إلى Google Gemini عنوان المشروع ووصفه المتاح ومصدر اكتماله وتصنيفه ومهاراته وميزانيته وبيانات الملف المهني التي تحفظها ونصًا إضافيًا تكتبه لهذا العرض. لا تُرسل ملاحظتك الشخصية المحفوظة على المشروع تلقائيًا. يعود رد بمسودة وافتراضات وأسئلة وتُحفظ المسودة محليًا في SQLite، ويمكنك تعديلها أو حذفها. قد يصل Google عنوان IP وبيانات الطلب والمدخلات والمخرجات. لا ترسل معلومات سرية أو شخصية إلا إذا كنت مخولًا بمشاركتها. الميزة متاحة بدءًا من 0.3.0.
 
 ## كيفية تعامل Google مع بيانات Gemini
 
@@ -50,11 +50,11 @@ Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters
 
 ## External connections
 
-Your device contacts Mostaql directly for RSS and detail pages as needed. The site and network providers may receive your IP address, request timing, connection metadata and User-Agent. Project, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or Mostaql password.
+Your device contacts Mostaql directly for RSS and detail pages as needed, and the public Khamsat unavailable-service requests listing when its monitoring is enabled. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat monitoring needs no login and does not retrieve full request detail text.
 
 ## Proposal Assistant and Gemini
 
-The optional development feature makes no AI request while watching or merely opening a project. Only after you preview data, check consent and press Generate does your device send the project title, available description and completeness, category, skills, budget, saved freelancer profile and any notes entered for this proposal directly to Google Gemini. Your saved private project note is not included automatically. Gemini returns a draft, assumptions and questions; the draft is stored in local SQLite and can be edited or deleted. Google may receive your IP address, request metadata, input and output content. Do not include personal or confidential information unless authorized. Published version 0.2.6 has no Proposal Assistant.
+The optional Proposal Assistant makes no AI request while watching or merely opening a project. Only after you preview data, check consent and press Generate does your device send the project title, available description and completeness, category, skills, budget, saved freelancer profile and any notes entered for this proposal directly to Google Gemini. Your saved private project note is not included automatically. Gemini returns a draft, assumptions and questions; the draft is stored in local SQLite and can be edited or deleted. Google may receive your IP address, request metadata, input and output content. Do not include personal or confidential information unless authorized. This feature is available from 0.3.0.
 
 ## How Google handles Gemini data
 

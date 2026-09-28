@@ -21,6 +21,7 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   const fetchImpl = (async (url, options) => {
     record('fetch', String(url))
     if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (String(url) === 'https://khamsat.com/community/requests') return new Response(readFileSync(join(profile, 'khamsat-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': 'text/html' } })
     const rss = String(url).endsWith('/rss')
     return new Response(readFileSync(join(profile, rss ? 'rss-fixture.xml' : 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': rss ? 'application/rss+xml' : 'text/html' } })
   }) as typeof fetch

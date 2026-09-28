@@ -1,22 +1,22 @@
 # RASED · راصد
 
-تطبيق Windows محلي لمتابعة المشاريع الجديدة في [مستقل](https://mostaql.com/) من خلاصته العامة RSS. يعرض المشاريع وينبّهك بها؛ تقديم العروض يتم بنفسك على موقع مستقل. لا يحتاج سيرفر أو حساب داخل التطبيق.
+تطبيق Windows محلي لمتابعة المشاريع الجديدة في [مستقل](https://mostaql.com/) من خلاصته العامة RSS و[طلبات الخدمات غير الموجودة في خمسات](https://khamsat.com/community/requests) من صفحتها العامة. يعرض الفرص وينبّهك بها؛ تقديم العروض والردود يتم بنفسك على المنصات. لا يحتاج سيرفر أو حساب داخل التطبيق.
 
 ![واجهة راصد بالعربية](docs/screenshots/ui-fixes/ar-main.png)
 
 ## تحميل التطبيق لأصحابك
 
-**الإصدار الحالي: [RASED 0.2.6](https://github.com/deved234/rased/releases/tag/v0.2.6)**. راجع [سجل التغييرات](CHANGELOG.md) و[ملاحظات الإصدار والتحقق](docs/RELEASE_0.2.6.md).
+**الإصدار الحالي: [RASED 0.3.0](https://github.com/deved234/rased/releases/tag/v0.3.0)**. راجع [سجل التغييرات](CHANGELOG.md) و[ملاحظات الإصدار والتحقق](docs/RELEASE_0.3.0.md).
 
-حمّل **`RASED-Setup-0.2.6.exe`** من [صفحة الإصدارات](https://github.com/deved234/rased/releases/latest) → **Assets** وشغّله على Windows x64. لا تختار Source code إن كنت تريد تشغيل التطبيق فقط. لا تحتاج تثبيت Node.js أو SQLite. المثبّت غير موقّع رقميًا حاليًا، ولذلك قد يظهر تحذير من Windows؛ تأكد من مصدر التحميل. بصمة SHA-256 متاحة في ملف `SHA256SUMS.txt` مع التحميل، ويمكن حسابها للمقارنة بالأمر:
+حمّل **`RASED-Setup-0.3.0.exe`** من [صفحة الإصدارات](https://github.com/deved234/rased/releases/latest) → **Assets** وشغّله على Windows x64. لا تختار Source code إن كنت تريد تشغيل التطبيق فقط. لا تحتاج تثبيت Node.js أو SQLite. المثبّت غير موقّع رقميًا حاليًا، ولذلك قد يظهر تحذير من Windows؛ تأكد من مصدر التحميل. بصمة SHA-256 متاحة في ملف `SHA256SUMS.txt` مع التحميل، ويمكن حسابها للمقارنة بالأمر:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.2.6.exe'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.3.0.exe'
 ```
 
 أول فحص ناجح يحفظ المشاريع الموجودة كنقطة بداية دون تنبيهات قديمة. بعده تظهر المشاريع الجديدة في القائمة ويُرسل تنبيه Windows بحسب الفلاتر التي تختارها. يمكن إغلاق النافذة مع استمرار المتابعة من أيقونة النظام، أو إيقافها من التطبيق. البيانات والإعدادات تُحفظ محليًا في `%APPDATA%\RASED\rased.db`.
 
-للتحديث، اخرج من راصد بالكامل من قائمة أيقونة النظام، ثم شغّل المثبت الجديد. لا تحذف مجلد البيانات. شاشة البداية تُعرض عند تشغيل العملية، وليس كل مرة تستعيد النافذة من أيقونة النظام. من 0.2.6، الإشعارات الجديدة تحمل رابط HTTPS يفتحه Windows مباشرة في المتصفح الافتراضي، حتى من مركز الإشعارات بعد خروج راصد. الإشعارات القديمة لا تتغير؛ اضغط بطاقة المشروع داخل راصد لعرض تفاصيله داخل التطبيق.
+يمكن لمستخدمي 0.2.5 أو أحدث التحديث من داخل البرنامج، أو الخروج من راصد بالكامل من قائمة أيقونة النظام ثم تشغيل المثبت الجديد. لا تحذف مجلد البيانات. شاشة البداية تُعرض عند تشغيل العملية، وليس كل مرة تستعيد النافذة من أيقونة النظام. الإشعارات الجديدة تحمل رابط HTTPS يفتحه Windows مباشرة في المتصفح الافتراضي، حتى من مركز الإشعارات بعد خروج راصد. الإشعارات القديمة لا تتغير؛ اضغط بطاقة الفرصة داخل راصد لعرض تفاصيلها داخل التطبيق.
 
 **التحديث من داخل البرنامج:** 0.2.5 أول نسخة تدعم الميزة. أصحاب 0.2.4 أو أقدم يحتاجون تثبيتها يدويًا مرة واحدة. بعدها راصد يفحص GitHub عند التشغيل وكل 6 ساعات، ويمكنك من **الإعدادات → تحديثات راصد** تحميل التحديث ومتابعة تقدّمه ثم إعادة التشغيل والتثبيت. لا تحميل أو تثبيت إجباري، ولا تثبيت بمجرد إغلاق البرنامج، مع حماية الملاحظات غير المحفوظة. [تفاصيل التحديث والنشر](docs/UPDATES.md).
 
@@ -59,7 +59,9 @@ npm run dist
 - احترام `Retry-After` وفترات التهدئة عند الأخطاء أو تقييد الطلبات. لا تسجيل دخول، ولا إرسال عروض آلي، ولا تجاوز لحماية الموقع.
 - توقيت نشر المشروع في RSS واستجابة الشبكة خارج سيطرة التطبيق؛ لا يمكن ضمان وصول التنبيه لحظيًا أو قبل كل المنافسين.
 
-**في نسخة التطوير فقط، ولم تُنشر بعد في الإصدار 0.2.6:** [مساعد كتابة العروض باستخدام Gemini](docs/PROPOSAL_ASSISTANT_CONCEPT.md). من تفاصيل المشروع افتح «مساعد العروض»، وأضف مفتاحك وملفك المهني من الإعدادات، ثم راجع البيانات قبل الضغط على «توليد». تحفظ المسودة محليًا ويمكن تعديلها ونسخها؛ تقديمها على مستقل يدوي. راجع [الخصوصية](PRIVACY.md) قبل الاستخدام. لا يصدر تحديث أو مثبّت جديد إلا بطلب منفصل.
+**مساعد كتابة العروض باستخدام Gemini:** من تفاصيل مشروع مستقل افتح «مساعد العروض»، وأضف مفتاحك وملفك المهني من الإعدادات، ثم راجع البيانات قبل الضغط على «توليد». تحفظ المسودة محليًا ويمكن تعديلها ونسخها؛ تقديمها على مستقل يدوي. راجع [التفاصيل](docs/PROPOSAL_ASSISTANT_CONCEPT.md) و[الخصوصية](PRIVACY.md) قبل الاستخدام.
+
+**رصد خمسات:** فعّل أو عطّل المصدر من الإعدادات، واختر كلمات في عنوان الطلب للتنبيه، أو اعرض المصدر منفصلًا من فلاتر القائمة. يفحص العنوان والرابط وتاريخ النشر من الصفحة العامة كل 5 ثوانٍ في الحالة السليمة، مع تهدئة تلقائية عند الأخطاء. يبدأ بأرشفة صامتة للطلبات الموجودة ثم ينبه بالطلبات الجديدة فقط. وصف الطلب الكامل غير متاح للرصد العام حاليًا؛ افتح الطلب في المتصفح لقراءته. [تفاصيل التنفيذ وحدود التحقق](docs/KHAMSAT_MONITORING.md).
 
 مؤسس ومطوّر راصد: **david atef** — [GitHub](https://github.com/deved234) · [LinkedIn](https://www.linkedin.com/in/david-atef/).
 
@@ -69,9 +71,9 @@ npm run dist
 
 ## English
 
-RASED is a local Windows app that watches the public [Mostaql](https://mostaql.com/) RSS feed for new projects. It shows projects and alerts you; you submit proposals yourself in your browser. No server or app account is required.
+RASED is a local Windows app that watches the public [Mostaql](https://mostaql.com/) RSS feed and [Khamsat unavailable-service requests](https://khamsat.com/community/requests) listing. It shows opportunities and alerts you; you submit proposals or replies yourself in your browser. No server or app account is required.
 
-Download **RASED-Setup-0.2.6.exe** under **Assets** in [Releases](https://github.com/deved234/rased/releases/latest), rather than the Source code archives. Node.js and SQLite are **not** required for end users. The installer is currently unsigned; verify its source and the downloadable SHA256SUMS.txt. Quit RASED fully from the tray before this initial upgrade. The first successful fetch establishes a silent baseline; later projects can trigger notifications. Clicking a project notification opens your default browser.
+Download **RASED-Setup-0.3.0.exe** under **Assets** in [Releases](https://github.com/deved234/rased/releases/latest), rather than the Source code archives. Node.js and SQLite are **not** required for end users. The installer is currently unsigned; verify its source and the downloadable SHA256SUMS.txt. Users on 0.2.5 or newer can update in-app. The first successful fetch for each source establishes a silent baseline; later opportunities can trigger notifications. Clicking a notification opens your default browser.
 
 0.2.5 adds in-app updates: Settings → RASED updates, then Download update and Restart and update. Checks run at startup and every 6 hours; download/install are explicit, with unsaved-note protection. Users coming from 0.2.4 or older need one manual install of this first updater-capable version. See the [update/release guide](docs/UPDATES.md).
 
@@ -79,13 +81,15 @@ To develop, install Node.js 24, clone this repository, run `npm ci`, then `npm r
 
 `npm run dev` opens an Electron desktop window. If the Electron executable is missing, the dev command downloads it before launching. The printed `localhost:5173` URL is the internal React development server.
 
-**Development build only, not published in 0.2.6:** [Gemini Proposal Assistant](docs/PROPOSAL_ASSISTANT_CONCEPT.md). From a project, open the assistant, add your own key and real freelancer profile in Settings, review the outgoing data, then explicitly generate an editable local draft. Submission on Mostaql remains manual. See the [privacy disclosure](PRIVACY.md). No new installer or release has been made.
+**Gemini Proposal Assistant:** From a Mostaql project, open the assistant, add your own key and real freelancer profile in Settings, review the outgoing data, then explicitly generate an editable local draft. Submission on Mostaql remains manual. See the [feature notes](docs/PROPOSAL_ASSISTANT_CONCEPT.md) and [privacy disclosure](PRIVACY.md).
+
+**Khamsat monitoring:** Settings include a source toggle and title-keyword alerts; the project list can filter by source. Full request text must be read on Khamsat in your browser. See [implementation and verification limits](docs/KHAMSAT_MONITORING.md).
 
 
 ## الشروط والخصوصية والحقوق
 
-اقرأ [شروط راصد](TERMS.md) و[الخصوصية](PRIVACY.md)، المتاحتين أيضًا داخل الإعدادات. ترخيص MIT يخص الكود ولا يمنح حقوقًا في محتوى مستقل أو إذنًا بالجلب الآلي. راصد مستقل عن حسوب/مستقل، ولم نتلق هنا موافقة مكتوبة منهما. [مراجعة المصادر والمخاطر](docs/legal/LEGAL_REVIEW.md) و[مسودة طلب الإذن](docs/legal/PERMISSION_REQUEST.md) موثقتان؛ لم تُرسل المسودة.
+اقرأ [شروط راصد](TERMS.md) و[الخصوصية](PRIVACY.md)، المتاحتين أيضًا داخل الإعدادات. ترخيص MIT يخص الكود ولا يمنح حقوقًا في محتوى مستقل أو خمسات أو إذنًا بالجلب الآلي. راصد مستقل عن حسوب والمنصتين، ولم نتلق هنا موافقة مكتوبة منهما. [مراجعة المصادر والمخاطر](docs/legal/LEGAL_REVIEW.md) و[مسودة طلب الإذن](docs/legal/PERMISSION_REQUEST.md) موثقتان؛ لم تُرسل المسودة.
 
-[رخص المكونات والخطوط](resources/legal/THIRD_PARTY_NOTICES.txt) مرفقة مع التطبيق، مع رخص Electron وChromium في التوزيع. لا توجد تحليلات أو رفع آلي للمطور؛ الجهاز يتصل بمستقل مباشرة وقد يرى المصدر IP ومعلومات الطلب. البيانات المحلية والنسخ الاحتياطية غير مشفرة بواسطة التطبيق.
+[رخص المكونات والخطوط](resources/legal/THIRD_PARTY_NOTICES.txt) مرفقة مع التطبيق، مع رخص Electron وChromium في التوزيع. لا توجد تحليلات أو رفع آلي للمطور؛ الجهاز يتصل بالمصادر المفعّلة مباشرة وقد ترى IP ومعلومات الطلب. البيانات المحلية والنسخ الاحتياطية غير مشفرة بواسطة التطبيق.
 
 في 0.2.3 أُضيف شريط نافذة مخصص وأيقونة بوصلة متجهية مضبوطة المركز. `npm run icons` يولّد PNG/ICO/Tray منها، و`prebuild` يجمع المستندات القانونية والرخص تلقائيًا.

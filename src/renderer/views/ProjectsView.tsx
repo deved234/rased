@@ -71,6 +71,13 @@ export function ProjectsView({
   const scopeRef = React.useRef(scope)
   const restoreRef = React.useRef<{ id?: number; offset?: number; scrollTop: number } | null>({ scrollTop: memory.scrollTop })
   const [actionError, setActionError] = React.useState<string | null>(null)
+  const [khamsatHealth, setKhamsatHealth] = React.useState<SourceHealth | null>(null)
+  React.useEffect(() => {
+    let alive = true
+    void rased.getKhamsatHealth().then(value => { if (alive) setKhamsatHealth(value) })
+    const off = rased.onKhamsatHealthChanged(value => setKhamsatHealth(value))
+    return () => { alive = false; off() }
+  }, [])
   const captureAnchor = (): { id?: number; offset?: number; scrollTop: number } => {
     const el = listRef.current
     if (!el) return { scrollTop: 0 }
@@ -230,6 +237,7 @@ export function ProjectsView({
   }
 
   const activeFilterCount =
+    (def.source !== 'all' ? 1 : 0) +
     (def.categoryFilter.mode === 'selected' ? def.categoryFilter.categories.length : 0) +
     def.categoryFilter.keywordsAny.length +
     def.categoryFilter.keywordsAll.length +
@@ -318,10 +326,18 @@ export function ProjectsView({
       <div className="list-pane">
         {actionError && <div className="banner bad" role="alert">{actionError}</div>}
         {showBanner && <div className={bannerClass}>{bannerText}</div>}
+        {settings.khamsatEnabled && def.source !== 'mostaql' && khamsatHealth && ['error', 'backing-off'].includes(khamsatHealth.state) && (
+          <div className="banner warn">{lang === 'ar' ? 'رصد خمسات متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Khamsat monitoring is temporarily unavailable; it will retry automatically.'}</div>
+        )}
         <div className="list-scroll" ref={listRef} onKeyDown={onListKey} tabIndex={0} aria-label={scope === 'saved' ? t.navSaved : t.allProjects}
           onScroll={() => { onMemory({ def: fullDef, limit, scrollTop: listRef.current?.scrollTop ?? 0, selectedId }) }}
         >
           <div className="chips">
+            {(['all', 'mostaql', 'khamsat'] as const).map(source => (
+              <button key={source} className={def.source === source ? 'chip active' : 'chip'} aria-pressed={def.source === source} onClick={() => applyDefinition(source === 'khamsat' ? { ...fullDef, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...fullDef, source })}>
+                {source === 'all' ? (lang === 'ar' ? 'كل المصادر' : 'All sources') : source === 'mostaql' ? (lang === 'ar' ? 'مستقل' : 'Mostaql') : (lang === 'ar' ? 'خمسات' : 'Khamsat')}
+              </button>
+            ))}
             <button className={def.categoryFilter.mode === 'all' ? 'chip active' : 'chip'} onClick={() => { applyDefinition({ ...fullDef, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] } }); setLimit(PAGE) }}>
               {t.allCategories}
             </button>
@@ -489,8 +505,9 @@ function PreviewPanel({
           {p.title}
         </h2>
         <div className="meta">
-          <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />
-          {budget && <span className="tag num" dir="ltr">{budget}</span>}
+          <span className="tag">{p.source === 'khamsat' ? (lang === 'ar' ? 'خمسات' : 'Khamsat') : (lang === 'ar' ? 'مستقل' : 'Mostaql')}</span>
+          {p.source !== 'khamsat' && <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />}
+          {p.source !== 'khamsat' && budget && <span className="tag num" dir="ltr">{budget}</span>}
           <span>
             {t.publishedAt}: {timeAgo(p.publishedAt, lang)}
           </span>

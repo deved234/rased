@@ -18,6 +18,7 @@ export const IPC = {
   getSettings: 'rased:get-settings',
   updateSettings: 'rased:update-settings',
   getHealth: 'rased:get-health',
+  getKhamsatHealth: 'rased:get-khamsat-health',
   pause: 'rased:pause',
   resume: 'rased:resume',
   refresh: 'rased:refresh',
@@ -65,6 +66,7 @@ export const IPC = {
   // main -> renderer events
   projectsChanged: 'rased:projects-changed',
   healthChanged: 'rased:health-changed',
+  khamsatHealthChanged: 'rased:khamsat-health-changed',
   settingsChanged: 'rased:settings-changed',
   detailsChanged: 'rased:details-changed',
   navigate: 'rased:navigate',

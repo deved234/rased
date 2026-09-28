@@ -86,6 +86,8 @@ export function evaluateFilter(p: FilterableProject, f: CategoryFilter): FilterV
 
 /** Identical predicate for stored queries and arrivals/updates in the UI. */
 export function matchesDefinition(p: ProjectWithUser, d: FilterDefinition): boolean {
+  if (d.source !== 'all' && p.source !== d.source) return false
+  if (p.source === 'khamsat' && d.categoryFilter.mode === 'selected') return false
   if (d.scope === 'hidden' ? !p.hidden : p.hidden) return false
   if (d.scope === 'saved' && !p.saved) return false
   if (d.unreadOnly && p.readAt) return false

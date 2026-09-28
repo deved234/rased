@@ -54,7 +54,7 @@ export function ProjectDetailView({
     setMissing(false)
     setDetails(d)
     // on-demand full text: once per mount (retry button handles the rest)
-    if (!autoRequested.current && d) {
+    if (!autoRequested.current && d && p.source === 'mostaql') {
       autoRequested.current = true
       const fresh = await rased.requestProjectDetails(projectId, d.status === 'failed')
       if (my !== generation.current) return
@@ -188,7 +188,7 @@ export function ProjectDetailView({
             <span className="faint" aria-hidden="true">
               ·
             </span>
-            <span className="muted">مستقل</span>
+            <span className="muted">{project.source === 'khamsat' ? (lang === 'ar' ? 'خمسات' : 'Khamsat') : (lang === 'ar' ? 'مستقل' : 'Mostaql')}</span>
           </div>
           <h2 dir="auto">{project.title}</h2>
           <div className="meta">
@@ -198,19 +198,19 @@ export function ProjectDetailView({
           </div>
 
           <div className="facts">
-            <div className="fact">
+            {project.source !== 'khamsat' && <div className="fact">
               <div className="k">{t.factsCategory}</div>
               <div className="v" dir="auto">
                 {project.categorySlug ? (categoryDisplay(project.categorySlug, lang) ?? project.categorySlug) : t.unknownCategory}
                 {!project.categoryConfirmed && <div className="faint small">{t.uncertainCategory}</div>}
               </div>
-            </div>
-            <div className="fact">
+            </div>}
+            {project.source !== 'khamsat' && <div className="fact">
               <div className="k">{t.factsBudget}</div>
               <div className="v num" dir="ltr">
                 {budget ?? t.budgetUnknown}
               </div>
-            </div>
+            </div>}
             <div className="fact">
               <div className="k">{t.factsPublished}</div>
               <div className="v" title={fullDate(project.publishedAt, lang)}>
@@ -226,6 +226,11 @@ export function ProjectDetailView({
           </div>
 
           <h3>{t.descriptionTitle}</h3>
+          {project.source === 'khamsat' ? (
+            <div className="banner">
+              {lang === 'ar' ? 'وصف طلب خمسات غير متاح من صفحة القائمة. افتح الطلب في المتصفح لقراءة التفاصيل والرد بنفسك.' : 'The Khamsat listing does not include the request description. Open the request in your browser to read it and respond yourself.'}
+            </div>
+          ) : <>
           <div className="faint small">
             {details?.provenance === 'full' ? t.descFullNote : details?.provenance === 'truncated' ? (lang === 'ar' ? 'وصف مقتطع لطوله — افتح مستقل للنص كاملًا' : 'Description truncated — open Mostaql for the complete text') : t.descExcerptNote}
             {details?.fetchedAt ? ` · ${t.descFetchedAt} ${timeAgo(details.fetchedAt, lang)}` : ''}
@@ -246,6 +251,7 @@ export function ProjectDetailView({
           )}
           {details?.status === 'loading' && <p className="muted">{t.loadingDetails}</p>}
           <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load())}>{t.retryFetch}</button>
+          </>}
 
           {project.skills && project.skills.length > 0 && (
             <>
@@ -268,9 +274,9 @@ export function ProjectDetailView({
           <button className="btn primary" onClick={() => void openExternal()}>
             <Icon name="external" size={16} /> {t.openExternal}
           </button>
-          <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
+          {project.source !== 'khamsat' && <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
             {lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant'}
-          </button>
+          </button>}
           <div className="row-actions">
             <button className="btn sm" onClick={() => void rased.updateProjectUserState(project.id, { saved: !project.saved }).then(() => load())} aria-pressed={project.saved}>
               <Icon name={project.saved ? 'bookmarkFill' : 'bookmark'} size={15} /> {project.saved ? t.unsaveProject : t.saveProject}

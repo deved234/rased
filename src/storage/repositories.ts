@@ -241,7 +241,7 @@ export function updateEnrichment(db: Db, id: number, u: EnrichmentUpdate, now = 
 export function getUnenrichedNewIds(db: Db, limit: number): number[] {
   const rows = db
     .prepare(
-      `SELECT id FROM projects WHERE enrichment_status IN ('not_requested','pending')
+      `SELECT id FROM projects WHERE source = 'mostaql' AND enrichment_status IN ('not_requested','pending')
        ORDER BY first_seen_at DESC, id DESC LIMIT ?;`
     )
     .all(limit) as unknown as { id: number }[]

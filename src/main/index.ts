@@ -73,6 +73,8 @@ import {
   updateUserState
 } from '../storage/repositories.js'
 import { fetchRss, parseRssItems, RSS_URL } from '../collector/rss.js'
+import { fetchKhamsatRequests, KHAMSAT_SOURCE, matchesKhamsatKeywords, parseKhamsatRequests } from '../collector/khamsat.js'
+import { applyKhamsatCycle } from '../collector/khamsatPipeline.js'
 import { normalizeItems, SOURCE } from '../collector/normalize.js'
 import {
   delayUntilNext,
@@ -118,6 +120,12 @@ let lastRecovering = false
 let lastDurationMs: number | null = null
 let lastItemCount: number | null = null
 let timer: NodeJS.Timeout | null = null
+let khamsatTimer: NodeJS.Timeout | null = null
+let khamsatInFlight = false
+let khamsatAbort: AbortController | null = null
+let khamsatNextAttemptMs: number | null = null
+let khamsatLastDurationMs: number | null = null
+let khamsatLastItemCount: number | null = null
 let enrichTimer: NodeJS.Timeout | null = null
 let quitRequested = false
 let episode = 0
@@ -290,7 +298,7 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
   if (p.project.discoveryKind === 'recovered') tags.push(lang === 'ar' ? 'فائت' : 'catch-up')
   if (p.uncertain) tags.push(lang === 'ar' ? 'تصنيف غير مؤكد' : 'uncertain category')
   const title = tags.length > 0 ? `${projectLine(p.project)} (${tags.join('، ')})` : projectLine(p.project)
-  const body = p.project.descriptionExcerpt.slice(0, 180)
+  const body = p.project.source === KHAMSAT_SOURCE ? (lang === 'ar' ? 'طلب خدمة جديد على خمسات — اضغط لفتح الطلب' : 'New Khamsat request — click to open') : p.project.descriptionExcerpt.slice(0, 180)
   const { id, url } = p.project
   return showToast(title, body, () => {
     void openProjectById(id, true, url).then(result => {
@@ -299,11 +307,26 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
   }, url)
 }
 
+function snapshotKhamsatHealth(): SourceHealth {
+  const source = db ? getSourceState(db, KHAMSAT_SOURCE) : null
+  const backoff = source?.backoffUntil ? Date.parse(source.backoffUntil) : NaN
+  const state: SourceHealth['state'] = !settings.khamsatEnabled || paused ? 'paused' : Number.isFinite(backoff) && backoff > Date.now() ? 'backing-off' : source?.lastError ? 'error' : source?.lastSuccessAt ? 'watching' : 'initializing'
+  return { state, lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: khamsatNextAttemptMs ? new Date(khamsatNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: khamsatLastDurationMs, lastItemCount: khamsatLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : 5000, paused: state === 'paused' }
+}
+
+function emitKhamsatHealth(): void {
+  broadcast(IPC.khamsatHealthChanged, snapshotKhamsatHealth())
+}
+
 async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<boolean> {
   const lang = settings.language
   const n = p.projects.length
   const title =
-    lang === 'ar'
+    p.projects.every(project => project.source === KHAMSAT_SOURCE)
+      ? (lang === 'ar' ? `${n} طلبات جديدة على خمسات` : `${n} new Khamsat requests`)
+      : p.projects.some(project => project.source === KHAMSAT_SOURCE)
+      ? (lang === 'ar' ? `${n} فرص جديدة` : `${n} new opportunities`)
+      : lang === 'ar'
       ? p.recovering
         ? `${n} مشاريع فائتة من مستقل`
         : `${n} مشاريع جديدة على مستقل`
@@ -386,6 +409,7 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
       shouldSend: (p) => {
         if (!notificationAllowed()) return false
         if (getUserState(d, p.id).hiddenAt !== null) return false
+        if (p.source === KHAMSAT_SOURCE) return settings.khamsatEnabled && settings.khamsatNotificationsEnabled && matchesKhamsatKeywords(p.title, settings.khamsatKeywordsAny, settings.khamsatExcludeKeywords)
         const v = evaluateFilter(toFilterable(p), settings.notifyFilter)
         return v === 'match' || (!p.categoryConfirmed && settings.notifyUncertainCategory && v === 'uncertain')
       },
@@ -396,6 +420,61 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
 }
 
 // ---------------------------------------------------------------- collector loop
+
+function scheduleKhamsat(delayMs?: number): void {
+  if (khamsatTimer) clearTimeout(khamsatTimer)
+  khamsatTimer = null
+  khamsatNextAttemptMs = null
+  if (!db || paused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) { emitKhamsatHealth(); return }
+  const state = getSourceState(db, KHAMSAT_SOURCE)
+  const backoff = state.backoffUntil ? Math.max(0, Date.parse(state.backoffUntil) - Date.now()) : 0
+  const delay = Math.max(delayMs ?? 5000, backoff)
+  khamsatNextAttemptMs = Date.now() + delay
+  khamsatTimer = setTimeout(() => void trackWork(runKhamsatCycle()), delay)
+  emitKhamsatHealth()
+}
+
+async function runKhamsatCycle(): Promise<void> {
+  if (!db || paused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) return
+  khamsatInFlight = true
+  khamsatAbort = new AbortController()
+  khamsatNextAttemptMs = null
+  emitKhamsatHealth()
+  try {
+    const result = await fetchKhamsatRequests(khamsatAbort.signal, testHarness?.fetchImpl)
+    if (!db || paused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
+    const nowMs = Date.now()
+    const nowIso = new Date(nowMs).toISOString()
+    const previous = getSourceState(db, KHAMSAT_SOURCE)
+    let items: ReturnType<typeof parseKhamsatRequests> | null = null
+    let failure = result.ok ? null : result.error ?? 'request failed'
+    if (result.ok) {
+      try { items = parseKhamsatRequests(result.html ?? '') }
+      catch (error) { failure = error instanceof Error ? error.message : 'parse failed' }
+    }
+    if (failure || !items) {
+      khamsatLastDurationMs = result.durationMs
+      khamsatLastItemCount = null
+      const failures = previous.consecutiveFailures + 1
+      const blocked = result.status === 202 || result.status === 403 || result.status === 429
+      const backoffMs = Math.max(result.retryAfterMs ?? 0, blocked ? 15 * 60_000 : Math.min(5 * 60_000, 5000 * 2 ** Math.min(failures, 6)))
+      runInTransaction(db, () => {
+        saveSourceState(db!, { ...previous, lastAttemptAt: nowIso, lastError: failure, consecutiveFailures: failures, backoffUntil: new Date(nowMs + backoffMs).toISOString(), transportKind: 'html', runId })
+        recordDiagnostic(db!, { at: nowIso, endpointKind: 'khamsat-list', status: 'failed', durationMs: result.durationMs, itemCount: null, errorCategory: failure, detail: `HTTP ${result.status ?? 'network'}; retry in ${backoffMs}ms` })
+      })
+      return
+    }
+    const { insertedIds, updatedIds, notifyIds } = applyKhamsatCycle(db, items, { nowMs, runId, durationMs: result.durationMs, settings })
+    khamsatLastDurationMs = result.durationMs
+    khamsatLastItemCount = items.length
+    if (insertedIds.length || updatedIds.length) emitProjects(insertedIds, updatedIds)
+    if (notifyIds.length) await flushNotifications(null)
+  } finally {
+    khamsatInFlight = false
+    khamsatAbort = null
+    scheduleKhamsat()
+  }
+}
 
 function mapFetchKind(kind: string, status: number | null): FailureKind {
   if (kind === 'timeout') return 'timeout'
@@ -921,6 +1000,9 @@ function openCompact(): void {
 async function doPause(): Promise<SourceHealth> {
   paused = true
   activeRss?.abort()
+  khamsatAbort?.abort()
+  if (khamsatTimer) clearTimeout(khamsatTimer)
+  khamsatTimer = null
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) {
@@ -937,6 +1019,7 @@ async function doResume(): Promise<SourceHealth> {
   lastStartMs = null
   lastRecovering = wasGap()
   scheduleNext()
+  scheduleKhamsat(0)
   emitHealth()
   return snapshotHealth()
 }
@@ -952,10 +1035,12 @@ async function shutdown(): Promise<void> {
   quitRequested = true
   paused = true
   activeRss?.abort()
+  khamsatAbort?.abort()
   activeProposal?.abort()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
+  if (khamsatTimer) clearTimeout(khamsatTimer)
   if (enrichTimer) clearInterval(enrichTimer)
   if (updateStartupTimer) clearTimeout(updateStartupTimer)
   if (updateTimer) clearInterval(updateTimer)
@@ -1100,16 +1185,25 @@ function registerIpc(): void {
     const p = (patch ?? {}) as Partial<AppSettings>
     const next = mergeSettings(settings, p)
     const intervalChanged = next.pollIntervalMs !== settings.pollIntervalMs
+    const khamsatChanged = next.khamsatEnabled !== settings.khamsatEnabled
     saveSettings(next)
     compactWin?.setAlwaysOnTop(next.ui.compactAlwaysOnTop)
     if (intervalChanged) scheduleNext()
+    if (khamsatChanged) {
+      if (!next.khamsatEnabled) khamsatAbort?.abort()
+      scheduleKhamsat(0)
+    }
     emitHealth()
     return next
   })
   ipcMain.handle(IPC.getHealth, () => snapshotHealth())
+  ipcMain.handle(IPC.getKhamsatHealth, () => snapshotKhamsatHealth())
   ipcMain.handle(IPC.pause, () => doPause())
   ipcMain.handle(IPC.resume, () => doResume())
-  ipcMain.handle(IPC.refresh, () => trackWork(runCycle()))
+  ipcMain.handle(IPC.refresh, () => {
+    void trackWork(runKhamsatCycle())
+    return trackWork(runCycle())
+  })
   ipcMain.handle(IPC.openProject, (_e, v: { id: number }) => {
     if (!Number.isInteger(v.id)) return { ok: false, error: 'bad-id' }
     return openProjectById(v.id, false)
@@ -1149,6 +1243,7 @@ function registerIpc(): void {
     if (!db || !Number.isInteger(v.id)) return null
     const p = getProjectById(db, v.id)
     if (!p) return null
+    if (p.source === KHAMSAT_SOURCE) return getProjectDetailsRow(db, v.id)
     const row = detailsFetcher.request(v.id, p.url, v.force === true)
     void trackWork(detailsFetcher.pump())
     return row
@@ -1438,6 +1533,9 @@ async function boot(): Promise<void> {
   })
   powerMonitor.on('suspend', () => {
     activeRss?.abort()
+    khamsatAbort?.abort()
+    if (khamsatTimer) clearTimeout(khamsatTimer)
+    khamsatTimer = null
     enrichQueue.abortActive()
     detailsFetcher.abortActive()
     if (timer) {
@@ -1450,6 +1548,7 @@ async function boot(): Promise<void> {
     lastRecovering = true
     setTimeout(() => void trackWork(runCycle()), 2000)
     scheduleNext()
+    scheduleKhamsat(2000)
   })
 
   enrichTimer = setInterval(() => {
@@ -1467,6 +1566,7 @@ async function boot(): Promise<void> {
 
   lastRecovering = wasGap()
   scheduleNext()
+  scheduleKhamsat(0)
   // First cycle starts immediately through the scheduler.
   if (process.env['RASED_CAPTURE_PATH']) captureWhenSettled(process.env['RASED_CAPTURE_PATH'])
 }

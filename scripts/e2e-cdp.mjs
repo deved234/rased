@@ -25,11 +25,15 @@ for (let id = 1; id <= 450; id++) {
 }
 db.exec(`INSERT INTO project_details SELECT id,'Cached review description','full','2020-01-01T00:00:00.000Z','ready',NULL FROM projects;`)
 db.prepare(`INSERT INTO source_state(source,baseline_complete,last_success_at,consecutive_failures) VALUES ('mostaql',1,?,0)`).run(stamp)
+db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({khamsatEnabled:false}))
 const def = { scope: 'all', unreadOnly: false, statuses: [], search: '', categoryFilter: { mode: 'all', categories: [], keywordsAny: [], keywordsAll: [], excludeKeywords: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true, sort: 'latestDetected' }
 const rss = items => `<?xml version="1.0"?><rss version="2.0"><channel><title>مستقل</title>${items.map(p => `<item><title>${p.title}</title><link>https://mostaql.com/go/${p.external}</link><description>React work</description><pubDate>${new Date().toUTCString()}</pubDate></item>`).join('')}</channel></rss>`
 const writeRss = items => writeFileSync(join(profile, 'rss-fixture.xml'), rss(items))
 writeRss([{ title: 'Review project 450', external: '90000450' }])
 writeFileSync(join(profile, 'detail-fixture.html'), readFileSync('tests/fixtures/detail-body.html', 'utf8') + readFileSync('tests/fixtures/detail-sample.html', 'utf8'))
+const khamsatStamp = date => { const d = new Date(date); return `${String(d.getUTCDate()).padStart(2,'0')}&#x2F;${String(d.getUTCMonth()+1).padStart(2,'0')}&#x2F;${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')} GMT` }
+const writeKhamsat = items => writeFileSync(join(profile, 'khamsat-fixture.html'), `<table id="forums_table"><tbody>${items.map(p => `<tr id="forum_post-${p.id}"><td><h3 class="details-head"><a href="/community/requests/${p.id}-${p.slug}">${p.title}</a></h3><span title="${khamsatStamp(p.publishedAt)}">date</span></td></tr>`).join('')}</tbody></table>`)
+writeKhamsat([{id:790001,slug:'baseline',title:'Old Khamsat request',publishedAt:Date.now()-3600000}])
 let child, ws, viewportSession, passed = 0
 const check = (label, condition, detail = '') => { assert.ok(condition, `${label}: ${detail}`); passed++; console.log(`PASS ${label}${detail ? ' — ' + detail : ''}`) }
 const ev = expression => evaluate(ws, expression)
@@ -235,6 +239,23 @@ try {
   await ev('window.rased.requestProjectDetails(450,true)'); await ev('window.rased.resume()')
   await eventually(()=>db.prepare("SELECT COUNT(*) n FROM project_details WHERE fetched_at > '2026-01-01' AND status='ready'").get().n>0,Boolean,20000); await ev('window.rased.pause()')
   check('stale cache was refreshed with real parser and metadata', db.prepare("SELECT COUNT(*) n FROM project_details WHERE fetched_at > '2026-01-01' AND status='ready'").get().n>0)
+  // Khamsat uses the public listing as an independent source. An old thread
+  // returning to page one must not create a new alert.
+  await ev('window.rased.updateSettings({khamsatEnabled:true})')
+  await ev('window.rased.resume()')
+  await eventually(() => db.prepare("SELECT baseline_complete n FROM source_state WHERE source='khamsat'").get()?.n === 1)
+  await ev('window.rased.pause()')
+  check('Khamsat first scan stores a silent baseline', db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 1 && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 0)
+  const khamsatToastStart = traces().filter(t => t.kind === 'toast').length
+  writeKhamsat([{id:790001,slug:'baseline',title:'Old Khamsat request',publishedAt:Date.now()-3600000},{id:790002,slug:'fresh',title:'New Khamsat request',publishedAt:Date.now()},{id:790003,slug:'old-return',title:'Old discussion returned',publishedAt:Date.now()-9*3600000}])
+  await ev('window.rased.resume()')
+  await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 3)
+  await ev('window.rased.pause()')
+  const khamsatToasts = traces().filter(t => t.kind === 'toast').slice(khamsatToastStart)
+  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && khamsatToasts[0].data.toastXml.includes('https://khamsat.com/community/requests/790002-fresh') && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
+  check('old Khamsat discussion is marked recovered', db.prepare("SELECT discovery_kind FROM projects WHERE source='khamsat' AND external_id='790003'").get()?.discovery_kind === 'recovered')
+  const khamsatOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"khamsat"},50,0)})()')
+  check('source filter returns only Khamsat requests', khamsatOnly.total === 3 && khamsatOnly.rows.every(p => p.source === 'khamsat'))
   // Real process restart, not Page.reload.
   await ev('window.rased.confirmClose(true)').catch(()=>{}); await sleep(500); await stopApp(child)
   child = startApp({exe,app,profile,port}); ws=await pageWs(port)
@@ -253,7 +274,7 @@ try {
   const preview = await ev('window.rased.purgeHistoryPreview("2021-01-01")')
   check('purge protects bookmarked/noted project', preview.ok && preview.affected===449)
   const purged = await ev('window.rased.purgeHistoryApply("2021-01-01")')
-  await wait('document.querySelectorAll("[data-row]").length===10')
+  await wait('document.querySelectorAll("[data-row]").length===13')
   check('purge updates visible rows, creates backup and preserves note', purged.ok && purged.deleted===449 && existsSync(purged.backupPath) && db.prepare('SELECT note FROM project_user_state WHERE project_id=450').get().note==='PERSISTENT NOTE')
   // Updater fixture replaces its native/network boundary; controller, IPC and UI are real.
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
