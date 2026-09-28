@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { LEGAL_DOCUMENTS } from '../src/shared/legal.ts'
+import { LEGAL_DOCUMENTS, LEGAL_UPDATED_AT } from '../src/shared/legal.ts'
 mkdirSync('resources/legal', { recursive: true })
 const parts = [], seen = new Set()
 function gather(name, base = process.cwd()) {
@@ -21,7 +21,7 @@ for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-s
 writeFileSync('resources/legal/THIRD_PARTY_NOTICES.txt', parts.join('\n\n' + '='.repeat(72) + '\n\n'))
 writeFileSync('resources/legal/LICENSE', readFileSync('LICENSE'))
 for (const [key, file] of [['terms', 'TERMS.md'], ['privacy', 'PRIVACY.md']]) {
-  const text = ['ar', 'en'].map(lang => '# ' + LEGAL_DOCUMENTS[lang][key].title + '\n\n2026-09-26 · RASED · david atef\n\n' + LEGAL_DOCUMENTS[lang][key].sections.map(([title, body]) => '## ' + title + '\n\n' + body).join('\n\n')).join('\n\n---\n\n')
+  const text = ['ar', 'en'].map(lang => '# ' + LEGAL_DOCUMENTS[lang][key].title + '\n\n' + LEGAL_UPDATED_AT + ' · RASED · david atef\n\n' + LEGAL_DOCUMENTS[lang][key].sections.map(([title, body]) => '## ' + title + '\n\n' + body).join('\n\n')).join('\n\n---\n\n')
   writeFileSync(file, text + '\n'); writeFileSync('resources/legal/' + file, text + '\n')
 }
 console.log('Terms, privacy, MIT and notices for ' + seen.size + ' components prepared')

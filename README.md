@@ -59,6 +59,8 @@ npm run dist
 - احترام `Retry-After` وفترات التهدئة عند الأخطاء أو تقييد الطلبات. لا تسجيل دخول، ولا إرسال عروض آلي، ولا تجاوز لحماية الموقع.
 - توقيت نشر المشروع في RSS واستجابة الشبكة خارج سيطرة التطبيق؛ لا يمكن ضمان وصول التنبيه لحظيًا أو قبل كل المنافسين.
 
+**ميزة مخططة وغير متاحة في الإصدار المنشور:** [مساعد كتابة العروض باستخدام Gemini](docs/PROPOSAL_ASSISTANT_CONCEPT.md). ستكون بطلب المستخدم فقط وبمفتاح API خاص به؛ راجع [الخصوصية](PRIVACY.md) قبل استخدامها عند طرحها. لم تُضف اتصالات Gemini للتطبيق بعد.
+
 مؤسس ومطوّر راصد: **david atef** — [GitHub](https://github.com/deved234) · [LinkedIn](https://www.linkedin.com/in/david-atef/).
 
 الخطة والمراجعة التقنية في [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md)، [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)، و[FIX_REPORT.md](FIX_REPORT.md)، و[إصلاحات الواجهة 0.2.1](docs/UI_UX_FIX_REPORT.md). للمساهمة اقرأ [CONTRIBUTING.md](CONTRIBUTING.md). للإبلاغ عن مشكلة استخدم [Issues](https://github.com/deved234/rased/issues). المشروع متاح برخصة [MIT](LICENSE).
@@ -76,6 +78,8 @@ Download **RASED-Setup-0.2.6.exe** under **Assets** in [Releases](https://github
 To develop, install Node.js 24, clone this repository, run `npm ci`, then `npm run dev`. Run `npm run typecheck`, `npm run lint`, and `npm test` before contributing. `npm run dist` builds the installer locally. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT license](LICENSE).
 
 `npm run dev` opens an Electron desktop window. If the Electron executable is missing, the dev command downloads it before launching. The printed `localhost:5173` URL is the internal React development server.
+
+**Planned, not in the published build:** [Gemini Proposal Assistant](docs/PROPOSAL_ASSISTANT_CONCEPT.md). It will use each user's own API key and make requests only when explicitly asked to generate a draft. See the [privacy disclosure](PRIVACY.md); the app currently makes no Gemini requests.
 
 
 ## الشروط والخصوصية والحقوق

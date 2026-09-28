@@ -72,10 +72,13 @@ try {
   await nav('#/settings/legal'); await wait('!!document.querySelector(".legal-page")')
   check('offline legal terms render in Arabic', await ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")'))
   await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")'))
+  check('privacy labels Gemini as a future opt-in service and explains free-tier processing', await ev('document.querySelector(".legal-page").textContent.includes("ميزة غير متاحة بعد") && document.querySelector(".legal-page").textContent.includes("مراجعون بشريون")'))
   await click('الرخص', '.legal-page .chips button'); check('licenses include actual dependency texts', await ev('document.querySelector(".license-text")?.textContent.includes("MIT License")'))
   const legalOpens=traces().filter(t=>t.kind==='open-external').length
   await click('شروط مستقل الرسمية','.legal-page button'); await eventually(()=>traces().filter(t=>t.kind==='open-external').length===legalOpens+1)
   check('legal source button opens the fixed official destination',traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/p/terms')
+  await click('شروط Gemini الرسمية','.legal-page button')
+  check('Gemini terms button opens only the fixed Google destination',traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://ai.google.dev/gemini-api/terms')
   await nav('#/settings/notifications')
   await wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.includes("إعدادات إشعارات Windows"))')
   await click('إعدادات إشعارات Windows')

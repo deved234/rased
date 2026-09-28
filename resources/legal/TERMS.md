@@ -1,6 +1,6 @@
 # شروط الاستخدام
 
-2026-09-26 · RASED · david atef
+2026-09-28 · RASED · david atef
 
 ## وظيفة البرنامج
 
@@ -18,19 +18,23 @@
 
 المعلومات قد تكون ناقصة أو قديمة، وقد تتأخر التنبيهات أو لا تصل. راجع المشروع الأصلي قبل تقديم عرض أو اتخاذ قرار. لا نضمن الرصد اللحظي أو السبق أو قبول العروض أو استمرار الخدمة.
 
+## مساعد العروض المخطط له
+
+عند طرح الميزة الاختيارية، سيستخدم راصد Gemini لإعداد مسودة عرض فقط بعد طلبك. راجع المسودة وعدّلها قبل نسخها وتقديمها بنفسك على مستقل؛ قد تكون غير دقيقة أو تتضمن خبرات أو وعودًا لم تقدمها. لا ينشئ راصد حساب مستقل ولا يقدم عروضًا آليًا. استخدام Gemini ومفتاحك يخضع لشروط Google، ومنها متطلبات السن والمنطقة والخطة المتاحة: https://ai.google.dev/gemini-api/terms . ولا تمنح هذه الميزة حقوقًا إضافية في محتوى المشاريع.
+
 ## الترخيص والمسؤولية
 
 الكود متاح وفق MIT ونصها الأصلي في قسم الرخص. البرنامج مقدم كما هو، دون ضمانات في الحدود التي يسمح بها القانون؛ لا تُلغى حقوق إلزامية للمستخدم أو مسؤوليات لا يجوز استبعادها. هذه المعلومات لا تحل محل استشارة قانونية ولا تمثل اعتمادًا قانونيًا للبرنامج.
 
 ## التحديث والتواصل
 
-هذه الصياغة تخص الإصدار الحالي ويمكن تحديثها مع تغيير السلوك؛ راجعها عند الترقية. للبلاغات المتعلقة بالكود أو الحقوق استخدم مستودع GitHub أو LinkedIn للمطور. لا تنشر بيانات حساسة في البلاغات العامة.
+تصف هذه الصياغة الإصدار الحالي وتوضح مسبقًا سلوك مساعد عروض اختياري مخطط له؛ ذكر الميزة لا يعني توافرها في الإصدار المنشور. راجع النص عند الترقية. للبلاغات المتعلقة بالكود أو الحقوق استخدم مستودع GitHub أو LinkedIn للمطور. لا تنشر بيانات حساسة في البلاغات العامة.
 
 ---
 
 # Terms of use
 
-2026-09-26 · RASED · david atef
+2026-09-28 · RASED · david atef
 
 ## Purpose
 
@@ -48,10 +52,14 @@ Do not evade blocks or challenges, flood the source, or abuse the platform. The 
 
 Information may be incomplete or stale and alerts may be delayed or missed. Check the original project before submitting a proposal or making decisions. Instant discovery, priority over competitors, successful proposals and continued availability are not guaranteed.
 
+## Planned Proposal Assistant
+
+When this optional feature is released, RASED will use Gemini to draft a proposal only at your request. Review and edit the draft before copying and submitting it yourself on Mostaql; it can contain mistakes, invented experience or unsupported promises. RASED does not create a Mostaql account or submit proposals automatically. Use of Gemini and your key is subject to Google terms, including age, regional and service-tier restrictions: https://ai.google.dev/gemini-api/terms . This feature grants no additional rights to project content.
+
 ## License and liability
 
 The software is provided under MIT, reproduced in Licenses. It is provided as is, without warranties to the extent permitted by law; mandatory consumer rights and liabilities that cannot legally be excluded remain unaffected. These disclosures are not legal advice or certification of compliance.
 
 ## Updates and contact
 
-These disclosures describe the current version and may change with its behavior; review them after upgrades. Contact the developer through the GitHub repository or LinkedIn for code or rights concerns. Do not post sensitive information in public reports.
+These disclosures describe the current version and explain a planned optional Proposal Assistant in advance; mentioning it does not mean it is available in the published build. Review the text after upgrades. Contact the developer through the GitHub repository or LinkedIn for code or rights concerns. Do not post sensitive information in public reports.

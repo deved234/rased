@@ -6,6 +6,7 @@ export const ABOUT_LINKS = {
   source: 'https://github.com/deved234/rased',
   mostaqlTerms: 'https://mostaql.com/p/terms',
   mostaqlPrivacy: 'https://mostaql.com/p/privacy',
+  geminiTerms: 'https://ai.google.dev/gemini-api/terms',
   issues: 'https://github.com/deved234/rased/issues'
 } as const
 export type AboutLink = keyof typeof ABOUT_LINKS
