@@ -218,6 +218,12 @@ export function SettingsView({
               <div className="set-row">
                 <span className="hint">{t.testNotifNote}</span>
               </div>
+              {appInfo?.platform === 'win32' && (
+                <div className="set-row">
+                  <button className="btn sm" onClick={() => void rased.openWindowsNotificationSettings()}>{t.windowsNotificationSettings}</button>
+                  <span className="hint">{t.windowsNotificationHint}</span>
+                </div>
+              )}
             </div>
 
             <div className="set-group">

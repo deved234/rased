@@ -76,6 +76,10 @@ try {
   const legalOpens=traces().filter(t=>t.kind==='open-external').length
   await click('شروط مستقل الرسمية','.legal-page button'); await eventually(()=>traces().filter(t=>t.kind==='open-external').length===legalOpens+1)
   check('legal source button opens the fixed official destination',traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/p/terms')
+  await nav('#/settings/notifications')
+  await wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.includes("إعدادات إشعارات Windows"))')
+  await click('إعدادات إشعارات Windows')
+  check('notification guidance opens fixed Windows Focus assist settings', traces().filter(t=>t.kind==='open-system-settings').at(-1)?.data==='ms-settings:quiethours')
   await nav('#/'); await wait('document.querySelectorAll("[data-row]").length===50')
 
 
@@ -184,7 +188,7 @@ try {
   await ev('window.__events=[];window.rased.onProjectsChanged(e=>window.__events.push(e))'); writeRss([{title:'New matching project',external:'91000001'}]); await ev('window.rased.resume()')
   await wait('!!document.querySelector(".pill")').catch(async e=>{console.error('Arrival debug',await ev('JSON.stringify({events:window.__events,scroll:document.querySelector(".list-scroll").scrollTop,rows:Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row),text:document.body.innerText,settings:await window.rased.getSettings()})'));throw e}); await sleep(2700)
   check('new arrival/enrichment preserves loaded ids until reveal', JSON.stringify(visible)===JSON.stringify(await ev('Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row)')))
-  check('single toast contains native browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="protocol" launch="https://mostaql.com/go/91000001"') && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
+  check('single toast requests high priority and native browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="protocol" launch="https://mostaql.com/go/91000001"') && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
   await click('.', '.pill'); await wait('document.querySelector("[data-row] article").textContent.includes("New matching project")')
   check('arrival reveal fetches new row', true)
   await ev('window.rased.pause()')

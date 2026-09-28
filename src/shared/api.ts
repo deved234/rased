@@ -79,6 +79,7 @@ export interface RasedApi {
   previewFilterCount(definition: FilterDefinition): Promise<{ total: number; unread: number }>
   queryProjectsPage(definition: FilterDefinition, limit: number, offset: number): Promise<PageResult>
   testNotification(): Promise<OpenProjectResult>
+  openWindowsNotificationSettings(): Promise<MutationResult>
   testSound(): Promise<void>
   setDnd(untilIso: string | null): Promise<AppSettings>
   openDataFolder(): Promise<MutationResult>

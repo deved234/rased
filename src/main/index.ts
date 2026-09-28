@@ -2,6 +2,7 @@
 // The collector lives here (outside React). Renderer is display-only.
 
 import { randomUUID } from 'node:crypto'
+import { release as osRelease } from 'node:os'
 import { NsisUpdater } from 'electron-updater'
 import { UpdateController } from './updates.js'
 import { testUpdater } from './testHarness.js'
@@ -91,7 +92,7 @@ import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
-import { browserToastXml } from './toast.js'
+import { browserToastXml, supportsUrgentToasts } from './toast.js'
 
 app.setAppUserModelId('com.rased.app')
 
@@ -238,10 +239,10 @@ const activeNotifications = new Set<Notification>()
 
 function showToast(title: string, body: string, onClick: () => void, url: string): Promise<boolean> {
   const toastXml = process.platform === 'win32'
-    ? browserToastXml(title, body, url, app.isPackaged ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'))
+    ? browserToastXml(title, body, url, app.isPackaged ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'), supportsUrgentToasts(process.platform, osRelease()))
     : undefined
   if (testHarness) {
-    testHarness.record('toast', { title, body, toastXml })
+    testHarness.record('toast', { title, body, toastXml, urgency: 'critical' })
     // Simulate the OS protocol destination, not a native Windows mouse click.
     if (toastXml) testHarness.record('open-external', url)
     else onClick()
@@ -256,7 +257,7 @@ function showToast(title: string, body: string, onClick: () => void, url: string
       }
     }
     try {
-      const n = new Notification({ title, body, silent: true, icon: iconPath('icon.png'), toastXml })
+      const n = new Notification({ title, body, silent: true, icon: iconPath('icon.png'), toastXml, urgency: 'critical' })
       activeNotifications.add(n)
       n.on('show', () => finish(true))
       n.on('failed', (_event, error: string) => {
@@ -1185,6 +1186,16 @@ function registerIpc(): void {
     return queryProjectsPage(db, def, { limit, offset })
   })
   ipcMain.handle(IPC.testNotification, () => sendTestNotification())
+  ipcMain.handle(IPC.openWindowsNotificationSettings, async event => {
+    if (!mainSender(event) || process.platform !== 'win32') return { ok: false, error: 'unavailable' }
+    try {
+      if (testHarness) testHarness.record('open-system-settings', 'ms-settings:quiethours')
+      else await shell.openExternal('ms-settings:quiethours')
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'open-failed' }
+    }
+  })
   ipcMain.handle(IPC.testSound, () => {
     win?.webContents.send(IPC.playBeep)
   })

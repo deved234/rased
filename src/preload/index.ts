@@ -59,6 +59,7 @@ const api: RasedApi = {
   previewFilterCount: (definition) => ipcRenderer.invoke(IPC.previewFilterCount, { definition }) as Promise<{ total: number; unread: number }>,
   queryProjectsPage: (definition, limit, offset) => ipcRenderer.invoke(IPC.queryProjectsPage, { definition, limit, offset }) as Promise<PageResult>,
   testNotification: () => ipcRenderer.invoke(IPC.testNotification) as Promise<OpenProjectResult>,
+  openWindowsNotificationSettings: () => ipcRenderer.invoke(IPC.openWindowsNotificationSettings) as Promise<MutationResult>,
   testSound: () => ipcRenderer.invoke(IPC.testSound) as Promise<void>,
   setDnd: (untilIso) => ipcRenderer.invoke(IPC.setDnd, { untilIso }) as Promise<AppSettings>,
   openDataFolder: () => ipcRenderer.invoke(IPC.openDataFolder) as Promise<MutationResult>,

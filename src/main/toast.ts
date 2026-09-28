@@ -10,7 +10,13 @@ function xml(value: string): string {
 }
 
 /** Windows owns HTTPS activation, including notifications retained after app exit. */
-export function browserToastXml(title: string, body: string, url: string, icon: string): string {
+export function supportsUrgentToasts(platform: string, release: string): boolean {
+  if (platform !== 'win32') return false
+  const parts = release.split('.').map(Number)
+  return parts[0] === 10 && parts.length >= 3 && Number.isInteger(parts[2]) && parts[2]! >= 22546
+}
+
+export function browserToastXml(title: string, body: string, url: string, icon: string, urgent = false): string {
   if (!isAllowedProjectUrl(url) && !isAllowedTestUrl(url)) throw new Error('Invalid notification destination')
-  return `<toast activationType="protocol" launch="${xml(url)}"><visual><binding template="ToastGeneric"><text>${xml(title)}</text><text>${xml(body)}</text><image placement="appLogoOverride" src="${xml(pathToFileURL(icon).href)}"/></binding></visual><audio silent="true"/></toast>`
+  return `<toast activationType="protocol" launch="${xml(url)}"${urgent ? ' scenario="urgent"' : ''}><visual><binding template="ToastGeneric"><text>${xml(title)}</text><text>${xml(body)}</text><image placement="appLogoOverride" src="${xml(pathToFileURL(icon).href)}"/></binding></visual><audio silent="true"/></toast>`
 }

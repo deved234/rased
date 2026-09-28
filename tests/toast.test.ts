@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
-import { browserToastXml } from '../src/main/toast.js'
+import { browserToastXml, supportsUrgentToasts } from '../src/main/toast.js'
 
 const icon = 'C:/RASED branding/icon.png'
 const parser = new XMLParser({ ignoreAttributes: false })
@@ -29,5 +29,18 @@ describe('Windows browser notification activation', () => {
     for (const url of ['https://evil.test/go/123', 'https://mostaql.com.evil.test/go/123', 'file:///C:/app.exe', 'javascript:alert(1)', 'https://mostaql.com/p/terms']) {
       expect(() => browserToastXml('Test', '', url, icon)).toThrow('Invalid notification destination')
     }
+  })
+  it('requests urgent delivery only on supporting Windows builds', () => {
+    expect(supportsUrgentToasts('win32', '10.0.19045')).toBe(false)
+    expect(supportsUrgentToasts('win32', '10.0.22000')).toBe(false)
+    expect(supportsUrgentToasts('win32', '10.0.22546')).toBe(true)
+    expect(supportsUrgentToasts('win32', '10.0.26100')).toBe(true)
+    expect(supportsUrgentToasts('linux', '10.0.26100')).toBe(false)
+    expect(supportsUrgentToasts('win32', 'invalid')).toBe(false)
+    const urgent = parser.parse(browserToastXml('Project', '', 'https://mostaql.com/go/123', icon, true)).toast
+    const ordinary = parser.parse(browserToastXml('Project', '', 'https://mostaql.com/go/123', icon, false)).toast
+    expect(urgent['@_scenario']).toBe('urgent')
+    expect(ordinary['@_scenario']).toBeUndefined()
+    expect(urgent['@_activationType']).toBe('protocol')
   })
 })

@@ -26,6 +26,7 @@ export const IPC = {
   previewFilterCount: 'rased:preview-filter-count',
   queryProjectsPage: 'rased:query-projects-page',
   testNotification: 'rased:test-notification',
+  openWindowsNotificationSettings: 'rased:open-windows-notification-settings',
   testSound: 'rased:test-sound',
   setDnd: 'rased:set-dnd',
   openDataFolder: 'rased:open-data-folder',
