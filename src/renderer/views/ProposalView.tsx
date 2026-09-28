@@ -15,6 +15,8 @@ function errorText(code: string | undefined, ar: boolean): string {
     'provider-http-503': ['خدمة Gemini مشغولة حاليًا. جرّب لاحقًا.', 'Gemini is temporarily unavailable. Try again later.'],
     'preview-changed': ['تغيّرت بيانات المشروع. راجع المعاينة مرة أخرى.', 'Project data changed. Review the preview again.'],
     'invalid-response': ['استجابة Gemini غير صالحة. أعد المحاولة.', 'Gemini returned an invalid response. Try again.'],
+    'output-truncated': ['Gemini قطع المسودة قبل اكتمالها. أعد التوليد.', 'Gemini stopped before the draft was complete. Generate again.'],
+    'response-blocked': ['Gemini لم يُكمل الرد على هذا الطلب. راجع البيانات وحاول مرة أخرى.', 'Gemini did not complete this request. Review the data and try again.'],
     'network-error': ['تعذر الاتصال بـGemini.', 'Could not reach Gemini.'],
     timeout: ['انتهت مهلة الاتصال بـGemini. جرّب لاحقًا.', 'Gemini timed out. Try again later.'],
     cancelled: ['أُلغي الطلب.', 'Request cancelled.']

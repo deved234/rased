@@ -48,8 +48,17 @@ describe('proposal assistant data boundaries', () => {
     const request = mock.mock.calls[0]
     expect(request?.[0]).toContain('gemini-2.5-flash')
     expect((request?.[1] as RequestInit).headers).toHaveProperty('x-goog-api-key', 'fake-test-key-123456')
+    const body = JSON.parse(String((request?.[1] as RequestInit).body))
+    expect(body.generationConfig.thinkingConfig.thinkingBudget).toBe(0)
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(2048)
     deleteGeminiKey(dir)
     expect(hasGeminiKey(dir)).toBe(false)
+  })
+
+  it('reports token-limited responses instead of treating partial JSON as a bad key', async () => {
+    expect(saveGeminiKey(dir, 'fake-test-key-123456')).toBe(true)
+    const truncated = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"proposal":"incomplete' }] } }] }), { status: 200 }))
+    await expect(generateGeminiProposal(dir, getProposalPreview(db, id, '')!, new AbortController().signal, truncated as typeof fetch)).rejects.toThrow('output-truncated')
   })
 
   it('persists and deletes editable drafts without touching projects', () => {

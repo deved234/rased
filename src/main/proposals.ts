@@ -94,7 +94,14 @@ export async function generateGeminiProposal(userData: string, preview: Proposal
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: buildProposalPrompt(preview) }] }],
-        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1500, temperature: 0.5 }
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: 2048,
+          temperature: 0.5,
+          // Gemini 2.5 Flash otherwise spends the output cap on hidden thinking,
+          // leaving a truncated JSON proposal even after a successful HTTP 200.
+          thinkingConfig: { thinkingBudget: 0 }
+        }
       })
     })
   } catch (error) {
@@ -107,8 +114,11 @@ export async function generateGeminiProposal(userData: string, preview: Proposal
     if (response.status === 429) throw new Error('rate-limited')
     throw new Error(`provider-http-${response.status}`)
   }
-  const data = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
-  const answer = data.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
+  const data = await response.json() as { candidates?: { finishReason?: string; content?: { parts?: { text?: string }[] } }[] }
+  const candidate = data.candidates?.[0]
+  if (candidate?.finishReason === 'MAX_TOKENS') throw new Error('output-truncated')
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') throw new Error('response-blocked')
+  const answer = candidate?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
   let parsed: unknown
   try { parsed = JSON.parse(answer) } catch (error) { throw new Error('invalid-response', { cause: error }) }
   const draft = parseGeminiDraft(parsed, preview.projectId)

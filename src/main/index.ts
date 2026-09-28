@@ -1004,7 +1004,7 @@ function registerIpc(): void {
       saveProposalDraft(db, draft)
       return { ok: true, draft }
     } catch (err) {
-      const code = timedOut ? 'timeout' : err instanceof Error && /^(cancelled|key-unavailable|key-rejected|rate-limited|model-unavailable|invalid-response|provider-http-\d+)$/.test(err.message) ? err.message : 'network-error'
+      const code = timedOut ? 'timeout' : err instanceof Error && /^(cancelled|key-unavailable|key-rejected|rate-limited|model-unavailable|invalid-response|output-truncated|response-blocked|provider-http-\d+)$/.test(err.message) ? err.message : 'network-error'
       return { ok: false, error: code }
     } finally { clearTimeout(timeout); if (activeProposal === controller) activeProposal = null }
   })
