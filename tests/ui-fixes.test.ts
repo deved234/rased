@@ -57,6 +57,17 @@ describe('UI fixes: storage and policies', () => {
     expect(detached.notifyFilter).toEqual(changed.notifyFilter)
     expect(detached.displayQuery).toEqual(changed.displayQuery)
   })
+  it('keeps Mostaql notification categories when a linked display switches to Khamsat', () => {
+    const s = defaultSettings()
+    const categoryFilter = { ...s.notifyFilter, mode: 'selected' as const, categories: ['design'] }
+    const linked = mergeSettings(s, { notifyFilter: categoryFilter, linkDisplayAndNotifyFilters: true })
+    const khamsat = mergeSettings(linked, {
+      displayQuery: { ...linked.displayQuery, source: 'khamsat', categoryFilter: { ...categoryFilter, mode: 'all', categories: [] } }
+    })
+    expect(khamsat.notifyFilter).toEqual(categoryFilter)
+    expect(khamsat.displayQuery.source).toBe('khamsat')
+    expect(khamsat.displayQuery.categoryFilter.categories).toEqual([])
+  })
   it('uses one complete predicate for arrivals and stored search/scope/budget/status filters', () => {
     const db = seed(); updateUserState(db, 1, { hidden: true, status: 'submitted' })
     const d = { ...defaultFilterDefinition(), scope: 'hidden' as const, search: 'Project 1', statuses: ['submitted' as const], includeUnknownBudget: true }

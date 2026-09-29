@@ -14,7 +14,7 @@ export function LegalView({ lang }: { lang: Lang }): React.ReactElement {
     try { setError(!(await rased.openAboutLink(id)).ok) } catch { setError(true) }
   }
   return <div className="legal-page">
-    <div className="set-group"><h2>{ar ? 'شروط الاستخدام والخصوصية' : 'Terms & privacy'}</h2><p className="muted">{ar ? 'راصد مشروع مستقل طوّره david atef؛ ليس منتجًا تابعًا لحسوب أو معتمدًا من مستقل.' : 'RASED is an independent project by david atef; it is not affiliated with Hsoub or endorsed by Mostaql.'}</p><span className="small muted">{ar ? 'آخر تحديث: ' : 'Last updated: '}{LEGAL_UPDATED_AT}</span></div>
+    <div className="set-group"><h2>{ar ? 'شروط الاستخدام والخصوصية' : 'Terms & privacy'}</h2><p className="muted">{ar ? 'راصد برنامج مستقل طوّره david atef؛ ليس تابعًا لحسوب أو نفذلي ولا منتجًا رسميًا للمنصات المدعومة.' : 'RASED is an independent app by david atef; it is not affiliated with Hsoub, Nafezly, or the supported platforms.'}</p><span className="small muted">{ar ? 'آخر تحديث: ' : 'Last updated: '}{LEGAL_UPDATED_AT}</span></div>
     <div className="chips" role="tablist" aria-label={ar ? 'المستندات القانونية' : 'Legal documents'}>{(['terms','privacy','licenses'] as const).map(id=><button key={id} role="tab" aria-selected={doc===id} className={doc===id?'chip active':'chip'} onClick={()=>setDoc(id)}>{content[id].title}</button>)}</div>
     <article className="set-group" role="tabpanel" aria-label={content[doc].title}>
       {content[doc].sections.map(([title,body])=><section className="legal-section" key={title}><h3>{title}</h3><p>{body}</p></section>)}

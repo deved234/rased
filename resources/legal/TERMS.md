@@ -1,14 +1,14 @@
 # شروط الاستخدام
 
-2026-09-28 · RASED · david atef
+2026-09-29 · RASED · david atef
 
 ## وظيفة البرنامج
 
-راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات؛ تفاصيل طلبات خمسات الكاملة تُفتح على موقعها في المتصفح. تقديم العروض والتواصل والتعاقد والدفع يتم بواسطتك على المنصة المعنية؛ البرنامج لا يدخل حسابك ولا يرسل عروضًا أو ردودًا آلية.
+راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل، وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وخلاصة RSS العامة لمشاريع نفذلي، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات؛ يقرأ وصف نفذلي من RSS ولا يطلب صفحات تفاصيله، وتفاصيل طلبات خمسات الكاملة تُفتح على موقعها في المتصفح. تقديم العروض والتواصل والتعاقد والدفع يتم بواسطتك على المنصة المعنية؛ البرنامج لا يدخل حسابك ولا يرسل عروضًا أو ردودًا آلية.
 
 ## علاقة المنصة وحقوق المحتوى
 
-مستقل وخمسات وحسوب وعلاماتهم ومحتوى المستخدمين تخص أصحابها. ظهور محتوى عام أو وجود RSS ليس تصريحًا بإعادة نشره أو بجلب آلي غير محدود. لا تمنح هذه الصفحات إذنًا من أي منصة. احترم شروط كل مصدر والقيود المحلية وحقوق أصحاب المحتوى؛ لا تستخدم راصد لتجاوز الحماية أو جمع معلومات خاصة أو إعادة بيع المحتوى.
+مستقل وخمسات ونفذلي وحسوب وعلاماتهم ومحتوى المستخدمين تخص أصحابها. ظهور محتوى عام أو وجود RSS ليس تصريحًا بإعادة نشره أو بجلب آلي غير محدود. لا تمنح هذه الصفحات إذنًا من أي منصة. احترم شروط كل مصدر والقيود المحلية وحقوق أصحاب المحتوى؛ لا تستخدم راصد لتجاوز الحماية أو جمع معلومات خاصة أو إعادة بيع المحتوى.
 
 ## استخدام مسؤول
 
@@ -34,15 +34,15 @@
 
 # Terms of use
 
-2026-09-28 · RASED · david atef
+2026-09-29 · RASED · david atef
 
 ## Purpose
 
-RASED is a local tool for following the public Mostaql RSS feed and Khamsat unavailable-service requests listing, organizing results and showing alerts. It may fetch public Mostaql detail pages; full Khamsat request details open on Khamsat in your browser. You reply, submit proposals, contract and pay yourself on the relevant platform. RASED does not access your accounts or submit automated proposals or replies.
+RASED is a local tool for following the public Mostaql RSS feed, Khamsat unavailable-service requests listing and Nafezly projects RSS feed, organizing results and showing alerts. It may fetch public Mostaql detail pages; Nafezly descriptions come from RSS without detail-page requests, and full Khamsat request details open in your browser. You reply, submit proposals, contract and pay yourself on the relevant platform. RASED does not access your accounts or submit automated proposals or replies.
 
 ## Platform and content rights
 
-Mostaql, Khamsat, Hsoub, their marks and user content belong to their respective owners. Public availability or an RSS feed does not establish permission for republication or unrestricted automated access. These documents do not grant permission from either platform. Respect each source’s terms, applicable law and content rights; do not bypass protection, collect private information or resell content.
+Mostaql, Khamsat, Nafezly, Hsoub, their marks and user content belong to their respective owners. Public availability or an RSS feed does not establish permission for republication or unrestricted automated access. These documents do not grant permission from any platform. Respect each source’s terms, applicable law and content rights; do not bypass protection, collect private information or resell content.
 
 ## Responsible use
 

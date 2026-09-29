@@ -6,6 +6,7 @@ import { STRINGS, type Lang } from '../i18n.js'
 import { budgetLabel, fullDate, timeAgo } from '../format.js'
 import { ConfirmDialog, EmptyState, SkeletonList } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
+import { openOnSource, sourceName } from '../sourceCopy.js'
 import { go, registerNavigationBlocker, requestAction } from '../router.js'
 
 function statusLabel(s: PersonalStatus, lang: Lang): string {
@@ -188,7 +189,7 @@ export function ProjectDetailView({
             <span className="faint" aria-hidden="true">
               ·
             </span>
-            <span className="muted">{project.source === 'khamsat' ? (lang === 'ar' ? 'خمسات' : 'Khamsat') : (lang === 'ar' ? 'مستقل' : 'Mostaql')}</span>
+            <span className="muted">{sourceName(project.source, lang)}</span>
           </div>
           <h2 dir="auto">{project.title}</h2>
           <div className="meta">
@@ -198,14 +199,14 @@ export function ProjectDetailView({
           </div>
 
           <div className="facts">
-            {project.source !== 'khamsat' && <div className="fact">
+            {project.source === 'mostaql' && <div className="fact">
               <div className="k">{t.factsCategory}</div>
               <div className="v" dir="auto">
                 {project.categorySlug ? (categoryDisplay(project.categorySlug, lang) ?? project.categorySlug) : t.unknownCategory}
                 {!project.categoryConfirmed && <div className="faint small">{t.uncertainCategory}</div>}
               </div>
             </div>}
-            {project.source !== 'khamsat' && <div className="fact">
+            {project.source === 'mostaql' && <div className="fact">
               <div className="k">{t.factsBudget}</div>
               <div className="v num" dir="ltr">
                 {budget ?? t.budgetUnknown}
@@ -232,7 +233,7 @@ export function ProjectDetailView({
             </div>
           ) : <>
           <div className="faint small">
-            {details?.provenance === 'full' ? t.descFullNote : details?.provenance === 'truncated' ? (lang === 'ar' ? 'وصف مقتطع لطوله — افتح مستقل للنص كاملًا' : 'Description truncated — open Mostaql for the complete text') : t.descExcerptNote}
+            {details?.provenance === 'full' ? t.descFullNote : details?.provenance === 'truncated' ? (lang === 'ar' ? 'وصف مقتطع لطوله — افتح المصدر للنص كاملًا' : 'Description truncated — open the source for the complete text') : t.descExcerptNote}
             {details?.fetchedAt ? ` · ${t.descFetchedAt} ${timeAgo(details.fetchedAt, lang)}` : ''}
           </div>
           <div className="prose" dir="auto">
@@ -240,7 +241,7 @@ export function ProjectDetailView({
               <p key={i}>{para}</p>
             ))}
           </div>
-          {details?.status === 'failed' && (
+          {project.source === 'mostaql' && details?.status === 'failed' && (
             <div className="banner warn">
               {t.detailsUnavailable}
               <span className="spacer" />
@@ -249,8 +250,8 @@ export function ProjectDetailView({
               </button>
             </div>
           )}
-          {details?.status === 'loading' && <p className="muted">{t.loadingDetails}</p>}
-          <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load())}>{t.retryFetch}</button>
+          {project.source === 'mostaql' && details?.status === 'loading' && <p className="muted">{t.loadingDetails}</p>}
+          {project.source === 'mostaql' && <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load())}>{t.retryFetch}</button>}
           </>}
 
           {project.skills && project.skills.length > 0 && (
@@ -272,9 +273,9 @@ export function ProjectDetailView({
         <div className="detail-wrap">
           {actionError && <p role="alert" className="field-err">{actionError}</p>}
           <button className="btn primary" onClick={() => void openExternal()}>
-            <Icon name="external" size={16} /> {t.openExternal}
+            <Icon name="external" size={16} /> {openOnSource(project.source, lang)}
           </button>
-          {project.source !== 'khamsat' && <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
+          {project.source === 'mostaql' && <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
             {lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant'}
           </button>}
           <div className="row-actions">

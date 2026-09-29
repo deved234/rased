@@ -73,8 +73,13 @@ export interface RasedApi {
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   getHealth(): Promise<SourceHealth>
   getKhamsatHealth(): Promise<SourceHealth>
+  getNafezlyHealth(): Promise<SourceHealth>
   pause(): Promise<SourceHealth>
   resume(): Promise<SourceHealth>
+  pauseKhamsat(): Promise<SourceHealth>
+  resumeKhamsat(): Promise<SourceHealth>
+  pauseNafezly(): Promise<SourceHealth>
+  resumeNafezly(): Promise<SourceHealth>
   refresh(): Promise<RefreshResult>
   openProject(id: number): Promise<OpenProjectResult>
   openProjectExternal(id: number): Promise<OpenProjectResult>
@@ -114,6 +119,7 @@ export interface RasedApi {
   onProjectsChanged(cb: (e: RendererProjectEvent) => void): () => void
   onHealthChanged(cb: (h: SourceHealth) => void): () => void
   onKhamsatHealthChanged(cb: (h: SourceHealth) => void): () => void
+  onNafezlyHealthChanged(cb: (h: SourceHealth) => void): () => void
   onSettingsChanged(cb: (s: AppSettings) => void): () => void
   onDetailsChanged(cb: (e: DetailsChangedEvent) => void): () => void
   onNavigate(cb: (e: NavigateEvent) => void): () => void

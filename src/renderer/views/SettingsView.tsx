@@ -7,13 +7,14 @@ import { DEVELOPER_NAME, type AboutLink } from '@shared/about.js'
 import logo from '../assets/logo.svg'
 import { Icon } from '../components/Icon.js'
 import { KNOWN_CATEGORIES } from '@shared/categories.js'
-import type { AppSettings, CategoryFilter, DiagnosticEntry } from '@shared/types.js'
+import type { AppSettings, CategoryFilter, DiagnosticEntry, SourceHealth } from '@shared/types.js'
 import type { ImportSummary } from '@shared/api.js'
 import { STRINGS, type Lang } from '../i18n.js'
 import { fullDate } from '../format.js'
 import { useNow } from '../hooks.js'
 import { ConfirmDialog, FieldError, Toggle } from '../components/ui.js'
 import { KeywordTokens } from '../components/FilterDrawer.js'
+import { statusText, togglePause } from '../components/shell.js'
 
 type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'data' | 'about' | 'legal' | 'updates'
 
@@ -80,12 +81,18 @@ function CategoryEditor({
 export function SettingsView({
   lang,
   settings,
+  health,
+  khamsatHealth,
+  nafezlyHealth,
   patchSettings,
   section,
   onSection
 }: {
   lang: Lang
   settings: AppSettings
+  health: SourceHealth | null
+  khamsatHealth: SourceHealth | null
+  nafezlyHealth: SourceHealth | null
   patchSettings: (p: Partial<AppSettings>) => Promise<void>
   section: string | null
   onSection: (s: Section) => void
@@ -107,8 +114,12 @@ export function SettingsView({
   const [aboutError, setAboutError] = React.useState<string | null>(null)
   const [khamsatAny, setKhamsatAny] = React.useState(settings.khamsatKeywordsAny.join(', '))
   const [khamsatExclude, setKhamsatExclude] = React.useState(settings.khamsatExcludeKeywords.join(', '))
+  const [nafezlyAny, setNafezlyAny] = React.useState(settings.nafezlyKeywordsAny.join(', '))
+  const [nafezlyExclude, setNafezlyExclude] = React.useState(settings.nafezlyExcludeKeywords.join(', '))
   React.useEffect(() => setKhamsatAny(settings.khamsatKeywordsAny.join(', ')), [settings.khamsatKeywordsAny.join(',')])
   React.useEffect(() => setKhamsatExclude(settings.khamsatExcludeKeywords.join(', ')), [settings.khamsatExcludeKeywords.join(',')])
+  React.useEffect(() => setNafezlyAny(settings.nafezlyKeywordsAny.join(', ')), [settings.nafezlyKeywordsAny.join(',')])
+  React.useEffect(() => setNafezlyExclude(settings.nafezlyExcludeKeywords.join(', ')), [settings.nafezlyExcludeKeywords.join(',')])
   const splitKeywords = (value: string): string[] => value.split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 100)
   const openAboutLink = async (link: AboutLink): Promise<void> => {
     try {
@@ -151,7 +162,13 @@ export function SettingsView({
 
         {active === 'watching' && (
           <><div className="set-group">
-            <h2>{t.settingsWatching}</h2>
+            <h2>{lang === 'ar' ? 'رصد مستقل' : 'Mostaql monitoring'}</h2>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'حالة رصد مستقل' : 'Mostaql status'}</label>
+              <span className="muted">{statusText(health, lang)}</span>
+              <button className="btn sm" disabled={!health} onClick={() => void togglePause('mostaql', health)}>{health?.paused ? t.resume : t.pause} {t.sourceMostaql}</button>
+            </div>
+            <p className="hint">{lang === 'ar' ? 'الإيقاف المؤقت يخص مستقل وحده ويُلغى عند إعادة تشغيل راصد.' : 'Pause affects only Mostaql and resets when RASED restarts.'}</p>
             <div className="set-row">
               <label>{t.settingsInterval}</label>
               <select
@@ -169,6 +186,9 @@ export function SettingsView({
                 <span className="hint">{t.interval2Warn}</span>
               </div>
             )}
+          </div>
+          <div className="set-group">
+            <h2>{lang === 'ar' ? 'تشغيل راصد' : 'RASED behavior'}</h2>
             <div className="set-row">
               <label>{t.settingsStartup}</label>
               <Toggle checked={settings.runAtStartup} onChange={(v) => void patchSettings({ runAtStartup: v })} label={t.settingsStartup} />
@@ -191,10 +211,29 @@ export function SettingsView({
           <div className="set-group">
             <h2>{lang === 'ar' ? 'رصد خمسات' : 'Khamsat monitoring'}</h2>
             <div className="set-row">
-              <label>{lang === 'ar' ? 'طلبات الخدمات غير الموجودة' : 'Unlisted service requests'}</label>
+              <label>{lang === 'ar' ? 'تفعيل المصدر' : 'Enable source'}</label>
               <Toggle checked={settings.khamsatEnabled} onChange={(v) => void patchSettings({ khamsatEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد خمسات' : 'Enable Khamsat monitoring'} />
             </div>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'حالة رصد خمسات' : 'Khamsat status'}</label>
+              <span className="muted">{settings.khamsatEnabled ? statusText(khamsatHealth, lang) : t.statusDisabled}</span>
+              <button className="btn sm" disabled={!settings.khamsatEnabled || !khamsatHealth} onClick={() => void togglePause('khamsat', khamsatHealth)}>{settings.khamsatEnabled && khamsatHealth?.paused ? t.resume : t.pause} {t.sourceKhamsat}</button>
+            </div>
+            <p className="hint">{lang === 'ar' ? 'الإيقاف المؤقت يخص خمسات وحده ويُلغى عند إعادة تشغيل راصد. تعطيل المصدر أعلاه يُحفظ في الإعدادات.' : 'Pause affects only Khamsat and resets when RASED restarts. Disabling the source above is saved in settings.'}</p>
             <p className="hint">{lang === 'ar' ? 'يُفحص عنوان الطلب ورابطه وتاريخ نشره كل 5 ثوانٍ؛ عند تعذر الوصول يتباطأ الفحص تلقائيًا. الوصف الكامل يُقرأ من موقع خمسات.' : 'Checks request titles, links and publication times every 5 seconds, with automatic backoff on errors. Read the full description on Khamsat.'}</p>
+          </div>
+          <div className="set-group">
+            <h2>{lang === 'ar' ? 'رصد نفذلي' : 'Nafezly monitoring'}</h2>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'تفعيل المصدر' : 'Enable source'}</label>
+              <Toggle checked={settings.nafezlyEnabled} onChange={(v) => void patchSettings({ nafezlyEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد نفذلي' : 'Enable Nafezly monitoring'} />
+            </div>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'حالة رصد نفذلي' : 'Nafezly status'}</label>
+              <span className="muted">{settings.nafezlyEnabled ? statusText(nafezlyHealth, lang) : t.statusDisabled}</span>
+              <button className="btn sm" disabled={!settings.nafezlyEnabled || !nafezlyHealth} onClick={() => void togglePause('nafezly', nafezlyHealth)}>{settings.nafezlyEnabled && nafezlyHealth?.paused ? t.resume : t.pause} {t.sourceNafezly}</button>
+            </div>
+            <p className="hint">{lang === 'ar' ? 'يفحص RSS العام كل 15–18 ثانية تقريبًا. يتباطأ تلقائيًا عند أخطاء الوصول. الإيقاف المؤقت مستقل عن باقي المصادر ويُلغى بعد إعادة التشغيل.' : 'Checks the public RSS feed roughly every 15–18 seconds. Automatically backs off on access errors. Pause is independent and resets on restart.'}</p>
           </div></>
         )}
 
@@ -256,6 +295,23 @@ export function SettingsView({
                 <input id="khamsat-exclude" className="input" value={khamsatExclude} onChange={e => setKhamsatExclude(e.target.value)} onBlur={() => void patchSettings({ khamsatExcludeKeywords: splitKeywords(khamsatExclude) })} />
               </div>
               <p className="hint">{lang === 'ar' ? 'فلترة خمسات تعتمد على عنوان الطلب فقط حاليًا. اترك حقل «أي كلمة» فارغًا للتنبيه بكل الطلبات.' : 'Khamsat filtering currently uses request titles only. Leave “Any keyword” blank for all requests.'}</p>
+            </div>
+
+            <div className="set-group">
+              <h2>{lang === 'ar' ? 'تنبيهات نفذلي' : 'Nafezly notifications'}</h2>
+              <div className="set-row">
+                <label>{lang === 'ar' ? 'تنبيهات المشاريع الجديدة' : 'New project alerts'}</label>
+                <Toggle checked={settings.nafezlyNotificationsEnabled} onChange={(v) => void patchSettings({ nafezlyNotificationsEnabled: v })} label={lang === 'ar' ? 'تفعيل تنبيهات نفذلي' : 'Enable Nafezly alerts'} />
+              </div>
+              <div className="set-row">
+                <label htmlFor="nafezly-any">{lang === 'ar' ? 'أي كلمة من' : 'Any keyword'}</label>
+                <input id="nafezly-any" className="input" value={nafezlyAny} onChange={e => setNafezlyAny(e.target.value)} onBlur={() => void patchSettings({ nafezlyKeywordsAny: splitKeywords(nafezlyAny) })} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
+              </div>
+              <div className="set-row">
+                <label htmlFor="nafezly-exclude">{lang === 'ar' ? 'استبعاد كلمات' : 'Exclude keywords'}</label>
+                <input id="nafezly-exclude" className="input" value={nafezlyExclude} onChange={e => setNafezlyExclude(e.target.value)} onBlur={() => void patchSettings({ nafezlyExcludeKeywords: splitKeywords(nafezlyExclude) })} />
+              </div>
+              <p className="hint">{lang === 'ar' ? 'تُطبّق الكلمات على عنوان المشروع والوصف الكامل الوارد في RSS. اترك «أي كلمة» فارغًا للتنبيه بكل المشاريع.' : 'Keywords match the project title and full RSS description. Leave “Any keyword” blank for all projects.'}</p>
             </div>
 
             <div className="set-group">
@@ -550,7 +606,10 @@ export function SettingsView({
             <FieldError message={aboutError} />
             <details className="set-group about-diagnostics">
               <summary>{t.diagnostics}</summary>
-              <div className="meta"><span dir="ltr">{appInfo ? `${appInfo.platform}-${appInfo.arch}` : '…'} · RSS: https://mostaql.com/rss</span></div>
+              <div className="meta"><span dir="ltr">{appInfo ? `${appInfo.platform}-${appInfo.arch}` : '…'}</span></div>
+              <div className="meta"><span>{t.sourceMostaql}: RSS · https://mostaql.com/rss</span></div>
+              <div className="meta"><span>{t.sourceKhamsat}: HTML · https://khamsat.com/community/requests</span></div>
+              <div className="meta"><span>{t.sourceNafezly}: RSS · https://nafezly.com/feed</span></div>
               {diag.length === 0 && <div className="faint small">—</div>}
               {diag.map((d, i) => (
                 <div className="diag" key={i}>

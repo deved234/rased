@@ -24,6 +24,7 @@ import {
   type Session
 } from 'electron'
 import { IPC } from '../shared/channels.js'
+import { overallSourceState } from '../shared/sourceStatus.js'
 import { ABOUT_LINKS, type AboutLink } from '../shared/about.js'
 import {
   defaultSettings,
@@ -75,6 +76,8 @@ import {
 import { fetchRss, parseRssItems, RSS_URL } from '../collector/rss.js'
 import { fetchKhamsatRequests, KHAMSAT_SOURCE, matchesKhamsatKeywords, parseKhamsatRequests } from '../collector/khamsat.js'
 import { applyKhamsatCycle } from '../collector/khamsatPipeline.js'
+import { fetchNafezlyFeed, matchesNafezlyKeywords, NAFEZLY_SOURCE, parseNafezlyFeed } from '../collector/nafezly.js'
+import { applyNafezlyCycle } from '../collector/nafezlyPipeline.js'
 import { normalizeItems, SOURCE } from '../collector/normalize.js'
 import {
   delayUntilNext,
@@ -110,7 +113,11 @@ let tray: Tray | null = null
 let compactWin: BrowserWindow | null = null
 let settings: AppSettings = defaultSettings()
 let sched: SchedulerState = initialSchedulerState()
+/** Temporary, session-only pause for the Mostaql collector. */
 let paused = false
+/** Temporary, session-only pause for the Khamsat collector. */
+let khamsatPaused = false
+let nafezlyPaused = false
 let inFlight = false
 let lastStartMs: number | null = null
 let lastFinishMs: number | null = null
@@ -126,6 +133,14 @@ let khamsatAbort: AbortController | null = null
 let khamsatNextAttemptMs: number | null = null
 let khamsatLastDurationMs: number | null = null
 let khamsatLastItemCount: number | null = null
+let nafezlyTimer: NodeJS.Timeout | null = null
+let nafezlyInFlight = false
+let nafezlyAbort: AbortController | null = null
+let nafezlyNextAttemptMs: number | null = null
+let nafezlyLastDurationMs: number | null = null
+let nafezlyLastItemCount: number | null = null
+let nafezlyBaseIntervalMs = 15_000
+let nafezlyRecoverySuccesses = 0
 let enrichTimer: NodeJS.Timeout | null = null
 let quitRequested = false
 let episode = 0
@@ -310,21 +325,36 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
 function snapshotKhamsatHealth(): SourceHealth {
   const source = db ? getSourceState(db, KHAMSAT_SOURCE) : null
   const backoff = source?.backoffUntil ? Date.parse(source.backoffUntil) : NaN
-  const state: SourceHealth['state'] = !settings.khamsatEnabled || paused ? 'paused' : Number.isFinite(backoff) && backoff > Date.now() ? 'backing-off' : source?.lastError ? 'error' : source?.lastSuccessAt ? 'watching' : 'initializing'
+  const state: SourceHealth['state'] = !settings.khamsatEnabled || khamsatPaused ? 'paused' : Number.isFinite(backoff) && backoff > Date.now() ? 'backing-off' : source?.lastError ? 'error' : source?.lastSuccessAt ? 'watching' : 'initializing'
   return { state, lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: khamsatNextAttemptMs ? new Date(khamsatNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: khamsatLastDurationMs, lastItemCount: khamsatLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : 5000, paused: state === 'paused' }
 }
 
 function emitKhamsatHealth(): void {
   broadcast(IPC.khamsatHealthChanged, snapshotKhamsatHealth())
+  updateTray()
+}
+
+function snapshotNafezlyHealth(): SourceHealth {
+  const source = db ? getSourceState(db, NAFEZLY_SOURCE) : null
+  const backoff = source?.backoffUntil ? Date.parse(source.backoffUntil) : NaN
+  const state: SourceHealth['state'] = !settings.nafezlyEnabled || nafezlyPaused ? 'paused' : Number.isFinite(backoff) && backoff > Date.now() ? 'backing-off' : source?.lastError ? 'error' : source?.lastSuccessAt ? 'watching' : 'initializing'
+  return { state, lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: nafezlyNextAttemptMs ? new Date(nafezlyNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: nafezlyLastDurationMs, lastItemCount: nafezlyLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : nafezlyBaseIntervalMs, paused: state === 'paused' }
+}
+
+function emitNafezlyHealth(): void {
+  broadcast(IPC.nafezlyHealthChanged, snapshotNafezlyHealth())
+  updateTray()
 }
 
 async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<boolean> {
   const lang = settings.language
   const n = p.projects.length
   const title =
-    p.projects.every(project => project.source === KHAMSAT_SOURCE)
+    p.projects.every(project => project.source === NAFEZLY_SOURCE)
+      ? (lang === 'ar' ? `${n} مشاريع جديدة على نفذلي` : `${n} new Nafezly projects`)
+      : p.projects.every(project => project.source === KHAMSAT_SOURCE)
       ? (lang === 'ar' ? `${n} طلبات جديدة على خمسات` : `${n} new Khamsat requests`)
-      : p.projects.some(project => project.source === KHAMSAT_SOURCE)
+      : p.projects.some(project => project.source === KHAMSAT_SOURCE || project.source === NAFEZLY_SOURCE)
       ? (lang === 'ar' ? `${n} فرص جديدة` : `${n} new opportunities`)
       : lang === 'ar'
       ? p.recovering
@@ -410,6 +440,10 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
         if (!notificationAllowed()) return false
         if (getUserState(d, p.id).hiddenAt !== null) return false
         if (p.source === KHAMSAT_SOURCE) return settings.khamsatEnabled && settings.khamsatNotificationsEnabled && matchesKhamsatKeywords(p.title, settings.khamsatKeywordsAny, settings.khamsatExcludeKeywords)
+        if (p.source === NAFEZLY_SOURCE) {
+          const description = getProjectDetailsRow(d, p.id).text ?? p.descriptionExcerpt
+          return settings.nafezlyEnabled && settings.nafezlyNotificationsEnabled && matchesNafezlyKeywords(p.title, description, settings.nafezlyKeywordsAny, settings.nafezlyExcludeKeywords)
+        }
         const v = evaluateFilter(toFilterable(p), settings.notifyFilter)
         return v === 'match' || (!p.categoryConfirmed && settings.notifyUncertainCategory && v === 'uncertain')
       },
@@ -425,7 +459,7 @@ function scheduleKhamsat(delayMs?: number): void {
   if (khamsatTimer) clearTimeout(khamsatTimer)
   khamsatTimer = null
   khamsatNextAttemptMs = null
-  if (!db || paused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) { emitKhamsatHealth(); return }
+  if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) { emitKhamsatHealth(); return }
   const state = getSourceState(db, KHAMSAT_SOURCE)
   const backoff = state.backoffUntil ? Math.max(0, Date.parse(state.backoffUntil) - Date.now()) : 0
   const delay = Math.max(delayMs ?? 5000, backoff)
@@ -435,14 +469,14 @@ function scheduleKhamsat(delayMs?: number): void {
 }
 
 async function runKhamsatCycle(): Promise<void> {
-  if (!db || paused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) return
+  if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) return
   khamsatInFlight = true
   khamsatAbort = new AbortController()
   khamsatNextAttemptMs = null
   emitKhamsatHealth()
   try {
     const result = await fetchKhamsatRequests(khamsatAbort.signal, testHarness?.fetchImpl)
-    if (!db || paused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
+    if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
     const previous = getSourceState(db, KHAMSAT_SOURCE)
@@ -473,6 +507,70 @@ async function runKhamsatCycle(): Promise<void> {
     khamsatInFlight = false
     khamsatAbort = null
     scheduleKhamsat()
+  }
+}
+
+function scheduleNafezly(delayMs?: number): void {
+  if (nafezlyTimer) clearTimeout(nafezlyTimer)
+  nafezlyTimer = null
+  nafezlyNextAttemptMs = null
+  if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) { emitNafezlyHealth(); return }
+  const state = getSourceState(db, NAFEZLY_SOURCE)
+  const backoff = state.backoffUntil ? Math.max(0, Date.parse(state.backoffUntil) - Date.now()) : 0
+  const jitter = Math.floor(Math.random() * 3001)
+  const delay = Math.max(delayMs ?? nafezlyBaseIntervalMs + jitter, backoff)
+  nafezlyNextAttemptMs = Date.now() + delay
+  nafezlyTimer = setTimeout(() => void trackWork(runNafezlyCycle()), delay)
+  emitNafezlyHealth()
+}
+
+async function runNafezlyCycle(): Promise<void> {
+  if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) return
+  const stored = getSourceState(db, NAFEZLY_SOURCE)
+  if (stored.backoffUntil && Date.parse(stored.backoffUntil) > Date.now()) { scheduleNafezly(); return }
+  nafezlyInFlight = true
+  nafezlyAbort = new AbortController()
+  nafezlyNextAttemptMs = null
+  emitNafezlyHealth()
+  try {
+    const result = await fetchNafezlyFeed(nafezlyAbort.signal, testHarness?.fetchImpl)
+    if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyAbort.signal.aborted) return
+    const nowMs = Date.now()
+    const nowIso = new Date(nowMs).toISOString()
+    const previous = getSourceState(db, NAFEZLY_SOURCE)
+    let items: ReturnType<typeof parseNafezlyFeed> | null = null
+    let failure = result.ok ? null : result.error ?? 'request failed'
+    if (result.ok) {
+      try { items = parseNafezlyFeed(result.xml ?? '') }
+      catch (error) { failure = error instanceof Error ? error.message : 'parse failed' }
+    }
+    if (failure || !items) {
+      nafezlyLastDurationMs = result.durationMs
+      nafezlyLastItemCount = null
+      nafezlyRecoverySuccesses = 0
+      const failures = previous.consecutiveFailures + 1
+      const blocked = result.status === 403 || result.status === 429 || result.status === 202 || failure === 'unexpected content type'
+      if (blocked) nafezlyBaseIntervalMs = 60_000
+      const backoffMs = Math.max(result.retryAfterMs ?? 0, blocked ? Math.min(2 * 60 * 60_000, 15 * 60_000 * 2 ** Math.min(failures - 1, 3)) : Math.min(5 * 60_000, 15_000 * 2 ** Math.min(failures, 5)))
+      runInTransaction(db, () => {
+        saveSourceState(db!, { ...previous, lastAttemptAt: nowIso, lastError: failure, consecutiveFailures: failures, backoffUntil: new Date(nowMs + backoffMs).toISOString(), transportKind: 'rss', runId })
+        recordDiagnostic(db!, { at: nowIso, endpointKind: 'nafezly-feed', status: 'failed', durationMs: result.durationMs, itemCount: null, errorCategory: failure, detail: `HTTP ${result.status ?? 'network'}; retry in ${backoffMs}ms` })
+      })
+      return
+    }
+    const outcome = applyNafezlyCycle(db, items, { nowMs, runId, durationMs: result.durationMs, settings })
+    nafezlyLastDurationMs = result.durationMs
+    nafezlyLastItemCount = items.length
+    if (nafezlyBaseIntervalMs > 15_000 && ++nafezlyRecoverySuccesses >= (nafezlyBaseIntervalMs === 60_000 ? 10 : 20)) {
+      nafezlyBaseIntervalMs = nafezlyBaseIntervalMs === 60_000 ? 30_000 : 15_000
+      nafezlyRecoverySuccesses = 0
+    }
+    if (outcome.insertedIds.length || outcome.updatedIds.length) emitProjects(outcome.insertedIds, outcome.updatedIds)
+    if (outcome.notifyIds.length) await flushNotifications(null)
+  } finally {
+    nafezlyInFlight = false
+    nafezlyAbort = null
+    scheduleNafezly()
   }
 }
 
@@ -872,10 +970,14 @@ function createWindow(): void {
 
 function trayLabel(): string {
   const ar = settings.language === 'ar'
-  const h = snapshotHealth()
+  const stateValue = overallSourceState([
+    snapshotHealth(),
+    ...(settings.khamsatEnabled ? [snapshotKhamsatHealth()] : []),
+    ...(settings.nafezlyEnabled ? [snapshotNafezlyHealth()] : [])
+  ])
   const state = ar
-    ? { watching: 'تتم المتابعة', paused: 'متوقف', 'backing-off': 'تهدئة وإعادة', error: 'خطأ', offline: 'غير متصل', 'needs-review': 'يحتاج مراجعة', initializing: 'يبدأ…' }[h.state]
-    : { watching: 'Watching', paused: 'Paused', 'backing-off': 'Backing off', error: 'Error', offline: 'Offline', 'needs-review': 'Needs review', initializing: 'Starting…' }[h.state]
+    ? { watching: 'الرصد نشط', partial: 'رصد جزئي', paused: 'متوقف', 'backing-off': 'تهدئة وإعادة', error: 'خطأ', offline: 'غير متصل', 'needs-review': 'يحتاج مراجعة', initializing: 'يبدأ…' }[stateValue]
+    : { watching: 'Watching', partial: 'Partial monitoring', paused: 'Paused', 'backing-off': 'Backing off', error: 'Error', offline: 'Offline', 'needs-review': 'Needs review', initializing: 'Starting…' }[stateValue]
   return `RASED — ${state}`
 }
 
@@ -888,8 +990,14 @@ function updateTray(): void {
       { label: ar ? 'فتح راصد' : 'Open RASED', click: () => win?.show() },
       { type: 'separator' },
       paused
-        ? { label: ar ? 'استئناف المتابعة' : 'Resume watching', click: () => void doResume() }
-        : { label: ar ? 'إيقاف المتابعة' : 'Pause watching', click: () => void doPause() },
+        ? { label: ar ? 'استئناف مستقل' : 'Resume Mostaql', click: () => void doResume() }
+        : { label: ar ? 'إيقاف مستقل مؤقتًا' : 'Pause Mostaql', click: () => void doPause() },
+      ...(settings.khamsatEnabled ? [khamsatPaused
+        ? { label: ar ? 'استئناف خمسات' : 'Resume Khamsat', click: () => void doResumeKhamsat() }
+        : { label: ar ? 'إيقاف خمسات مؤقتًا' : 'Pause Khamsat', click: () => void doPauseKhamsat() }] : []),
+      ...(settings.nafezlyEnabled ? [nafezlyPaused
+        ? { label: ar ? 'استئناف نفذلي' : 'Resume Nafezly', click: () => void doResumeNafezly() }
+        : { label: ar ? 'إيقاف نفذلي مؤقتًا' : 'Pause Nafezly', click: () => void doPauseNafezly() }] : []),
       {
         label: settings.soundEnabled ? (ar ? 'كتم الصوت' : 'Mute sound') : ar ? 'تفعيل الصوت' : 'Enable sound',
         click: () => saveSettings({ ...settings, soundEnabled: !settings.soundEnabled })
@@ -1000,9 +1108,6 @@ function openCompact(): void {
 async function doPause(): Promise<SourceHealth> {
   paused = true
   activeRss?.abort()
-  khamsatAbort?.abort()
-  if (khamsatTimer) clearTimeout(khamsatTimer)
-  khamsatTimer = null
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) {
@@ -1019,9 +1124,40 @@ async function doResume(): Promise<SourceHealth> {
   lastStartMs = null
   lastRecovering = wasGap()
   scheduleNext()
-  scheduleKhamsat(0)
   emitHealth()
   return snapshotHealth()
+}
+
+async function doPauseKhamsat(): Promise<SourceHealth> {
+  khamsatPaused = true
+  khamsatAbort?.abort()
+  if (khamsatTimer) clearTimeout(khamsatTimer)
+  khamsatTimer = null
+  khamsatNextAttemptMs = null
+  emitKhamsatHealth()
+  return snapshotKhamsatHealth()
+}
+
+async function doResumeKhamsat(): Promise<SourceHealth> {
+  khamsatPaused = false
+  scheduleKhamsat(0)
+  return snapshotKhamsatHealth()
+}
+
+async function doPauseNafezly(): Promise<SourceHealth> {
+  nafezlyPaused = true
+  nafezlyAbort?.abort()
+  if (nafezlyTimer) clearTimeout(nafezlyTimer)
+  nafezlyTimer = null
+  nafezlyNextAttemptMs = null
+  emitNafezlyHealth()
+  return snapshotNafezlyHealth()
+}
+
+async function doResumeNafezly(): Promise<SourceHealth> {
+  nafezlyPaused = false
+  scheduleNafezly(0)
+  return snapshotNafezlyHealth()
 }
 
 function doQuit(): void {
@@ -1034,13 +1170,17 @@ async function shutdown(): Promise<void> {
   if (shutdownWork) return shutdownWork
   quitRequested = true
   paused = true
+  khamsatPaused = true
+  nafezlyPaused = true
   activeRss?.abort()
   khamsatAbort?.abort()
+  nafezlyAbort?.abort()
   activeProposal?.abort()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
   if (khamsatTimer) clearTimeout(khamsatTimer)
+  if (nafezlyTimer) clearTimeout(nafezlyTimer)
   if (enrichTimer) clearInterval(enrichTimer)
   if (updateStartupTimer) clearTimeout(updateStartupTimer)
   if (updateTimer) clearInterval(updateTimer)
@@ -1186,22 +1326,35 @@ function registerIpc(): void {
     const next = mergeSettings(settings, p)
     const intervalChanged = next.pollIntervalMs !== settings.pollIntervalMs
     const khamsatChanged = next.khamsatEnabled !== settings.khamsatEnabled
+    const nafezlyChanged = next.nafezlyEnabled !== settings.nafezlyEnabled
     saveSettings(next)
     compactWin?.setAlwaysOnTop(next.ui.compactAlwaysOnTop)
     if (intervalChanged) scheduleNext()
     if (khamsatChanged) {
       if (!next.khamsatEnabled) khamsatAbort?.abort()
+      khamsatPaused = false
       scheduleKhamsat(0)
+    }
+    if (nafezlyChanged) {
+      if (!next.nafezlyEnabled) nafezlyAbort?.abort()
+      nafezlyPaused = false
+      scheduleNafezly(0)
     }
     emitHealth()
     return next
   })
   ipcMain.handle(IPC.getHealth, () => snapshotHealth())
   ipcMain.handle(IPC.getKhamsatHealth, () => snapshotKhamsatHealth())
+  ipcMain.handle(IPC.getNafezlyHealth, () => snapshotNafezlyHealth())
   ipcMain.handle(IPC.pause, () => doPause())
   ipcMain.handle(IPC.resume, () => doResume())
+  ipcMain.handle(IPC.pauseKhamsat, () => doPauseKhamsat())
+  ipcMain.handle(IPC.resumeKhamsat, () => doResumeKhamsat())
+  ipcMain.handle(IPC.pauseNafezly, () => doPauseNafezly())
+  ipcMain.handle(IPC.resumeNafezly, () => doResumeNafezly())
   ipcMain.handle(IPC.refresh, () => {
     void trackWork(runKhamsatCycle())
+    void trackWork(runNafezlyCycle())
     return trackWork(runCycle())
   })
   ipcMain.handle(IPC.openProject, (_e, v: { id: number }) => {
@@ -1243,7 +1396,7 @@ function registerIpc(): void {
     if (!db || !Number.isInteger(v.id)) return null
     const p = getProjectById(db, v.id)
     if (!p) return null
-    if (p.source === KHAMSAT_SOURCE) return getProjectDetailsRow(db, v.id)
+    if (p.source === KHAMSAT_SOURCE || p.source === NAFEZLY_SOURCE) return getProjectDetailsRow(db, v.id)
     const row = detailsFetcher.request(v.id, p.url, v.force === true)
     void trackWork(detailsFetcher.pump())
     return row
@@ -1480,12 +1633,14 @@ async function boot(): Promise<void> {
 
   db = openDatabase(join(app.getPath('userData'), 'rased.db'))
   settings = loadSettings()
-  if (testHarness) paused = true
+  if (testHarness) { paused = true; khamsatPaused = true; nafezlyPaused = true }
   const savedState = getSourceState(db, SOURCE)
   const savedBackoff = savedState.backoffUntil ? Date.parse(savedState.backoffUntil) : NaN
   if (Number.isFinite(savedBackoff) && savedBackoff > Date.now()) {
     sched = { ...sched, backoffUntilMs: savedBackoff, consecutiveFailures: savedState.consecutiveFailures, needsReview: savedState.lastError === 'forbidden' || savedState.lastError === 'http-403' || savedState.lastError === 'http-401' }
   }
+  const nafezlyState = getSourceState(db, NAFEZLY_SOURCE)
+  if (nafezlyState.lastError && /(?:403|429|content type)/i.test(nafezlyState.lastError)) nafezlyBaseIntervalMs = 60_000
   for (const [id, deadline] of listClassificationWaits(db)) uncertainWaits.set(id, deadline)
   for (const [id, deadline] of uncertainWaits) {
     if (deadline > Date.now()) {
@@ -1534,8 +1689,11 @@ async function boot(): Promise<void> {
   powerMonitor.on('suspend', () => {
     activeRss?.abort()
     khamsatAbort?.abort()
+    nafezlyAbort?.abort()
     if (khamsatTimer) clearTimeout(khamsatTimer)
     khamsatTimer = null
+    if (nafezlyTimer) clearTimeout(nafezlyTimer)
+    nafezlyTimer = null
     enrichQueue.abortActive()
     detailsFetcher.abortActive()
     if (timer) {
@@ -1544,11 +1702,13 @@ async function boot(): Promise<void> {
     }
   })
   powerMonitor.on('resume', () => {
-    if (paused) return
-    lastRecovering = true
-    setTimeout(() => void trackWork(runCycle()), 2000)
-    scheduleNext()
-    scheduleKhamsat(2000)
+    if (!paused) {
+      lastRecovering = true
+      setTimeout(() => void trackWork(runCycle()), 2000)
+      scheduleNext()
+    }
+    if (!khamsatPaused) scheduleKhamsat(2000)
+    if (!nafezlyPaused) scheduleNafezly(2000)
   })
 
   enrichTimer = setInterval(() => {
@@ -1567,6 +1727,7 @@ async function boot(): Promise<void> {
   lastRecovering = wasGap()
   scheduleNext()
   scheduleKhamsat(0)
+  scheduleNafezly(0)
   // First cycle starts immediately through the scheduler.
   if (process.env['RASED_CAPTURE_PATH']) captureWhenSettled(process.env['RASED_CAPTURE_PATH'])
 }
@@ -1706,7 +1867,7 @@ function applySettingsImport(mode: unknown, applyStartup: boolean): ImportSummar
   // runAtStartup needs an explicit opt-in at import time; never implied.
   if (!applyStartup) delete partial.runAtStartup
   const next = sanitizeSettings({ ...settings, ...partial, doNotDisturbUntil: null })
-  if (next.linkDisplayAndNotifyFilters) next.notifyFilter = next.displayQuery.categoryFilter
+  if (next.linkDisplayAndNotifyFilters && next.displayQuery.source === 'mostaql') next.notifyFilter = next.displayQuery.categoryFilter
   next.displayFilter = next.displayQuery.categoryFilter
   const currentIds = new Set(listSavedFilters(d).map((f) => f.id))
   runInTransaction(d, () => {

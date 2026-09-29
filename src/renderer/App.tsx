@@ -3,7 +3,7 @@ import { Titlebar } from './components/Titlebar.js'
 import { rased } from './api.js'
 import { defaultFilterDefinition } from '@shared/types.js'
 import { STRINGS } from './i18n.js'
-import { applyUiPrefs, useHashRoute, useHealth, useSettings } from './hooks.js'
+import { applyUiPrefs, useHashRoute, useHealth, useKhamsatHealth, useNafezlyHealth, useSettings } from './hooks.js'
 import { go, navigateHash, requestAction, type Route } from './router.js'
 import { playBeep } from './sound.js'
 import { Sidebar, Statusbar, Topbar, togglePause } from './components/shell.js'
@@ -41,6 +41,8 @@ export function App(): React.ReactElement {
   const lang = settings.language
   const t = STRINGS[lang]
   const health = useHealth(boot === 'ready')
+  const khamsatHealth = useKhamsatHealth(boot === 'ready')
+  const nafezlyHealth = useNafezlyHealth(boot === 'ready')
 
   // bootstrap: settings + local list (RSS runs independently in main)
   React.useEffect(() => {
@@ -145,13 +147,13 @@ export function App(): React.ReactElement {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         if (target.matches('input, textarea, select, [contenteditable]')) return
         e.preventDefault()
-        searchRef.current?.focus()
-        searchRef.current?.select()
+        if (route.name !== 'projects' && route.name !== 'saved') go({ name: 'projects' })
+        requestAnimationFrame(() => { searchRef.current?.focus(); searchRef.current?.select() })
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [route.name])
 
   if (boot !== 'ready') {
     return <div className="desktop-shell"><Titlebar lang={lang} /><SplashView lang={lang} phase={boot === 'welcome' ? 'ready' : boot} stage={bootStage} error={bootError} onContinue={() => setBoot('ready')} onRetry={() => setBootEpoch((e) => e + 1)} /></div>
@@ -171,8 +173,8 @@ export function App(): React.ReactElement {
   const title =
     route.name === 'saved' ? t.navSaved : route.name === 'filters' ? t.navFilters : route.name === 'settings' ? t.navSettings : route.name === 'project' ? t.projectDetails : route.name === 'proposal' ? (lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant') : t.allProjects
 
-  const pause = (): void => {
-    void togglePause(health)
+  const pause = (source: 'mostaql' | 'khamsat' | 'nafezly'): void => {
+    void togglePause(source, source === 'mostaql' ? health : source === 'khamsat' ? khamsatHealth : nafezlyHealth)
   }
   const refresh = (): void => {
     void rased.refresh()
@@ -194,11 +196,15 @@ export function App(): React.ReactElement {
           lang={lang}
           title={title}
           health={health}
+          khamsatHealth={khamsatHealth}
+          khamsatEnabled={settings.khamsatEnabled}
+          nafezlyHealth={nafezlyHealth}
+          nafezlyEnabled={settings.nafezlyEnabled}
+          showSearch={route.name === 'projects' || route.name === 'saved'}
           search={searchInput}
           onSearch={setSearchInput}
           searchRef={searchRef}
-          onPause={pause}
-          onResume={pause}
+          onTogglePause={pause}
           onRefresh={refresh}
         />
         {route.name === 'proposal' ? (
@@ -211,6 +217,8 @@ export function App(): React.ReactElement {
             settings={settings}
             patchSettings={patchSettings}
             health={health}
+            khamsatHealth={khamsatHealth}
+            nafezlyHealth={nafezlyHealth}
             search={search}
             onSearch={(value) => { setSearchInput(value); setSearch(value) }}
             memory={memory}
@@ -236,6 +244,9 @@ export function App(): React.ReactElement {
           <SettingsView
             lang={lang}
             settings={settings}
+            health={health}
+            khamsatHealth={khamsatHealth}
+            nafezlyHealth={nafezlyHealth}
             patchSettings={patchSettings}
             section={route.section}
             onSection={(s) => go({ name: 'settings', section: s })}
@@ -246,6 +257,8 @@ export function App(): React.ReactElement {
             settings={settings}
             patchSettings={patchSettings}
             health={health}
+            khamsatHealth={khamsatHealth}
+            nafezlyHealth={nafezlyHealth}
             search={search}
             onSearch={(value) => { setSearchInput(value); setSearch(value) }}
             memory={memory}
@@ -254,7 +267,7 @@ export function App(): React.ReactElement {
             scope="all"
           />
         )}
-        <Statusbar lang={lang} health={health} settings={settings} />
+        <Statusbar lang={lang} health={health} khamsatHealth={khamsatHealth} nafezlyHealth={nafezlyHealth} settings={settings} />
       </div>
     </div></div>
   )

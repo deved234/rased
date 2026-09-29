@@ -7,6 +7,7 @@ import { IconBtn, useDialogFocus } from './ui.js'
 import { go, type Route } from '../router.js'
 import { countdownTo, fullDate, timeAgo } from '../format.js'
 import { useNow } from '../hooks.js'
+import { overallSourceState, type OverallSourceState } from '@shared/sourceStatus.js'
 import logo from '../assets/logo.svg'
 
 export function dotClass(h: SourceHealth | null): string {
@@ -17,7 +18,7 @@ export function dotClass(h: SourceHealth | null): string {
   return 'bad'
 }
 
-export function statusText(h: SourceHealth | null, lang: Lang): string {
+export function statusText(h: Pick<SourceHealth, 'state'> | null, lang: Lang): string {
   const t = STRINGS[lang]
   if (!h) return t.statusInitializing
   switch (h.state) {
@@ -29,6 +30,18 @@ export function statusText(h: SourceHealth | null, lang: Lang): string {
     case 'error': return t.statusError
     default: return t.statusInitializing
   }
+}
+
+export function overallText(state: OverallSourceState, lang: Lang): string {
+  if (state === 'partial') return STRINGS[lang].statusPartial
+  return statusText({ state }, lang)
+}
+
+export function overallDot(state: OverallSourceState): string {
+  if (state === 'watching') return 'ok'
+  if (state === 'partial' || state === 'paused' || state === 'backing-off') return 'warn'
+  if (state === 'initializing') return ''
+  return 'bad'
 }
 
 export function Sidebar({
@@ -87,15 +100,21 @@ export function Sidebar({
 export function HealthPopover({
   lang,
   health,
-  onPause,
-  onResume,
+  khamsatHealth,
+  khamsatEnabled,
+  nafezlyHealth,
+  nafezlyEnabled,
+  onTogglePause,
   onRefresh,
   onClose
 }: {
   lang: Lang
   health: SourceHealth | null
-  onPause: () => void
-  onResume: () => void
+  khamsatHealth: SourceHealth | null
+  khamsatEnabled: boolean
+  nafezlyHealth: SourceHealth | null
+  nafezlyEnabled: boolean
+  onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly') => void
   onRefresh: () => void
   onClose: () => void
 }): React.ReactElement {
@@ -108,46 +127,33 @@ export function HealthPopover({
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
   }, [onClose])
-  const refreshDisabled = !health || health.paused || health.state === 'backing-off' || health.state === 'needs-review'
+  const state = overallSourceState([health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : [])])
+  const refreshDisabled = [health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : [])].every(value => !value || value.paused || value.state === 'backing-off')
+  const sources: { id: 'mostaql' | 'khamsat' | 'nafezly'; name: string; value: SourceHealth | null }[] = [
+    { id: 'mostaql', name: t.sourceMostaql, value: health },
+    ...(khamsatEnabled ? [{ id: 'khamsat' as const, name: t.sourceKhamsat, value: khamsatHealth }] : []),
+    ...(nafezlyEnabled ? [{ id: 'nafezly' as const, name: t.sourceNafezly, value: nafezlyHealth }] : [])
+  ]
   return (
     <>
       <div className="scrim" onClick={onClose} />
       <div ref={panelRef} className="popover" role="dialog" aria-modal="true" aria-label={t.healthDetails}>
         <div className="meta">
-          <span className={`dot ${dotClass(health)}`} />
-          <strong>{statusText(health, lang)}</strong>
+          <span className={`dot ${overallDot(state)}`} />
+          <strong>{overallText(state, lang)}</strong>
         </div>
-        <div className="meta">
-          <span>
-            {t.lastSuccessAt}: {health?.lastSuccessAt ? timeAgo(health.lastSuccessAt, lang) : t.unknownTime}
-          </span>
-        </div>
-        <div className="meta">
-          <span>
-            {t.nextCheck}: {health?.nextAttemptAt ? countdownTo(health.nextAttemptAt, lang) : '…'}
-          </span>
-        </div>
-        {health?.lastError && (
-          <div className="meta">
-            <span>
-              {t.lastErrorLabel}: <span dir="auto">{health.lastError}</span>
-            </span>
-          </div>
-        )}
-        {health?.lastSuccessAt && <div className="faint small num">{fullDate(health.lastSuccessAt, lang)}</div>}
+        {sources.map(({ id, name, value }) => <div className="health-source" key={id}>
+          <div className="meta"><span className={`dot ${dotClass(value)}`} /><strong>{name}</strong><span>{statusText(value, lang)}</span></div>
+          <div className="faint small">{t.lastSuccessAt}: {value?.lastSuccessAt ? timeAgo(value.lastSuccessAt, lang) : t.unknownTime}</div>
+          <div className="faint small">{t.nextCheck}: {value?.nextAttemptAt ? countdownTo(value.nextAttemptAt, lang) : '…'}</div>
+          {value?.lastError && <div className="faint small">{t.lastErrorLabel}: <span dir="auto">{value.lastError}</span></div>}
+          {value?.lastSuccessAt && <div className="faint small num">{fullDate(value.lastSuccessAt, lang)}</div>}
+          <button className="btn sm" disabled={!value} onClick={() => onTogglePause(id)}>{value?.paused ? t.resume : t.pause} {name}</button>
+        </div>)}
         <div className="row-actions">
           <button className="btn sm" disabled={refreshDisabled} onClick={onRefresh}>
             {t.refreshNow}
           </button>
-          {health?.paused ? (
-            <button className="btn sm primary" onClick={onResume}>
-              {t.resume}
-            </button>
-          ) : (
-            <button className="btn sm" onClick={onPause}>
-              {t.pause}
-            </button>
-          )}
         </div>
       </div>
     </>
@@ -158,29 +164,46 @@ export function Topbar({
   lang,
   title,
   health,
+  khamsatHealth,
+  khamsatEnabled,
+  nafezlyHealth,
+  nafezlyEnabled,
+  showSearch,
   search,
   onSearch,
   searchRef,
-  onPause,
-  onResume,
+  onTogglePause,
   onRefresh
 }: {
   lang: Lang
   title: string
   health: SourceHealth | null
+  khamsatHealth: SourceHealth | null
+  khamsatEnabled: boolean
+  nafezlyHealth: SourceHealth | null
+  nafezlyEnabled: boolean
+  showSearch: boolean
   search: string
   onSearch: (v: string) => void
   searchRef: React.RefObject<HTMLInputElement | null>
-  onPause: () => void
-  onResume: () => void
+  onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly') => void
   onRefresh: () => void
 }): React.ReactElement {
   const t = STRINGS[lang]
   const [pop, setPop] = React.useState(false)
+  const sourcePill = (source: 'mostaql' | 'khamsat' | 'nafezly', name: string, value: SourceHealth | null, enabled = true): React.ReactElement => (
+    <div className="source-pill" key={source}>
+      <button className="source-health-btn" onClick={() => setPop((v) => !v)} aria-haspopup="dialog" aria-expanded={pop} aria-label={`${name}: ${enabled ? statusText(value, lang) : t.statusDisabled}`}>
+        <span className={`dot ${enabled ? dotClass(value) : ''}`} aria-hidden="true" />
+        <span>{name}</span><span className="source-status-label">: {enabled ? statusText(value, lang) : t.statusDisabled}</span>
+      </button>
+      {enabled && <button className="source-pause-btn" disabled={!value} title={`${value?.paused ? t.resume : t.pause} ${name}`} aria-label={`${value?.paused ? t.resume : t.pause} ${name}`} onClick={() => onTogglePause(source)}><Icon name={value?.paused ? 'play' : 'pause'} size={15} /></button>}
+    </div>
+  )
   return (
     <div className="topbar">
       <h1>{title}</h1>
-      <input
+      {showSearch && <input
         ref={searchRef}
         className="input search-top"
         dir="auto"
@@ -189,14 +212,15 @@ export function Topbar({
         aria-label={t.searchPlaceholder}
         value={search}
         onChange={(e) => onSearch(e.target.value)}
-      />
+      />}
       <span className="spacer" />
-      <button className="health-btn" onClick={() => setPop((v) => !v)} aria-haspopup="dialog" aria-expanded={pop}>
-        <span className={`dot ${dotClass(health)}`} />
-        {statusText(health, lang)}
-      </button>
+      <div className="source-health-strip">
+        {sourcePill('mostaql', t.sourceMostaql, health)}
+        {sourcePill('khamsat', t.sourceKhamsat, khamsatHealth, khamsatEnabled)}
+        {sourcePill('nafezly', t.sourceNafezly, nafezlyHealth, nafezlyEnabled)}
+      </div>
       {pop && (
-        <HealthPopover lang={lang} health={health} onPause={onPause} onResume={onResume} onRefresh={onRefresh} onClose={() => setPop(false)} />
+        <HealthPopover lang={lang} health={health} khamsatHealth={khamsatHealth} khamsatEnabled={khamsatEnabled} nafezlyHealth={nafezlyHealth} nafezlyEnabled={nafezlyEnabled} onTogglePause={onTogglePause} onRefresh={onRefresh} onClose={() => setPop(false)} />
       )}
     </div>
   )
@@ -205,31 +229,33 @@ export function Topbar({
 export function Statusbar({
   lang,
   health,
+  khamsatHealth,
+  nafezlyHealth,
   settings
 }: {
   lang: Lang
   health: SourceHealth | null
+  khamsatHealth: SourceHealth | null
+  nafezlyHealth: SourceHealth | null
   settings: AppSettings
 }): React.ReactElement {
   const t = STRINGS[lang]
   useNow(1000)
-  const text = health?.state === 'watching' ? t.connectedMostaql : statusText(health, lang)
   return (
     <div className="statusbar" role="status">
       <span>
-        <span className={`dot ${dotClass(health)}`} aria-hidden="true" /> {text}
+        <span className={`dot ${dotClass(health)}`} aria-hidden="true" /> {t.sourceMostaql}: {statusText(health, lang)}
       </span>
       <span className="sep" aria-hidden="true">
         |
       </span>
-      <span>RSS</span>
+      <span className="num">{settings.pollIntervalMs / 1000}{t.secondsUnit}</span>
       <span className="sep" aria-hidden="true">
         |
       </span>
-      <span className="num">
-        {t.everySeconds} {settings.pollIntervalMs / 1000}
-        {t.secondsUnit}
-      </span>
+      <span><span className={`dot ${settings.khamsatEnabled ? dotClass(khamsatHealth) : ''}`} aria-hidden="true" /> {t.sourceKhamsat}: {settings.khamsatEnabled ? statusText(khamsatHealth, lang) : t.statusDisabled}</span>
+      <span className="sep" aria-hidden="true">|</span>
+      <span><span className={`dot ${settings.nafezlyEnabled ? dotClass(nafezlyHealth) : ''}`} aria-hidden="true" /> {t.sourceNafezly}: {settings.nafezlyEnabled ? statusText(nafezlyHealth, lang) : t.statusDisabled}</span>
       <span className="grow" />
       <IconBtn
         name="keyboard"
@@ -240,8 +266,14 @@ export function Statusbar({
   )
 }
 
-export async function togglePause(health: SourceHealth | null): Promise<void> {
+export async function togglePause(source: 'mostaql' | 'khamsat' | 'nafezly', health: SourceHealth | null): Promise<void> {
   if (!health) return
-  if (health.paused) await rased.resume()
+  if (source === 'nafezly') {
+    if (health.paused) await rased.resumeNafezly()
+    else await rased.pauseNafezly()
+  } else if (source === 'khamsat') {
+    if (health.paused) await rased.resumeKhamsat()
+    else await rased.pauseKhamsat()
+  } else if (health.paused) await rased.resume()
   else await rased.pause()
 }

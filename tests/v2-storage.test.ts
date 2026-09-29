@@ -275,6 +275,8 @@ describe('sanitizers', () => {
     expect(bad.ui.theme).toBe('dark')
     expect(bad.ui.textScale).toBe(100)
     expect(bad.ui.previewRatio).toBe(0.6)
+    expect(sanitizeSettings({ ui: { previewRatio: 0.45 } }).ui.previewRatio).toBe(0.32)
+    expect(sanitizeSettings({ ui: { previewRatio: 0.45, previewLayoutVersion: 2 } }).ui.previewRatio).toBe(0.45)
     expect(bad.ui.closeBehavior).toBe('tray')
   })
 

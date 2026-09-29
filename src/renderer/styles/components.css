@@ -66,6 +66,18 @@
 .row h3 { margin: 0 0 3px; font-size: 1.02rem; }
 .row h3 .t { font-weight: 700; }
 .row .ex { color: var(--muted); font-size: 0.93rem; margin: 0 0 7px; }
+.opportunity-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-block-size: 80px; padding: 7px 11px; margin-block-end: 6px; }
+.opportunity-content { min-inline-size: 0; grid-column: 2; grid-row: 1; }
+.opportunity-row h3 { margin-block-end: 2px; line-height: 1.35; font-size: 0.98rem; }
+.opportunity-row .ex { margin-block-end: 2px; font-size: 0.87rem; }
+.opportunity-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; gap: 6px 8px; }
+.opportunity-meta > * { flex-shrink: 0; }
+.opportunity-actions { display: flex; align-items: center; gap: 5px; grid-column: 1; grid-row: 1; }
+.opportunity-actions .btn { white-space: nowrap; }
+.opportunity-actions .preview-action { color: var(--accent-strong); }
+.opportunity-actions .external-action { border-color: var(--accent-dim); color: var(--accent-strong); }
+.opportunity-actions .external-action:hover { background: var(--accent-bg); border-color: var(--accent); }
+.opportunity-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .meta { display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: center; font-size: 0.86rem; color: var(--faint); }
 
 .tag {
@@ -119,6 +131,7 @@
   border-radius: var(--radius); padding: 12px 16px; min-inline-size: 260px; max-inline-size: 340px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
+.health-source { border-block-start: 1px solid var(--border); margin-block-start: 10px; padding-block-start: 10px; display: grid; gap: 4px; }
 .dialog {
   position: fixed; z-index: 50; inset-block-start: 12%; inset-inline: 0;
   margin-inline: auto; inline-size: min(480px, 92%);
@@ -159,6 +172,7 @@
 }
 .statusbar .sep { color: var(--faint); }
 .statusbar .grow { flex: 1; }
+.statusbar .dot { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
 
 /* Public attribution: calm surfaces using the existing theme tokens. */
 .about-page { display: grid; gap: 16px; }

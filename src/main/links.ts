@@ -21,6 +21,7 @@ export function isAllowedProjectUrl(raw: string): boolean {
   }
   if (u.protocol !== 'https:') return false
   if (u.username || u.password) return false
+  if (u.hostname.toLowerCase() === 'nafezly.com') return !u.search && !u.hash && /^\/project\/\d+(?:-[^/]*)?\/?$/.test(u.pathname)
   if (u.hostname.toLowerCase() === 'khamsat.com') return !u.search && !u.hash && /^\/community\/requests\/\d+(?:-[^/]*)?\/?$/.test(u.pathname)
   if (u.hostname.toLowerCase() !== 'mostaql.com') return false
   // Short links from RSS (/go/<id>) and canonical project pages.

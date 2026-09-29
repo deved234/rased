@@ -1,6 +1,5 @@
 import React from 'react'
 import { rased } from '../api.js'
-import { KNOWN_CATEGORIES } from '@shared/categories.js'
 import { matchesDefinition } from '@shared/filters.js'
 import {
   defaultFilterDefinition,
@@ -16,6 +15,7 @@ import { CategoryTag, ProjectRow } from '../components/ProjectRow.js'
 import { FilterDrawer } from '../components/FilterDrawer.js'
 import { EmptyState, IconBtn, SkeletonList, useDialogFocus } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
+import { openOnSource, sourceName } from '../sourceCopy.js'
 import { budgetLabel, timeAgo } from '../format.js'
 
 const PAGE = 50
@@ -36,6 +36,8 @@ export function ProjectsView({
   settings,
   patchSettings,
   health,
+  khamsatHealth,
+  nafezlyHealth,
   search,
   onSearch,
   memory,
@@ -47,6 +49,8 @@ export function ProjectsView({
   settings: AppSettings
   patchSettings: (p: Partial<AppSettings>) => Promise<void>
   health: SourceHealth | null
+  khamsatHealth: SourceHealth | null
+  nafezlyHealth: SourceHealth | null
   search: string
   onSearch: (value: string) => void
   memory: ListMemory
@@ -64,20 +68,14 @@ export function ProjectsView({
   const [drawer, setDrawer] = React.useState(false)
   const [pendingNew, setPendingNew] = React.useState<number[]>([])
   const [selectedId, setSelectedId] = React.useState<number | null>(memory.selectedId)
-  const [narrow, setNarrow] = React.useState(() => window.innerWidth < 1100)
+  const [narrow, setNarrow] = React.useState(() => window.innerWidth < 900)
   const listRef = React.useRef<HTMLDivElement>(null)
   const splitRef = React.useRef<HTMLDivElement>(null)
   const gen = React.useRef(0)
   const scopeRef = React.useRef(scope)
   const restoreRef = React.useRef<{ id?: number; offset?: number; scrollTop: number } | null>({ scrollTop: memory.scrollTop })
+  const previewAnchorRef = React.useRef<{ id?: number; offset?: number; scrollTop: number } | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [khamsatHealth, setKhamsatHealth] = React.useState<SourceHealth | null>(null)
-  React.useEffect(() => {
-    let alive = true
-    void rased.getKhamsatHealth().then(value => { if (alive) setKhamsatHealth(value) })
-    const off = rased.onKhamsatHealthChanged(value => setKhamsatHealth(value))
-    return () => { alive = false; off() }
-  }, [])
   const captureAnchor = (): { id?: number; offset?: number; scrollTop: number } => {
     const el = listRef.current
     if (!el) return { scrollTop: 0 }
@@ -169,7 +167,7 @@ export function ProjectsView({
   }, [def, limit, selectedId, onMemory])
 
   React.useEffect(() => {
-    const onResize = (): void => setNarrow(window.innerWidth < 1100)
+    const onResize = (): void => setNarrow(window.innerWidth < 900)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -229,11 +227,10 @@ export function ProjectsView({
     await rased.updateProjectUserState(p.id, { saved: !p.saved })
   }, [])
 
-  const toggleCat = (slug: string): void => {
-    const cur = def.categoryFilter
-    const cats = cur.categories.includes(slug) ? cur.categories.filter((c) => c !== slug) : [...cur.categories, slug]
-    applyDefinition({ ...fullDef, categoryFilter: { ...cur, mode: cats.length > 0 ? 'selected' : 'all', categories: cats } })
-    setLimit(PAGE)
+  const openPreview = (id: number): void => {
+    previewAnchorRef.current = captureAnchor()
+    setSelectedId(id)
+    if (!settings.ui.previewOpen) void patchSettings({ ui: { ...settings.ui, previewOpen: true } })
   }
 
   const activeFilterCount =
@@ -254,6 +251,15 @@ export function ProjectsView({
   const selected = rows.find((r) => r.id === selectedId) ?? null
   const showPreview = settings.ui.previewOpen && selected && !narrow
   const showOverlay = !!(settings.ui.previewOpen && selected && narrow)
+  React.useLayoutEffect(() => {
+    const saved = previewAnchorRef.current
+    const el = listRef.current
+    if (!saved || !el || (!showPreview && !showOverlay)) return
+    const anchor = saved.id ? el.querySelector<HTMLElement>(`[data-row="${saved.id}"]`) : null
+    if (anchor && saved.offset !== undefined) el.scrollTop += anchor.getBoundingClientRect().top - el.getBoundingClientRect().top - saved.offset
+    else el.scrollTop = saved.scrollTop
+    previewAnchorRef.current = null
+  }, [showPreview, showOverlay, selectedId])
   const overlayRef = React.useRef<HTMLDivElement>(null)
   useDialogFocus(overlayRef, showOverlay)
   React.useEffect(() => {
@@ -277,7 +283,7 @@ export function ProjectsView({
     const move = (ev: MouseEvent): void => {
       const box = container.getBoundingClientRect()
       const px = rtl ? box.right - ev.clientX : ev.clientX - box.left
-      const ratio = Math.min(0.6, Math.max(0.25, 1 - px / Math.max(1, box.width)))
+      const ratio = Math.min(0.6, Math.max(0.25, px / Math.max(1, box.width)))
       container.style.setProperty('--preview-ratio', String(ratio))
       container.dataset['dragRatio'] = String(ratio)
     }
@@ -294,7 +300,7 @@ export function ProjectsView({
   const resizeKey = (e: React.KeyboardEvent): void => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
     e.preventDefault()
-    const step = (e.key === 'ArrowLeft' ? 0.05 : -0.05) * (lang === 'ar' ? -1 : 1)
+    const step = (e.key === 'ArrowLeft' ? 0.05 : -0.05) * (lang === 'ar' ? 1 : -1)
     const ratio = e.key === 'Home' ? 0.25 : e.key === 'End' ? 0.6 : Math.min(0.6, Math.max(0.25, settings.ui.previewRatio + step))
     void patchSettings({ ui: { ...settings.ui, previewRatio: ratio } })
   }
@@ -314,7 +320,7 @@ export function ProjectsView({
       }
     } else if (e.key === 'Enter' && selectedId !== null) {
       if (e.ctrlKey || e.metaKey) void openExternal(selectedId)
-      else openDetail(selectedId)
+      else openPreview(selectedId)
     } else if ((e.key === 'd' || e.key === 'D') && (e.ctrlKey || e.metaKey) && selected) {
       e.preventDefault()
       void toggleSave(selected)
@@ -325,44 +331,40 @@ export function ProjectsView({
     <div className="split" ref={splitRef}>
       <div className="list-pane">
         {actionError && <div className="banner bad" role="alert">{actionError}</div>}
-        {showBanner && <div className={bannerClass}>{bannerText}</div>}
-        {settings.khamsatEnabled && def.source !== 'mostaql' && khamsatHealth && ['error', 'backing-off'].includes(khamsatHealth.state) && (
+        {showBanner && (health?.state === 'paused' || def.source === 'mostaql' || def.source === 'all') && <div className={bannerClass}>{health?.state === 'paused' ? bannerText : `${t.sourceMostaql}: ${bannerText}`}</div>}
+        {settings.khamsatEnabled && (def.source === 'all' || def.source === 'khamsat') && khamsatHealth && ['error', 'backing-off'].includes(khamsatHealth.state) && (
           <div className="banner warn">{lang === 'ar' ? 'رصد خمسات متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Khamsat monitoring is temporarily unavailable; it will retry automatically.'}</div>
         )}
+        {settings.nafezlyEnabled && (def.source === 'all' || def.source === 'nafezly') && nafezlyHealth && ['error', 'backing-off'].includes(nafezlyHealth.state) && (
+          <div className="banner warn">{lang === 'ar' ? 'رصد نفذلي متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Nafezly monitoring is temporarily unavailable; it will retry automatically.'}</div>
+        )}
+        {def.source === 'all' && def.categoryFilter.mode === 'selected' && <div className="banner">{t.filterCategoryScope}</div>}
+        <div className="list-toolbar">
+          <div className="source-segment" role="group" aria-label={t.filterSource}>
+            {(['all', 'mostaql', 'khamsat', 'nafezly'] as const).map(source => (
+              <button key={source} className={def.source === source ? 'source-option active' : 'source-option'} aria-pressed={def.source === source} onClick={() => applyDefinition(source === 'khamsat' || source === 'nafezly' ? { ...fullDef, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...fullDef, source })}>
+                {source === 'all' ? (lang === 'ar' ? 'كل المصادر' : 'All sources') : source === 'mostaql' ? t.sourceMostaql : source === 'khamsat' ? t.sourceKhamsat : t.sourceNafezly}
+              </button>
+            ))}
+          </div>
+          <button className={def.unreadOnly ? 'chip active' : 'chip'} aria-pressed={def.unreadOnly} onClick={() => applyDefinition({ ...fullDef, unreadOnly: !def.unreadOnly })}>{t.navUnread}</button>
+          <select
+            className="select"
+            aria-label={t.sortTitle}
+            value={def.sort}
+            onChange={(e) => { applyDefinition({ ...fullDef, sort: e.target.value as FilterDefinition['sort'] }); setLimit(PAGE) }}
+          >
+            <option value="latestDetected">{t.sortDetected}</option>
+            <option value="latestPublished">{t.sortPublished}</option>
+          </select>
+          <button className="chip filter-trigger" onClick={() => setDrawer(true)}>
+              <Icon name="filter" size={15} /> {t.filters}
+              {activeFilterCount > 0 && <span className="num">({activeFilterCount})</span>}
+          </button>
+        </div>
         <div className="list-scroll" ref={listRef} onKeyDown={onListKey} tabIndex={0} aria-label={scope === 'saved' ? t.navSaved : t.allProjects}
           onScroll={() => { onMemory({ def: fullDef, limit, scrollTop: listRef.current?.scrollTop ?? 0, selectedId }) }}
         >
-          <div className="chips">
-            {(['all', 'mostaql', 'khamsat'] as const).map(source => (
-              <button key={source} className={def.source === source ? 'chip active' : 'chip'} aria-pressed={def.source === source} onClick={() => applyDefinition(source === 'khamsat' ? { ...fullDef, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...fullDef, source })}>
-                {source === 'all' ? (lang === 'ar' ? 'كل المصادر' : 'All sources') : source === 'mostaql' ? (lang === 'ar' ? 'مستقل' : 'Mostaql') : (lang === 'ar' ? 'خمسات' : 'Khamsat')}
-              </button>
-            ))}
-            <button className={def.categoryFilter.mode === 'all' ? 'chip active' : 'chip'} onClick={() => { applyDefinition({ ...fullDef, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] } }); setLimit(PAGE) }}>
-              {t.allCategories}
-            </button>
-            {KNOWN_CATEGORIES.map((c) => {
-              const on = def.categoryFilter.mode === 'selected' && def.categoryFilter.categories.includes(c.slug)
-              return (
-                <button key={c.slug} className={on ? 'chip active' : 'chip'} aria-pressed={on} onClick={() => toggleCat(c.slug)}>
-                  {lang === 'ar' ? c.ar : c.en}
-                </button>
-              )
-            })}
-            <button className="chip" onClick={() => setDrawer(true)}>
-              <Icon name="filter" size={15} /> {t.filters}
-              {activeFilterCount > 0 && <span className="num">({activeFilterCount})</span>}
-            </button>
-            <select
-              className="select"
-              aria-label={t.sortTitle}
-              value={def.sort}
-              onChange={(e) => { applyDefinition({ ...fullDef, sort: e.target.value as FilterDefinition['sort'] }); setLimit(PAGE) }}
-            >
-              <option value="latestDetected">{t.sortDetected}</option>
-              <option value="latestPublished">{t.sortPublished}</option>
-            </select>
-          </div>
 
           <div className="list-head">
             <strong>{scope === 'saved' ? t.navSaved : t.allProjects}</strong>
@@ -402,8 +404,7 @@ export function ProjectsView({
                   project={p}
                   isNew={p.discoveryKind === 'live' && !p.readAt && Date.parse(p.firstSeenAt) >= sessionStart}
                   selected={p.id === selectedId}
-                  onOpen={() => { setSelectedId(p.id); openDetail(p.id) }}
-                  onPreview={() => { setSelectedId(p.id); void patchSettings({ ui: { ...settings.ui, previewOpen: true } }) }}
+                  onPreview={() => openPreview(p.id)}
                   onToggleSave={() => void toggleSave(p)}
                   onOpenExternal={() => void openExternal(p.id)}
                 />
@@ -505,18 +506,21 @@ function PreviewPanel({
           {p.title}
         </h2>
         <div className="meta">
-          <span className="tag">{p.source === 'khamsat' ? (lang === 'ar' ? 'خمسات' : 'Khamsat') : (lang === 'ar' ? 'مستقل' : 'Mostaql')}</span>
-          {p.source !== 'khamsat' && <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />}
-          {p.source !== 'khamsat' && budget && <span className="tag num" dir="ltr">{budget}</span>}
-          <span>
-            {t.publishedAt}: {timeAgo(p.publishedAt, lang)}
-          </span>
+          <span className="tag">{sourceName(p.source, lang)}</span>
+          {p.source === 'mostaql' && <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />}
         </div>
-        {p.descriptionExcerpt && (
-          <p className="muted" dir="auto">
+        <div className="preview-facts">
+          <div className="fact"><span className="k">{t.factsDiscovered}</span><span className="v">{timeAgo(p.firstSeenAt, lang)}</span></div>
+          {p.publishedAt && <div className="fact"><span className="k">{t.factsPublished}</span><span className="v">{timeAgo(p.publishedAt, lang)}</span></div>}
+          {p.source === 'mostaql' && budget && <div className="fact"><span className="k">{t.factsBudget}</span><span className="v num" dir="ltr">{budget}</span></div>}
+        </div>
+        <h3 className="preview-section-title">{t.descriptionTitle}</h3>
+        {p.source !== 'khamsat' && p.descriptionExcerpt && (
+          <p className="muted preview-excerpt" dir="auto">
             {p.descriptionExcerpt.slice(0, 400)}
           </p>
         )}
+        {(p.source === 'khamsat' || !p.descriptionExcerpt) && <p className="muted preview-excerpt">{p.source === 'khamsat' ? t.previewKhamsatDescription : t.detailsUnavailable}</p>}
         {p.skills && p.skills.length > 0 && (
           <div className="chips">
             {p.skills.slice(0, 8).map((s) => (
@@ -528,10 +532,10 @@ function PreviewPanel({
         )}
         <div className="row-actions">
           <button className="btn primary sm" onClick={onOpenDetail}>
-            {t.projectDetails}
+            {t.previewFullDetails}
           </button>
           <button className="btn sm" onClick={onOpenExternal}>
-            {t.openExternal}
+            {openOnSource(p.source, lang)}
           </button>
           <button className="btn sm ghost" onClick={onToggleSave}>
             {p.saved ? t.unsaveProject : t.saveProject}

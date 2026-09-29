@@ -2,10 +2,12 @@ import React from 'react'
 import { rased } from '../api.js'
 import { defaultFilterDefinition, type ProjectWithUser } from '@shared/types.js'
 import { STRINGS } from '../i18n.js'
-import { applyUiPrefs, useHealth, useNow, useSettings } from '../hooks.js'
+import { applyUiPrefs, useHealth, useKhamsatHealth, useNafezlyHealth, useNow, useSettings } from '../hooks.js'
 import { timeAgo } from '../format.js'
 import { Icon } from '../components/Icon.js'
-import { dotClass, statusText } from '../components/shell.js'
+import { overallDot, overallText } from '../components/shell.js'
+import { overallSourceState } from '@shared/sourceStatus.js'
+import { openOnSource, sourceName } from '../sourceCopy.js'
 
 /** Mini follower window: latest headlines, same services, no collector of its own. */
 export function CompactView(): React.ReactElement {
@@ -13,6 +15,9 @@ export function CompactView(): React.ReactElement {
   const lang = settings.language
   const t = STRINGS[lang]
   const health = useHealth(ready)
+  const khamsatHealth = useKhamsatHealth(ready)
+  const nafezlyHealth = useNafezlyHealth(ready)
+  const overall = overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : [])])
   const [rows, setRows] = React.useState<ProjectWithUser[]>([])
   void useNow(5000)
 
@@ -34,8 +39,8 @@ export function CompactView(): React.ReactElement {
   return (
     <div className="compact">
       <div className="compact-top">
-        <span className={`dot ${dotClass(health)}`} aria-hidden="true" />
-        <strong>{statusText(health, lang)}</strong>
+        <span className={`dot ${overallDot(overall)}`} aria-hidden="true" />
+        <strong>{overallText(overall, lang)}</strong>
         <span className="grow" />
         <button
           className={pin ? 'icon-btn on' : 'icon-btn'}
@@ -64,6 +69,7 @@ export function CompactView(): React.ReactElement {
               </button>
             </h3>
             <div className="meta">
+              <span className="tag">{sourceName(p.source, lang)}</span>
               <span>
                 {timeAgo(p.publishedAt ?? p.firstSeenAt, lang)}
               </span>
@@ -81,8 +87,8 @@ export function CompactView(): React.ReactElement {
               </button>
               <button
                 className="icon-btn"
-                title={t.openExternal}
-                aria-label={t.openExternal}
+                title={openOnSource(p.source, lang)}
+                aria-label={openOnSource(p.source, lang)}
                 onClick={() => void rased.openProjectExternal(p.id)}
               >
                 <Icon name="external" size={15} />

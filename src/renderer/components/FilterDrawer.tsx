@@ -123,6 +123,20 @@ export function FilterDrawer({
         <h2>{t.filterTitle}</h2>
 
         <div className="set-row">
+          <label>{t.filterSource}</label>
+          <select className="select" value={def.source} onChange={(e) => {
+            const source = e.target.value as FilterDefinition['source']
+            setDef(source === 'khamsat' || source === 'nafezly' ? { ...def, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...def, source })
+          }}>
+            <option value="all">{lang === 'ar' ? 'كل المصادر' : 'All sources'}</option>
+            <option value="mostaql">{t.sourceMostaql}</option>
+            <option value="khamsat">{t.sourceKhamsat}</option>
+            <option value="nafezly">{t.sourceNafezly}</option>
+          </select>
+        </div>
+        <p className="hint">{def.source === 'khamsat' ? t.filterKhamsatScope : def.source === 'nafezly' ? (lang === 'ar' ? 'نفذلي: البحث في العنوان ومقتطف الوصف؛ المجال والميزانية غير مؤكدين.' : 'Nafezly: search the title and description excerpt; category and budget are unverified.') : t.filterCategoryScope}</p>
+
+        <div className="set-row">
           <label>{t.scopeAll}</label>
           <select className="select" value={def.scope} onChange={(e) => setDef({ ...def, scope: e.target.value as FilterDefinition['scope'] })}>
             <option value="all">{t.scopeAll}</option>
@@ -151,7 +165,7 @@ export function FilterDrawer({
           </div>
         </div>
 
-        <div>
+        {(def.source === 'mostaql' || def.source === 'all') && <div>
           <div className="small muted">{t.filterModeAll} / {t.filterModeSelected}</div>
           <div className="chips">
             <button
@@ -180,13 +194,13 @@ export function FilterDrawer({
               )
             })}
           </div>
-        </div>
+        </div>}
 
         <KeywordTokens label={t.keywordsAny} values={def.categoryFilter.keywordsAny} onChange={(v) => setKw('keywordsAny', v)} />
         <KeywordTokens label={t.keywordsAll} values={def.categoryFilter.keywordsAll} onChange={(v) => setKw('keywordsAll', v)} />
         <KeywordTokens label={t.excludeKeywords} values={def.categoryFilter.excludeKeywords} onChange={(v) => setKw('excludeKeywords', v)} />
 
-        <div className="set-row">
+        {(def.source === 'mostaql' || def.source === 'all') && <div className="set-row">
           <label>{t.budget}</label>
           <input
             className="input num"
@@ -212,11 +226,11 @@ export function FilterDrawer({
               setDef({ ...def, budgetMax: e.target.value === '' || !Number.isFinite(n) || n < 0 ? null : n })
             }}
           />
-        </div>
-        <div className="set-row">
+        </div>}
+        {(def.source === 'mostaql' || def.source === 'all') && <div className="set-row">
           <label>{t.includeUnknownBudget}</label>
           <Toggle checked={def.includeUnknownBudget} onChange={(v) => setDef({ ...def, includeUnknownBudget: v })} label={t.includeUnknownBudget} />
-        </div>
+        </div>}
 
         <div className="set-row">
           <label>{t.sortTitle}</label>
@@ -226,14 +240,14 @@ export function FilterDrawer({
           </select>
         </div>
 
-        <div className="set-row">
+        {(def.source === 'mostaql' || def.source === 'all') && <div className="set-row">
           <label>{t.linkFilters}</label>
           <Toggle checked={linked} onChange={onToggleLink} label={t.linkFilters} />
-        </div>
-        <div className="set-row">
+        </div>}
+        {(def.source === 'mostaql' || def.source === 'all') && <div className="set-row">
           <span className="hint">{t.linkFiltersHint}</span>
-        </div>
-        {!linked && (
+        </div>}
+        {(def.source === 'mostaql' || def.source === 'all') && !linked && (
           <div className="set-row">
             <button className="btn sm ghost" onClick={() => setDef({ ...def, categoryFilter: { ...notifyFilter } })}>
               {t.copyNotifyToDisplay}

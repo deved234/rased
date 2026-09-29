@@ -59,6 +59,10 @@ export interface AppSettings {
   /** Khamsat has no verified categories or description in the public list. */
   khamsatKeywordsAny: string[]
   khamsatExcludeKeywords: string[]
+  nafezlyEnabled: boolean
+  nafezlyNotificationsEnabled: boolean
+  nafezlyKeywordsAny: string[]
+  nafezlyExcludeKeywords: string[]
   soundEnabled: boolean
   runAtStartup: boolean
   /** filter used for notifications */
@@ -138,7 +142,7 @@ export interface ProjectDetails {
 
 /** Full list-query definition. Every constraint applies before pagination AND count. */
 export interface FilterDefinition {
-  source: 'all' | 'mostaql' | 'khamsat'
+  source: 'all' | 'mostaql' | 'khamsat' | 'nafezly'
   scope: FilterScope
   unreadOnly: boolean
   /** empty = any status (stored NULL counts as 'none') */
@@ -168,6 +172,8 @@ export interface UiPreferences {
   previewOpen: boolean
   /** list/preview split ratio, clamped 0.25–0.6 */
   previewRatio: number
+  /** layout generation, used to migrate the original wide default once */
+  previewLayoutVersion: 2
   autoRevealNew: boolean
   compactAlwaysOnTop: boolean
   closeBehavior: 'tray' | 'quit'
@@ -254,6 +260,10 @@ export function defaultSettings(): AppSettings {
     khamsatNotificationsEnabled: true,
     khamsatKeywordsAny: [],
     khamsatExcludeKeywords: [],
+    nafezlyEnabled: true,
+    nafezlyNotificationsEnabled: true,
+    nafezlyKeywordsAny: [],
+    nafezlyExcludeKeywords: [],
     soundEnabled: true,
     runAtStartup: false,
     notifyFilter: defaultCategoryFilter(),
@@ -275,7 +285,8 @@ export function defaultUiPreferences(): UiPreferences {
     density: 'comfortable',
     sidebarCollapsed: false,
     previewOpen: false,
-    previewRatio: 0.45,
+    previewRatio: 0.32,
+    previewLayoutVersion: 2,
     autoRevealNew: false,
     compactAlwaysOnTop: false,
     closeBehavior: 'tray'
@@ -314,6 +325,10 @@ export function sanitizeSettings(input: unknown): AppSettings {
     khamsatNotificationsEnabled: o['khamsatNotificationsEnabled'] !== false,
     khamsatKeywordsAny: stringList(o['khamsatKeywordsAny']),
     khamsatExcludeKeywords: stringList(o['khamsatExcludeKeywords']),
+    nafezlyEnabled: o['nafezlyEnabled'] !== false,
+    nafezlyNotificationsEnabled: o['nafezlyNotificationsEnabled'] !== false,
+    nafezlyKeywordsAny: stringList(o['nafezlyKeywordsAny']),
+    nafezlyExcludeKeywords: stringList(o['nafezlyExcludeKeywords']),
     soundEnabled: typeof o['soundEnabled'] === 'boolean' ? o['soundEnabled'] : true,
     runAtStartup: typeof o['runAtStartup'] === 'boolean' ? o['runAtStartup'] : false,
     notifyFilter: sanitizeFilter(o['notifyFilter']),
@@ -354,7 +369,8 @@ function sanitizeUiPreferences(v: unknown): UiPreferences {
   const d = defaultUiPreferences()
   if (typeof v !== 'object' || v === null) return d
   const o = v as Record<string, unknown>
-  const ratio = typeof o['previewRatio'] === 'number' && Number.isFinite(o['previewRatio']) ? o['previewRatio'] : d.previewRatio
+  const oldRatio = typeof o['previewRatio'] === 'number' && Number.isFinite(o['previewRatio']) ? o['previewRatio'] : d.previewRatio
+  const ratio = o['previewLayoutVersion'] === 2 ? oldRatio : oldRatio === 0.45 ? d.previewRatio : oldRatio
   return {
     theme: o['theme'] === 'light' ? 'light' : 'dark',
     textScale: (TEXT_SCALES as readonly number[]).includes(o['textScale'] as number) ? (o['textScale'] as 90 | 100 | 110 | 125) : 100,
@@ -362,6 +378,7 @@ function sanitizeUiPreferences(v: unknown): UiPreferences {
     sidebarCollapsed: o['sidebarCollapsed'] === true,
     previewOpen: o['previewOpen'] === true,
     previewRatio: Math.min(0.6, Math.max(0.25, ratio)),
+    previewLayoutVersion: 2,
     autoRevealNew: o['autoRevealNew'] === true,
     compactAlwaysOnTop: o['compactAlwaysOnTop'] === true,
     closeBehavior: o['closeBehavior'] === 'quit' ? 'quit' : 'tray'
@@ -392,7 +409,7 @@ export function sanitizeFilterDefinition(v: unknown): FilterDefinition {
   let budgetMax = sanitizeBudgetBound(o['budgetMax'])
   if (budgetMin !== null && budgetMax !== null && budgetMin > budgetMax) budgetMax = budgetMin
   return {
-    source: o['source'] === 'mostaql' || o['source'] === 'khamsat' ? o['source'] : 'all',
+    source: o['source'] === 'mostaql' || o['source'] === 'khamsat' || o['source'] === 'nafezly' ? o['source'] : 'all',
     scope: scope === 'saved' || scope === 'hidden' ? scope : 'all',
     unreadOnly: o['unreadOnly'] === true,
     statuses,

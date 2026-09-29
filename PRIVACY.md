@@ -1,6 +1,6 @@
 # الخصوصية
 
-2026-09-28 · RASED · david atef
+2026-09-29 · RASED · david atef
 
 ## ما يبقى على جهازك
 
@@ -8,7 +8,7 @@
 
 ## الاتصالات الخارجية
 
-يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات عند تفعيل رصدها. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات لا يحتاج تسجيل دخول ولا يجلب نص الطلب الكامل من صفحة التفاصيل.
+يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا.
 
 ## مساعد العروض وGemini
 
@@ -42,7 +42,7 @@
 
 # Privacy
 
-2026-09-28 · RASED · david atef
+2026-09-29 · RASED · david atef
 
 ## Local data
 
@@ -50,7 +50,7 @@ Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters
 
 ## External connections
 
-Your device contacts Mostaql directly for RSS and detail pages as needed, and the public Khamsat unavailable-service requests listing when its monitoring is enabled. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat monitoring needs no login and does not retrieve full request detail text.
+Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally.
 
 ## Proposal Assistant and Gemini
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-09-29
+
+- Added read-only monitoring of public Nafezly project RSS with an independent 15–18 second scheduler, silent first scan, local full-description storage, source-specific pause and keyword alerts, and conservative backoff on access errors.
+- Added Nafezly to project views, filters, status, tray and settings. Its project links and notification clicks open in the default browser.
+- Refined the source-neutral Arabic/English interface, side preview and platform controls so RASED presents opportunities from all supported platforms.
+- Updated offline terms, privacy disclosures and documentation for the third source. No account login or automated proposal submission was added.
+- Validated 115 unit tests and 82 Electron/SQLite/React integration assertions before packaging. See [release notes](docs/RELEASE_0.4.0.md) for limits.
+
 ## 0.3.0 — 2026-09-28
 
 - Added read-only monitoring of the public Khamsat unavailable-service requests listing. It has an independent five-second poller, silent first scan, publication-time freshness checks, error backoff, source filtering, title-keyword alerts and browser-opening notifications.

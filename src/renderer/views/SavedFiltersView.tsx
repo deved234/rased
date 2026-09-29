@@ -62,6 +62,7 @@ export function SavedFiltersView({
             <div key={f.id} className="set-group">
               <div className="set-row">
                 <strong dir="auto">{f.name}</strong>
+                <span className="tag">{f.definition.source === 'all' ? (lang === 'ar' ? 'كل المصادر' : 'All sources') : f.definition.source === 'khamsat' ? t.sourceKhamsat : f.definition.source === 'nafezly' ? t.sourceNafezly : t.sourceMostaql}</span>
                 <span className="faint small num">{fullDate(f.updatedAt, lang)}</span>
               </div>
               <div className="row-actions">
