@@ -69,6 +69,9 @@ export function KeywordTokens({
 export function FilterDrawer({
   lang,
   initial,
+  initialName = '',
+  busy = false,
+  error = false,
   notifyFilter,
   linked,
   onToggleLink,
@@ -78,6 +81,9 @@ export function FilterDrawer({
 }: {
   lang: Lang
   initial: FilterDefinition
+  error?: boolean
+  busy?: boolean
+  initialName?: string
   notifyFilter: CategoryFilter
   linked: boolean
   onToggleLink: (v: boolean) => void
@@ -87,7 +93,7 @@ export function FilterDrawer({
 }): React.ReactElement {
   const t = STRINGS[lang]
   const [def, setDef] = React.useState<FilterDefinition>(initial)
-  const [name, setName] = React.useState('')
+  const [name, setName] = React.useState(initialName)
   const [count, setCount] = React.useState<{ total: number; unread: number } | null>(null)
   const gen = React.useRef(0)
   const panelRef = React.useRef<HTMLDivElement>(null)
@@ -98,18 +104,18 @@ export function FilterDrawer({
     const id = setTimeout(() => {
       void rased.previewFilterCount(def).then((c) => {
         if (gen.current === my) setCount(c)
-      })
+      }).catch(() => { if(gen.current===my)setCount(null) })
     }, 350)
     return () => clearTimeout(id)
   }, [def])
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && !busy) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, busy])
 
   const setCat = (mode: 'all' | 'selected', categories: string[]): void =>
     setDef({ ...def, categoryFilter: { ...def.categoryFilter, mode, categories } });
@@ -118,13 +124,14 @@ export function FilterDrawer({
 
   return (
     <>
-      <div className="scrim" onClick={onClose} />
+      <div className="scrim" onClick={() => { if (!busy) onClose() }} />
       <div ref={panelRef} className="drawer" role="dialog" aria-modal="true" aria-label={t.filterTitle}>
         <h2>{t.filterTitle}</h2>
+        {error && <p className="field-err" role="alert">{lang === 'ar' ? 'تعذر حفظ الفلتر. تعديلاتك ما زالت هنا؛ أعد المحاولة.' : 'Could not save the filter. Your edits are still here; retry.'}</p>}
 
         <div className="set-row">
-          <label>{t.filterSource}</label>
-          <select className="select" value={def.source} onChange={(e) => {
+          <label htmlFor="filter-field-1">{t.filterSource}</label>
+          <select id="filter-field-1" className="select" value={def.source} onChange={(e) => {
             const source = e.target.value as FilterDefinition['source']
             setDef(source === 'khamsat' || source === 'nafezly' ? { ...def, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...def, source })
           }}>
@@ -137,8 +144,8 @@ export function FilterDrawer({
         <p className="hint">{def.source === 'khamsat' ? t.filterKhamsatScope : def.source === 'nafezly' ? (lang === 'ar' ? 'نفذلي: البحث في العنوان ومقتطف الوصف؛ المجال والميزانية غير مؤكدين.' : 'Nafezly: search the title and description excerpt; category and budget are unverified.') : t.filterCategoryScope}</p>
 
         <div className="set-row">
-          <label>{t.scopeAll}</label>
-          <select className="select" value={def.scope} onChange={(e) => setDef({ ...def, scope: e.target.value as FilterDefinition['scope'] })}>
+          <label htmlFor="filter-field-2">{t.scopeAll}</label>
+          <select id="filter-field-2" className="select" value={def.scope} onChange={(e) => setDef({ ...def, scope: e.target.value as FilterDefinition['scope'] })}>
             <option value="all">{t.scopeAll}</option>
             <option value="saved">{t.scopeSaved}</option>
             <option value="hidden">{t.scopeHidden}</option>
@@ -233,8 +240,8 @@ export function FilterDrawer({
         </div>}
 
         <div className="set-row">
-          <label>{t.sortTitle}</label>
-          <select className="select" value={def.sort} onChange={(e) => setDef({ ...def, sort: e.target.value as FilterDefinition['sort'] })}>
+          <label htmlFor="filter-field-3">{t.sortTitle}</label>
+          <select id="filter-field-3" className="select" value={def.sort} onChange={(e) => setDef({ ...def, sort: e.target.value as FilterDefinition['sort'] })}>
             <option value="latestDetected">{t.sortDetected}</option>
             <option value="latestPublished">{t.sortPublished}</option>
           </select>
@@ -272,7 +279,7 @@ export function FilterDrawer({
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <button className="btn sm" disabled={!name.trim()} onClick={() => onSave(name.trim(), def)}>
+          <button className="btn sm" disabled={busy || !name.trim()} onClick={() => onSave(name.trim(), def)}>
             {t.saveFilterBtn}
           </button>
         </div>
@@ -287,7 +294,7 @@ export function FilterDrawer({
           >
             {t.clearAllBtn}
           </button>
-          <button className="btn primary" onClick={() => onApply(def)}>
+          <button className="btn primary" disabled={busy} onClick={() => onApply(def)}>
             {t.applyFilterBtn}
           </button>
         </div>

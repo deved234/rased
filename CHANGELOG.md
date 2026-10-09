@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — 2026-10-09
+
+- Refined Arabic/English layouts, text contrast, keyboard focus, cards and settings navigation. Preview actions stay available while the description scrolls.
+- Protected Quick Apply templates, AI configuration/profile, draft edits and notification keywords against accidental navigation and failed saves. Settings are persisted before live state changes.
+- Added preparation status beside its matching project, translated job phases and clearer Chrome setup/pairing states. Updated the extension popup identity and language.
+- Added an optional compact-window display filter, shortened local startup presentation, and loaded settings on demand.
+- Fixed saved-filter name editing, prevented repeated mutations, improved error recovery, legal tab navigation and field labels. Added responsive UI integration coverage and maintained interface guides/screenshots.
+
+
 ## 0.5.0 — 2026-10-09
 
 - Added Gemini, OpenAI and Claude proposal generation with independent encrypted keys, model catalogs/manual IDs, per-draft selection, explicit consent and cancellation. Existing Gemini keys and local drafts migrate without intentional data loss. The assistant remains Mostaql-only.

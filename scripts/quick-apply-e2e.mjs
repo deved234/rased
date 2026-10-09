@@ -72,6 +72,8 @@ try {
  send({type:'result',requestId:request.requestId,phase:'ready',tabId:123,price:38,days:6})
  await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.lastJob?.phase==='ready')
  check('result crosses broker, main, preload and UI status',true)
+ await eventually(()=>ev("document.querySelector('.settings-content')?.textContent.includes('Draft ready')"))
+ check('terminal job status is translated and offers no cancellation',await ev("!Array.from(document.querySelectorAll('.settings-content button')).some(b=>b.textContent.includes('Cancel preparation'))"))
  check('Khamsat quick action rejected by actual main IPC',!(await ev('window.rased.quickApplyProject(3)')).ok)
  await ev(`window.rased.extensionAction(${JSON.stringify({action:'revoke',id:pair.id})})`)
  check('unpair disables Quick Apply without deleting template',!(await ev('window.rased.getSettings()')).quickApply.enabled)

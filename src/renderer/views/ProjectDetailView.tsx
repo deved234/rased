@@ -33,6 +33,7 @@ export function ProjectDetailView({
   const [missing, setMissing] = React.useState(false)
   const [note, setNote] = React.useState('')
   const [savedNote, setSavedNote] = React.useState('')
+  const [savingNote, setSavingNote] = React.useState(false)
   const [justSaved, setJustSaved] = React.useState(false)
   const [confirmLeave, setConfirmLeave] = React.useState<null | (() => void)>(null)
   const [copied, setCopied] = React.useState(false)
@@ -46,6 +47,7 @@ export function ProjectDetailView({
 
   const load = React.useCallback(async () => {
     const my = ++generation.current
+    try {
     const [p, d] = await Promise.all([rased.getProject(projectId), rased.getProjectDetails(projectId)])
     if (my !== generation.current) return
     if (!p) {
@@ -73,7 +75,8 @@ export function ProjectDetailView({
       const fresh = await rased.getProject(projectId)
       if (fresh && my === generation.current) setProject(fresh)
     }
-  }, [projectId])
+    } catch { if (my === generation.current) setActionError(lang === 'ar' ? 'تعذر تحميل التفاصيل. أعد المحاولة.' : 'Could not load details. Retry.') }
+  }, [projectId, lang])
 
   React.useEffect(() => {
     markedRead.current = false
@@ -141,14 +144,16 @@ export function ProjectDetailView({
   if (!project) {
     return (
       <div className="detail-wrap">
-        <SkeletonList lang={lang} rows={4} />
+        {actionError ? <div role="alert"><p className="field-err">{actionError}</p><button className="btn" onClick={() => { setActionError(null); void load() }}>{lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}</button></div> : <SkeletonList lang={lang} rows={4} />}
       </div>
     )
   }
 
   const budget = budgetLabel(project.budgetMin, project.budgetMax)
   const saveNote = async (): Promise<boolean> => {
+    if (savingNote) return false
     const draft = noteRef.current.note
+    setSavingNote(true)
     try {
       const r = await rased.updateProjectUserState(project.id, { note: draft })
       if (!r.ok) { setActionError(r.error ?? 'save-failed'); return false }
@@ -158,7 +163,7 @@ export function ProjectDetailView({
       setActionError(null)
       setTimeout(() => setJustSaved(false), 2500)
       return true
-    } catch (err) { setActionError(String(err)); return false }
+    } catch { setActionError(lang === 'ar' ? 'تعذر حفظ الملاحظة. تعديلاتك ما زالت هنا.' : 'Could not save the note. Your edits are still here.'); return false } finally { setSavingNote(false) }
   }
 
   const openExternal = async (): Promise<void> => {
@@ -246,13 +251,13 @@ export function ProjectDetailView({
             <div className="banner warn">
               {t.detailsUnavailable}
               <span className="spacer" />
-              <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load())}>
+              <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load()).catch(() => setActionError(lang === 'ar' ? 'تعذر إتمام العملية. أعد المحاولة.' : 'Could not complete the operation. Retry.'))}>
                 {t.retryFetch}
               </button>
             </div>
           )}
           {project.source === 'mostaql' && details?.status === 'loading' && <p className="muted">{t.loadingDetails}</p>}
-          {project.source === 'mostaql' && <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load())}>{t.retryFetch}</button>}
+          {project.source === 'mostaql' && <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load()).catch(() => setActionError(lang === 'ar' ? 'تعذر إتمام العملية. أعد المحاولة.' : 'Could not complete the operation. Retry.'))}>{t.retryFetch}</button>}
           </>}
 
           {project.skills && project.skills.length > 0 && (
@@ -281,7 +286,7 @@ export function ProjectDetailView({
             {lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant'}
           </button>}
           <div className="row-actions">
-            <button className="btn sm" onClick={() => void rased.updateProjectUserState(project.id, { saved: !project.saved }).then(() => load())} aria-pressed={project.saved}>
+            <button className="btn sm" onClick={() => void rased.updateProjectUserState(project.id, { saved: !project.saved }).then(() => load()).catch(() => setActionError(lang === 'ar' ? 'تعذر إتمام العملية. أعد المحاولة.' : 'Could not complete the operation. Retry.'))} aria-pressed={project.saved}>
               <Icon name={project.saved ? 'bookmarkFill' : 'bookmark'} size={15} /> {project.saved ? t.unsaveProject : t.saveProject}
             </button>
             <button className="btn sm" onClick={copyLink}>
@@ -324,7 +329,7 @@ export function ProjectDetailView({
             </span>
             {dirty ? <span className="tag uncertain">{t.noteUnsaved}</span> : justSaved ? <span className="tag good">{t.noteSaved}</span> : null}
           </div>
-          <button className="btn sm primary" disabled={!dirty} onClick={() => void saveNote()}>
+          <button className="btn sm primary" disabled={!dirty || savingNote} onClick={() => void saveNote()}>
             {t.noteSave}
           </button>
 

@@ -243,19 +243,11 @@ export function Statusbar({
   useNow(1000)
   return (
     <div className="statusbar" role="status">
-      <span>
-        <span className={`dot ${dotClass(health)}`} aria-hidden="true" /> {t.sourceMostaql}: {statusText(health, lang)}
+      <span title={[statusText(health, lang), statusText(khamsatHealth, lang), statusText(nafezlyHealth, lang)].join(' · ')}>
+        {overallText(overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : [])]), lang)}
       </span>
-      <span className="sep" aria-hidden="true">
-        |
-      </span>
-      <span className="num">{settings.pollIntervalMs / 1000}{t.secondsUnit}</span>
-      <span className="sep" aria-hidden="true">
-        |
-      </span>
-      <span><span className={`dot ${settings.khamsatEnabled ? dotClass(khamsatHealth) : ''}`} aria-hidden="true" /> {t.sourceKhamsat}: {settings.khamsatEnabled ? statusText(khamsatHealth, lang) : t.statusDisabled}</span>
-      <span className="sep" aria-hidden="true">|</span>
-      <span><span className={`dot ${settings.nafezlyEnabled ? dotClass(nafezlyHealth) : ''}`} aria-hidden="true" /> {t.sourceNafezly}: {settings.nafezlyEnabled ? statusText(nafezlyHealth, lang) : t.statusDisabled}</span>
+      <span className="sep" aria-hidden="true">·</span>
+      <span className="muted">{lang === 'ar' ? 'تفاصيل كل مصدر في الشريط العلوي' : 'Source details are in the top bar'}</span>
       <span className="grow" />
       <IconBtn
         name="keyboard"

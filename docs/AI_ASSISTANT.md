@@ -28,3 +28,9 @@ Provider request/response contracts, errors, cancellation, encrypted storage, mi
 Unknown/new models may reject parameters or produce invalid/truncated output. The app reports the error rather than saving an incomplete draft or making another paid request. Model availability, cost and Arabic proposal quality depend on the provider and account.
 
 On a brand-new Windows profile, forcibly killing the app before its first normal exit can prevent Chromium from persisting encryption state. Keys may then require re-entry. A normal first exit and restart preserve keys; crash-proof storage is not guaranteed.
+
+## Editing safely
+
+Provider selection, key storage, model defaults and your freelancer profile are separate steps. Keys are masked, with an optional Show/Hide control. “Key saved” is different from a successfully tested model; requesting a generation test asks for confirmation because it can consume provider credits or quota.
+
+Explicitly save each group. Navigation protects an edited profile, unsaved key, changed defaults and edited proposal text. Failed saves retain edits; saving and continuing proceeds only after success. Project previews show readable profile fields, and copying a proposal excludes separate assumptions/questions. Changing request input or model requires a new preview and consent.

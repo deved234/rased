@@ -15,25 +15,27 @@ export function useHashRoute(): Route {
   return route
 }
 
-export function useSettings(): [AppSettings, (patch: Partial<AppSettings>) => Promise<void>, boolean] {
+export function useSettings(epoch = 0): [AppSettings, (patch: Partial<AppSettings>) => Promise<void>, boolean] {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings())
   const [ready, setReady] = useState(false)
   useEffect(() => {
     let alive = true
+    let received = false
     void rased.getSettings().then((s) => {
-      if (alive) {
+      if (alive && !received) {
         setSettings(s)
         setReady(true)
       }
-    })
+    }).catch(() => { /* bootstrap surfaces failures; an incoming update can recover this hook */ })
     const off = rased.onSettingsChanged((s) => {
-      if (alive) setSettings(s)
+      received = true
+      if (alive) { setSettings(s); setReady(true) }
     })
     return () => {
       alive = false
       off()
     }
-  }, [])
+  }, [epoch])
   const patch = useCallback(async (p: Partial<AppSettings>) => {
     const next = await rased.updateSettings(p)
     setSettings(next)
@@ -56,7 +58,7 @@ export function useHealth(enabled: boolean): SourceHealth | null {
   useEffect(() => {
     if (!enabled) return
     let alive = true
-    void rased.getHealth().then((h) => alive && setHealth(h))
+    void rased.getHealth().then((h) => alive && setHealth(h)).catch(() => {})
     const off = rased.onHealthChanged((h) => alive && setHealth(h))
     return () => {
       alive = false
@@ -71,7 +73,7 @@ export function useKhamsatHealth(enabled: boolean): SourceHealth | null {
   useEffect(() => {
     if (!enabled) return
     let alive = true
-    void rased.getKhamsatHealth().then((h) => alive && setHealth(h))
+    void rased.getKhamsatHealth().then((h) => alive && setHealth(h)).catch(() => {})
     const off = rased.onKhamsatHealthChanged((h) => alive && setHealth(h))
     return () => { alive = false; off() }
   }, [enabled])
@@ -83,7 +85,7 @@ export function useNafezlyHealth(enabled: boolean): SourceHealth | null {
   useEffect(() => {
     if (!enabled) return
     let alive = true
-    void rased.getNafezlyHealth().then((h) => alive && setHealth(h))
+    void rased.getNafezlyHealth().then((h) => alive && setHealth(h)).catch(() => {})
     const off = rased.onNafezlyHealthChanged((h) => alive && setHealth(h))
     return () => { alive = false; off() }
   }, [enabled])
@@ -103,6 +105,7 @@ export function useNow(stepMs = 1000): number {
 export interface PageState {
   result: PageResult
   loading: boolean
+  error: boolean
   /** bump to force reload */
   epoch: number
   reload: () => void
@@ -115,6 +118,7 @@ export interface PageState {
 export function useProjectsPage(def: FilterDefinition, limit: number, offset: number, active: boolean): PageState {
   const [result, setResult] = useState<PageResult>({ rows: [], total: 0, unread: 0 })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [epoch, setEpoch] = useState(0)
   const gen = useRef(0)
   const key = JSON.stringify(def)
@@ -127,10 +131,12 @@ export function useProjectsPage(def: FilterDefinition, limit: number, offset: nu
       if (gen.current !== my) return // stale: a newer query already started
       setResult(r)
       setLoading(false)
-    })
+      setError(false)
+    }).catch(() => { if(gen.current===my){setLoading(false);setError(true)} })
+    return () => { gen.current++ }
   }, [key, limit, offset, active, epoch])
   const reload = useCallback(() => setEpoch((e) => e + 1), [])
-  return { result, loading, epoch, reload }
+  return { result, loading, error, epoch, reload }
 }
 
 export function emptyFilterDef(): FilterDefinition {

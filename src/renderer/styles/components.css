@@ -29,6 +29,14 @@
   border-radius: var(--radius-s); padding: 8px 12px; outline: none; inline-size: 100%;
 }
 .input:focus, .select:focus, .textarea:focus { border-color: var(--accent-dim); }
+.input:focus-visible, .select:focus-visible, .textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.project-title-button { border: 0; padding: 0; background: transparent; color: var(--text); font: inherit; font-weight: inherit; text-align: start; cursor: pointer; inline-size: 100%; }
+.clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.quick-action { display: grid; gap: 5px; max-inline-size: 230px; }
+.quick-action .hint { font-size: 0.9rem; white-space: normal; }
+.readiness-summary { display: flex; gap: 12px; flex-wrap: wrap; padding: 12px 16px; margin-block: 14px; background: var(--accent-bg); border: 1px solid var(--border); border-radius: var(--radius); }
+.readiness-summary span { color: var(--muted); }
+.setup-disclosure > summary { cursor: pointer; padding-block: 12px; font-weight: 600; }
 .textarea { min-block-size: 110px; resize: vertical; line-height: 1.7; }
 .select { inline-size: auto; }
 .field-err { color: var(--bad); font-size: 0.85rem; }
@@ -74,6 +82,17 @@
 .opportunity-meta > * { flex-shrink: 0; }
 .opportunity-actions { display: flex; align-items: center; gap: 5px; grid-column: 1; grid-row: 1; }
 .opportunity-actions .btn { white-space: nowrap; }
+/* This must follow the default grid rules: the list shrinks independently of the window. */
+@container (max-width: 760px) {
+  .opportunity-row { grid-template-columns: minmax(0, 1fr); }
+  .opportunity-content { grid-column: 1; grid-row: 1; }
+  .opportunity-actions { grid-column: 1; grid-row: 2; justify-content: flex-start; flex-wrap: wrap; }
+  .opportunity-meta { flex-wrap: wrap; white-space: normal; }
+  .opportunity-actions .btn { white-space: normal; }
+}
+.compact-caption { display: grid; gap: 6px; padding: 8px 12px; font-size: 0.9rem; color: var(--muted); border-block-end: 1px solid var(--border); }
+.compact-caption label { display: flex; align-items: center; gap: 8px; }
+.inline-feedback { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-s); color: var(--text); background: var(--accent-bg); }
 .opportunity-actions .preview-action { color: var(--accent-strong); }
 .opportunity-actions .external-action { border-color: var(--accent-dim); color: var(--accent-strong); }
 .opportunity-actions .external-action:hover { background: var(--accent-bg); border-color: var(--accent); }

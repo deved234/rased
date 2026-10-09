@@ -1,6 +1,7 @@
 import React from 'react'
 import { rased } from '../api.js'
-import { go, registerNavigationBlocker } from '../router.js'
+import { go } from '../router.js'
+import { useUnsavedChanges } from '../components/useUnsavedChanges.js'
 import type { Lang } from '../i18n.js'
 import type { ProposalDraft, ProposalPreview } from '@shared/proposals.js'
 
@@ -20,6 +21,8 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
   const previewSequence = React.useRef(0)
   const [consent, setConsent] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
+  const [loadEpoch, setLoadEpoch] = React.useState(0)
+  const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState('')
   const [copied, setCopied] = React.useState(false)
   const dirtyRef = React.useRef(false)
@@ -40,12 +43,7 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
       setPreviewLoaded(true)
     }).catch(() => alive && setError(ar ? 'تعذر تحميل مساعد العروض.' : 'Could not load Proposal Assistant.'))
     return () => { alive = false; previewSequence.current++; void rased.cancelProposal() }
-  }, [projectId, ar])
-
-  React.useEffect(() => registerNavigationBlocker(() => {
-    if (!dirtyRef.current) return true
-    return window.confirm(ar ? 'لديك تعديلات غير محفوظة. هل تريد المغادرة؟' : 'You have unsaved changes. Leave?')
-  }), [ar])
+  }, [projectId, loadEpoch])
 
   const refresh = async (): Promise<void> => {
     const seq = ++previewSequence.current
@@ -67,24 +65,30 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
     } catch { if (seq === previewSequence.current) setError(aiErrorText('network-error', ar)) }
     finally { if (seq === previewSequence.current) setBusy(false) }
   }
-  const save = async (): Promise<void> => {
-    if (!draft) return
-    const result = await rased.saveProposalDraft(draft)
-    if (result.ok) { setSaved(draft.proposal); setError('') }
-    else setError(ar ? 'تعذر حفظ المسودة.' : 'Could not save draft.')
+  const save = async (): Promise<boolean> => {
+    const current = draftRef.current
+    if (!current || busy || saving) return false
+    setSaving(true)
+    try {
+      const result = await rased.saveProposalDraft(current)
+      if (!result.ok) { setError(ar ? 'تعذر حفظ المسودة.' : 'Could not save draft.'); return false }
+      setSaved(current.proposal); setError(''); return true
+    } catch { setError(ar ? 'تعذر حفظ المسودة. تعديلاتك ما زالت هنا.' : 'Could not save. Your edits are still here.'); return false } finally { setSaving(false) }
   }
+  const unsavedDialog = useUnsavedChanges(dirtyRef.current, ar, save)
   const copy = async (): Promise<void> => {
     if (!draft) return
     try { await navigator.clipboard.writeText(draft.proposal); setCopied(true); setTimeout(() => setCopied(false), 2200) }
     catch { setError(ar ? 'تعذر النسخ.' : 'Copy failed.') }
   }
   const open = async (): Promise<void> => {
-    const result = await rased.openProjectExternal(projectId)
+    let result
+    try { result = await rased.openProjectExternal(projectId) } catch { setError(ar ? 'تعذر فتح المتصفح.' : 'Could not open browser.'); return }
     if (!result.ok) setError(ar ? 'تعذر فتح المشروع في المتصفح.' : 'Could not open project in browser.')
   }
 
   return <div className="proposal-page">
-    <button className="btn ghost sm" onClick={() => go({ name: 'project', id: projectId })}>{ar ? '← المشروع' : '← Project'}</button>
+    <button className="btn ghost sm" onClick={() => go({ name: 'project', id: projectId })}>{ar ? 'المشروع →' : '← Project'}</button>
     <div className="proposal-hero"><span className="tag" dir="ltr">{AI_NAMES[selection.provider]}</span><h2>{ar ? 'مساعد العروض' : 'Proposal Assistant'}</h2><p className="muted">{ar ? 'مسودة قابلة للتعديل. راجعها ثم قدمها بنفسك على مستقل.' : 'An editable draft. Review it, then submit it yourself on Mostaql.'}</p></div>
     {!hasKey && <div className="banner warn">{ar ? 'أضف مفتاح الموفر المختار من الإعدادات.' : 'Add this provider’s API key in Settings.'} <button className="btn sm" onClick={() => go({ name: 'settings', section: 'ai' })}>{ar ? 'إعدادات المساعد' : 'Assistant settings'}</button></div>}
     <section className="proposal-card"><h3>{ar ? 'الموفر والموديل لهذا العرض' : 'Provider and model for this proposal'}</h3>
@@ -99,7 +103,7 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
         <details><summary>{ar ? 'عرض نص المشروع والملف الشخصي المرسل' : 'Show project text and profile sent'}</summary>
           <pre className="proposal-preview" dir="auto">{preview.description}</pre>
           <p>{ar ? 'التصنيف' : 'Category'}: {preview.category ?? '—'} · {ar ? 'المهارات' : 'Skills'}: {preview.skills.join('، ') || '—'} · {ar ? 'الميزانية' : 'Budget'}: {preview.budget ?? '—'}</p>
-          <pre className="proposal-preview" dir="auto">{JSON.stringify(preview.profile, null, 2)}</pre>
+          <dl className="profile-preview">{Object.entries(preview.profile).map(([field,value])=><div key={field}><dt>{({skills:ar?'المهارات':'Skills',experience:ar?'الخبرة':'Experience',portfolio:ar?'الأعمال':'Portfolio',tone:ar?'أسلوب العرض':'Tone',language:ar?'اللغة':'Language'} as Record<string,string>)[field]??field}</dt><dd dir="auto">{String(value)||'—'}</dd></div>)}</dl>
           {preview.projectNotes && <p dir="auto">{preview.projectNotes}</p>}
         </details>
       </> : <p className="muted">{previewLoaded ? (ar ? 'المعاينة غير متاحة أو تحتاج تحديثًا بعد تعديل التفاصيل.' : 'Preview unavailable or needs refreshing after editing notes.') : (ar ? 'جارٍ تحميل المشروع…' : 'Loading project…')}</p>}
@@ -110,11 +114,12 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
       <label className="proposal-consent"><input type="checkbox" checked={consent} disabled={!preview || busy} onChange={e => setConsent(e.target.checked)} /> {ar ? `راجعت البيانات وأوافق على إرسالها إلى ${AI_NAMES[selection.provider]} باستخدام ${selection.model} لهذا الطلب` : `I reviewed the data and agree to send it to ${AI_NAMES[selection.provider]} using ${selection.model} for this request`}</label>
       <div className="row-actions"><button className="btn primary" disabled={!preview || !consent || !hasKey || busy} onClick={() => void generate()}>{busy ? (ar ? 'جارٍ التوليد…' : 'Generating…') : (ar ? 'توليد المسودة' : 'Generate draft')}</button>{busy && <button className="btn" onClick={() => void rased.cancelProposal()}>{ar ? 'إلغاء' : 'Cancel'}</button>}</div>
     </section>
-    {draft && <section className="proposal-card"><h3>{ar ? 'مسودتك' : 'Your draft'}</h3><p className="muted small" dir="auto">{draft.provider && draft.model ? `${AI_NAMES[draft.provider]} · ${draft.model}` : (ar ? 'مسودة سابقة — المصدر غير مسجل' : 'Earlier draft — source not recorded')}</p><textarea className="textarea proposal-editor" dir="auto" maxLength={12000} value={draft.proposal} disabled={busy} onChange={e => setDraft({ ...draft, proposal: e.target.value })} />
-      <div className="row-actions"><button className="btn" disabled={busy || draft.proposal === saved} onClick={() => void save()}>{ar ? 'حفظ محليًا' : 'Save locally'}</button><button className="btn" onClick={() => void copy()}>{copied ? (ar ? 'تم النسخ' : 'Copied') : (ar ? 'نسخ العرض' : 'Copy proposal')}</button><button className="btn primary" onClick={() => void open()}>{ar ? 'فتح المشروع في المتصفح' : 'Open project in browser'}</button><button className="btn danger" disabled={busy} onClick={() => { if (window.confirm(ar ? 'حذف المسودة المحفوظة؟' : 'Delete saved draft?')) void rased.deleteProposalDraft(projectId).then(() => { setDraft(null); setSaved('') }) }}>{ar ? 'حذف المسودة' : 'Delete draft'}</button></div>
+    {draft && <section className="proposal-card"><h3>{ar ? 'مسودتك' : 'Your draft'}</h3><p className="muted small" dir="auto">{draft.provider && draft.model ? `${AI_NAMES[draft.provider]} · ${draft.model}` : (ar ? 'مسودة سابقة — المصدر غير مسجل' : 'Earlier draft — source not recorded')}</p><textarea aria-label={ar ? 'نص مسودة العرض' : 'Proposal draft text'} className="textarea proposal-editor" dir="auto" maxLength={12000} value={draft.proposal} disabled={busy} onChange={e => setDraft({ ...draft, proposal: e.target.value })} />
+      <div className="row-actions"><button className="btn" disabled={busy || draft.proposal === saved} onClick={() => void save()}>{ar ? 'حفظ محليًا' : 'Save locally'}</button><button className="btn" onClick={() => void copy()}>{copied ? (ar ? 'تم النسخ' : 'Copied') : (ar ? 'نسخ العرض' : 'Copy proposal')}</button><button className="btn primary" onClick={() => void open()}>{ar ? 'فتح المشروع في المتصفح' : 'Open project in browser'}</button><button className="btn danger" disabled={busy} onClick={() => { if (window.confirm(ar ? 'حذف المسودة المحفوظة؟' : 'Delete saved draft?')) void rased.deleteProposalDraft(projectId).then(() => { setDraft(null); setSaved('') }).catch(() => setError(ar ? 'تعذر حذف المسودة.' : 'Could not delete the draft.')) }}>{ar ? 'حذف المسودة' : 'Delete draft'}</button></div>
       {draft.assumptions.length > 0 && <><h4>{ar ? 'افتراضات تحتاج مراجعة' : 'Assumptions to review'}</h4><ul>{draft.assumptions.map((x, i) => <li key={i} dir="auto">{x}</li>)}</ul></>}
       {draft.questions.length > 0 && <><h4>{ar ? 'أسئلة مقترحة' : 'Suggested questions'}</h4><ul>{draft.questions.map((x, i) => <li key={i} dir="auto">{x}</li>)}</ul></>}
     </section>}
-    {error && <p className="field-err" role="alert">{error}</p>}
+    {error && <p className="field-err" role="alert">{error}{!setup && <button className="btn sm" onClick={() => setLoadEpoch(e => e + 1)}>{ar ? 'إعادة المحاولة' : 'Retry'}</button>}</p>}
+    {unsavedDialog}
   </div>
 }

@@ -22,6 +22,7 @@ Use Windows and Node.js 24 with npm.
 - `npm test`: run Vitest unit tests.
 - `npm run build`: generate legal assets and compile into `out/`.
 - `npm run test:e2e`: test built Electron/preload/SQLite integration; build first.
+- `npm run test:ui`: verify UI guards, field names and responsive layouts after building.
 - `npm run test:ai`: test provider settings, consent, encrypted key migration, cancellation, and Electron wiring with synthetic API fixtures; build first.
 - `npm run test:quick-apply`: verify extension setup UI and embedded-browser retirement.
 - `npm run test:extension`: exercise Chrome, the standalone native host, pairing, and safe form filling.

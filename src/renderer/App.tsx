@@ -1,5 +1,6 @@
 import React from 'react'
 import { Titlebar } from './components/Titlebar.js'
+import { ScreenBoundary } from './components/ScreenBoundary.js'
 import { rased } from './api.js'
 import { defaultFilterDefinition } from '@shared/types.js'
 import { STRINGS } from './i18n.js'
@@ -13,7 +14,7 @@ import { ProjectDetailView } from './views/ProjectDetailView.js'
 import { ProposalView } from './views/ProposalView.js'
 import { SplashView } from './views/SplashView.js'
 import { CompactView } from './views/CompactView.js'
-import { SettingsView } from './views/SettingsView.js'
+const SettingsView = React.lazy(() => import('./views/SettingsView.js').then(module => ({ default: module.SettingsView })))
 import { useUpdates, UpdateBanner } from './views/UpdatesView.js'
 
 type Boot = 'loading' | 'slow' | 'error' | 'welcome' | 'ready'
@@ -21,10 +22,10 @@ type Boot = 'loading' | 'slow' | 'error' | 'welcome' | 'ready'
 export function App(): React.ReactElement {
   const updateState = useUpdates()
   const route = useHashRoute()
-  const [settings, patchSettings, settingsReady] = useSettings()
+  const [bootEpoch, setBootEpoch] = React.useState(0)
+  const [settings, patchSettings, settingsReady] = useSettings(bootEpoch)
   const [boot, setBoot] = React.useState<Boot>('loading')
   const [bootError, setBootError] = React.useState<string | null>(null)
-  const [bootEpoch, setBootEpoch] = React.useState(0)
   const [bootStage, setBootStage] = React.useState<'settings' | 'database' | 'ready'>('settings')
   const [searchInput, setSearchInput] = React.useState('')
   const [search, setSearch] = React.useState('')
@@ -69,7 +70,7 @@ export function App(): React.ReactElement {
           if (!alive) return
           setBootStage('ready')
           setBoot('welcome')
-        }, Math.max(0, 1500 - (performance.now() - started)))
+        }, Math.max(0, 600 - (performance.now() - started)))
       } catch (err) {
         if (!alive) return
         setBootError(err instanceof Error ? err.message : String(err))
@@ -87,7 +88,7 @@ export function App(): React.ReactElement {
 
   React.useEffect(() => {
     if (boot !== 'welcome') return
-    const timer = setTimeout(() => setBoot('ready'), 1800)
+    const timer = setTimeout(() => setBoot('ready'), 800)
     return () => clearTimeout(timer)
   }, [boot])
 
@@ -241,7 +242,7 @@ export function App(): React.ReactElement {
             }}
           />
         ) : route.name === 'settings' ? (
-          <SettingsView
+          <ScreenBoundary ar={lang === 'ar'}><React.Suspense fallback={<div className="detail-wrap" role="status">{lang === 'ar' ? 'جارٍ فتح الإعدادات…' : 'Opening settings…'}</div>}><SettingsView
             lang={lang}
             settings={settings}
             health={health}
@@ -250,7 +251,7 @@ export function App(): React.ReactElement {
             patchSettings={patchSettings}
             section={route.section}
             onSection={(s) => go({ name: 'settings', section: s })}
-          />
+          /></React.Suspense></ScreenBoundary>
         ) : (
           <ProjectsView key="projects"
             lang={lang}

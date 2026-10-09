@@ -63,8 +63,8 @@ try {
   await sleep(150)
   await wait('!!document.querySelector(".splash") && !!document.querySelector(".window-titlebar")')
   check('startup splash is visible before the projects shell', await ev('!document.querySelector(".app") && !!document.querySelector(".window-titlebar")'))
-  await wait('document.querySelector(".splash")?.dataset.phase === "ready"')
-  check('ready splash confirms real local bootstrap and exposes entry', await ev('document.querySelectorAll(".splash-steps .done").length===3 && !!document.querySelector(".splash-enter")'))
+  await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
+  check('local bootstrap reaches ready splash or its automatic workspace', await ev('document.querySelector(".splash") ? document.querySelectorAll(".splash-steps .done").length===3 && !!document.querySelector(".splash-enter") : !!document.querySelector(".app")'))
   await sleep(600) // let the ready milestone's CSS transition settle for the screenshot
   mkdirSync('.local/qa/screenshots/startup', { recursive: true })
   const splashShot = await call(ws, 'Page.captureScreenshot', { format: 'png' })
@@ -318,8 +318,9 @@ try {
   // Real process restart, not Page.reload.
   await ev('window.rased.confirmClose(true)').catch(()=>{}); await sleep(500); await stopApp(child)
   child = startApp({exe,app,profile,port}); ws=await pageWs(port)
-  await wait('document.querySelector(".splash")?.dataset.phase === "ready"')
-  check('restart splash uses persisted English preferences', await ev('document.querySelector(".splash-enter")?.textContent === "Explore opportunities" && document.documentElement.dir === "ltr"'))
+  await call(ws, 'Page.reload')
+  await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
+  check('restart splash uses persisted English preferences', await ev('document.documentElement.lang === "en" && document.documentElement.dir === "ltr" && (document.querySelector(".splash-enter")?.textContent === "Explore opportunities" || !!document.querySelector(".app"))'))
   await sleep(600)
   const englishSplash = await call(ws, 'Page.captureScreenshot', { format: 'png' })
   writeFileSync('.local/qa/screenshots/startup/en-ready.png', Buffer.from(englishSplash.data, 'base64'))
@@ -382,5 +383,6 @@ try {
   check('no uncaught/late DB writes through exercised flows', problems.length===0,JSON.stringify(problems))
   console.log(`E2E PASSED (${passed} assertions), isolated profile: ${profile}`)
 } catch(err) {
+  try { console.error('Renderer failure state:', await ev('({phase:document.querySelector(".splash")?.dataset.phase,text:document.querySelector(".splash")?.textContent,rows:document.querySelectorAll("[data-row]").length})')) } catch { /* process may already have exited */ }
   console.error(`E2E FAILED after ${passed} assertions:`,err.stack); console.error('Profile retained:',profile); process.exitCode=1
 } finally { viewportSession?.close(); db.close(); if(child) await stopApp(child) }

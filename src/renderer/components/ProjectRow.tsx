@@ -36,7 +36,7 @@ export function ProjectRow({
   const onKey = (e: React.KeyboardEvent): void => {
     if (e.target !== e.currentTarget) return // inner buttons handle their own keys
     e.stopPropagation()
-    if (e.key === 'Enter' && !e.ctrlKey) {
+    if ((e.key === 'Enter' && !e.ctrlKey) || e.key === ' ') {
       e.preventDefault()
       onPreview()
     } else if (e.key === 'Enter' && e.ctrlKey) {
@@ -47,15 +47,14 @@ export function ProjectRow({
   return (
     <article
       className={['row', 'opportunity-row', p.readAt ? '' : 'unread', selected ? 'selected' : ''].filter(Boolean).join(' ')}
-      onClick={onPreview}
+      onClick={() => { if (!window.getSelection()?.toString()) onPreview() }}
       onKeyDown={onKey}
       tabIndex={0}
-      role="button"
-      aria-label={`${t.previewAction}: ${p.title}`}
+      aria-label={p.title}
       aria-current={selected ? 'true' : undefined}
     >
       <div className="opportunity-content">
-        <h3><span className="t clamp-1" dir="auto">{p.title}</span></h3>
+        <h3><button className="project-title-button" dir="auto" onClick={e=>{e.stopPropagation();onPreview()}} aria-label={`${t.previewAction}: ${p.title}`}><span className="t clamp-2">{p.title}</span></button></h3>
         {p.descriptionExcerpt && <p className="ex clamp-1" dir="auto">{p.descriptionExcerpt}</p>}
         <div className="meta opportunity-meta">
           <span className="tag">{sourceName(p.source, lang)}</span>

@@ -45,8 +45,8 @@ try {
   await launch()
   check('startup performs no AI requests', !traces().some(t => t.kind === 'ai-request'))
   for (const [provider, model] of providers) {
-    await nav('#/settings/ai'); await wait('!!document.querySelector("#ai-provider") && !document.querySelector("#ai-provider").disabled')
-    await select('#ai-provider', provider)
+    await nav('#/settings/ai'); await wait('!!document.querySelector("#setup-provider") && !document.querySelector("#setup-provider").disabled')
+    await select('#setup-provider', provider)
     await fill('#ai-key', 'fake-integration-' + provider + '-key')
     await click('حفظ المفتاح', '.proposal-settings button')
     await wait(`window.rased.getAiSetup().then(s=>s.providers.${provider}.keyReadable)`)
@@ -95,7 +95,7 @@ try {
   writeFileSync('.local/qa/screenshots/ai-providers/ar-settings.png', Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
   await ev('window.rased.updateSettings({language:"en"})'); await wait('document.documentElement.dir==="ltr" && !!document.querySelector("#ai-key")')
   writeFileSync('.local/qa/screenshots/ai-providers/en-settings.png', Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
-  check('English settings show all providers and model controls', await ev('document.querySelectorAll("#ai-provider option").length===3 && document.querySelector(".proposal-settings").textContent.includes("Test generation")'))
+  check('English settings show all providers and model controls', await ev('document.querySelectorAll("#setup-provider option").length===3 && document.querySelector(".proposal-settings").textContent.includes("Test generation")'))
   await ev('window.rased.confirmClose(true)').catch(() => {})
   await eventually(() => child.exitCode !== null, Boolean, 5000)
   child = null

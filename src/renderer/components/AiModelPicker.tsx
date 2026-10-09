@@ -2,8 +2,8 @@ import React from 'react'
 import { AI_NAMES, AI_PROVIDERS, aiErrorText, type AiSelection, type AiSetup } from '@shared/ai.js'
 import { rased } from '../api.js'
 
-export function AiModelPicker({ ar, selection, setup, disabled = false, onChange, onSetup }: {
-  ar: boolean; selection: AiSelection; setup: AiSetup | null; disabled?: boolean
+export function AiModelPicker({ ar, selection, setup, disabled = false, hideProvider = false, onChange, onSetup }: {
+  ar: boolean; selection: AiSelection; setup: AiSetup | null; disabled?: boolean; hideProvider?: boolean
   onChange: (selection: AiSelection) => void; onSetup: (setup: AiSetup) => void
 }): React.ReactElement {
   const [loading, setLoading] = React.useState(false)
@@ -23,10 +23,10 @@ export function AiModelPicker({ ar, selection, setup, disabled = false, onChange
     finally { setLoading(false) }
   }
   return <div className="ai-picker">
-    <div className="set-row"><label htmlFor="ai-provider">{ar ? 'الموفر' : 'Provider'}</label><select id="ai-provider" className="select" disabled={disabled || loading} value={selection.provider} onChange={e => {
+    {!hideProvider && <div className="set-row"><label htmlFor="ai-provider">{ar ? 'الموفر' : 'Provider'}</label><select id="ai-provider" className="select" disabled={disabled || loading} value={selection.provider} onChange={e => {
       const provider = e.target.value as AiSelection['provider']
       setSearch(''); setMessage(''); onChange({ provider, model: setup?.settings.modelByProvider[provider] ?? '' })
-    }}>{AI_PROVIDERS.map(p => <option key={p} value={p}>{AI_NAMES[p]}</option>)}</select></div>
+    }}>{AI_PROVIDERS.map(p => <option key={p} value={p}>{AI_NAMES[p]}</option>)}</select></div>}
     <div className="proposal-field"><label htmlFor="ai-model">{ar ? 'الموديل' : 'Model'}</label>
       {models.length > 15 && <input className="input" aria-label={ar ? 'بحث الموديلات' : 'Search models'} placeholder={ar ? 'بحث في الموديلات' : 'Search models'} value={search} onChange={e => setSearch(e.target.value)} disabled={disabled || loading} />}
       <select id="ai-model" className="select" dir="ltr" value={selection.model} disabled={disabled || loading} onChange={e => { setMessage(''); onChange({ ...selection, model: e.target.value }) }}>

@@ -239,9 +239,10 @@ function loadSettings(): AppSettings {
 
 function saveSettings(s: AppSettings): void {
   if(s.quickApply.enabled&&!extension?.available())s={...s,quickApply:{...s.quickApply,enabled:false}}
-  if(!s.quickApply.enabled)extension?.cancel()
-  settings = s
+  // Persist first: a failed write must not change live settings or cancel work.
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
+  settings = s
+  if(!s.quickApply.enabled)extension?.cancel()
   applyAutoStart()
   broadcast(IPC.settingsChanged, s)
   updateTray()
@@ -1056,7 +1057,7 @@ function updateTray(): void {
       },
       { label: ar ? 'الإعدادات' : 'Settings', click: () => { win?.show(); win?.webContents.send('rased:open-settings') } },
       { type: 'separator' },
-      { label: ar ? 'خروج' : 'Quit', click: () => doQuit() }
+      { label: ar ? 'خروج' : 'Quit', click: () => { if (win && !win.isDestroyed()) { win.show(); win.webContents.send(IPC.requestClose, { quit: true }) } else doQuit() } }
     ])
   )
 }

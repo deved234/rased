@@ -16,8 +16,15 @@ export function LegalView({ lang }: { lang: Lang }): React.ReactElement {
   }
   return <div className="legal-page">
     <div className="set-group"><h2>{ar ? 'شروط الاستخدام والخصوصية' : 'Terms & privacy'}</h2><p className="muted">{ar ? 'راصد برنامج مستقل طوّره david atef؛ ليس تابعًا لحسوب أو نفذلي ولا منتجًا رسميًا للمنصات المدعومة.' : 'RASED is an independent app by david atef; it is not affiliated with Hsoub, Nafezly, or the supported platforms.'}</p><span className="small muted">{ar ? 'آخر تحديث: ' : 'Last updated: '}{LEGAL_UPDATED_AT}</span></div>
-    <div className="chips" role="tablist" aria-label={ar ? 'المستندات القانونية' : 'Legal documents'}>{(['terms','privacy','licenses'] as const).map(id=><button key={id} role="tab" aria-selected={doc===id} className={doc===id?'chip active':'chip'} onClick={()=>setDoc(id)}>{content[id].title}</button>)}</div>
-    <article className="set-group" role="tabpanel" aria-label={content[doc].title}>
+    <div className="chips" role="tablist" aria-label={ar ? 'المستندات القانونية' : 'Legal documents'}>{(['terms','privacy','licenses'] as const).map((id,index)=><button key={id} id={`legal-tab-${id}`} role="tab" aria-controls={`legal-panel-${id}`} tabIndex={doc===id?0:-1} aria-selected={doc===id} className={doc===id?'chip active':'chip'} onClick={()=>setDoc(id)} onKeyDown={e=>{
+      const ids=['terms','privacy','licenses'] as const
+      const delta=e.key==='ArrowRight'?(ar?-1:1):e.key==='ArrowLeft'?(ar?1:-1):0
+      if(!delta && e.key!=='Home' && e.key!=='End')return
+      e.preventDefault()
+      const next=ids[e.key==='Home'?0:e.key==='End'?2:(index+delta+3)%3]!
+      setDoc(next);document.getElementById(`legal-tab-${next}`)?.focus()
+    }}>{content[id].title}</button>)}</div>
+    <article id={`legal-panel-${doc}`} className="set-group" role="tabpanel" aria-labelledby={`legal-tab-${doc}`} tabIndex={0}>
       {content[doc].sections.map(([title,body])=><section className="legal-section" key={title}><h3>{title}</h3><p>{body}</p></section>)}
       {doc==='licenses' && <><details><summary>MIT — RASED</summary><pre className="license-text" dir="ltr">{license}</pre></details><details><summary>{ar ? 'نصوص رخص المكونات والخطوط' : 'Component and font license texts'}</summary><pre className="license-text" dir="ltr">{notices}</pre></details></>}
     </article>

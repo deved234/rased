@@ -11,13 +11,14 @@ import { openOnSource, sourceName } from '../sourceCopy.js'
 
 /** Mini follower window: latest headlines, same services, no collector of its own. */
 export function CompactView(): React.ReactElement {
-  const [settings, , ready] = useSettings()
+  const [settings, patch, ready] = useSettings()
   const lang = settings.language
   const t = STRINGS[lang]
   const health = useHealth(ready)
   const khamsatHealth = useKhamsatHealth(ready)
   const nafezlyHealth = useNafezlyHealth(ready)
   const overall = overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : [])])
+  const [error, setError] = React.useState(false)
   const [rows, setRows] = React.useState<ProjectWithUser[]>([])
   void useNow(5000)
 
@@ -25,14 +26,16 @@ export function CompactView(): React.ReactElement {
     if (ready) applyUiPrefs(settings)
   }, [settings, ready])
 
+  const queryGeneration = React.useRef(0)
   const reload = React.useCallback(() => {
-    void rased.queryProjectsPage(defaultFilterDefinition(), 8, 0).then((r) => setRows(r.rows))
-  }, [])
+    const generation = ++queryGeneration.current
+    void rased.queryProjectsPage(settings.ui.compactUseDisplayFilter ? settings.displayQuery : defaultFilterDefinition(), 8, 0).then((r) => { if (generation === queryGeneration.current) { setRows(r.rows); setError(false) } }).catch(() => { if (generation === queryGeneration.current) setError(true) })
+  }, [settings.displayQuery, settings.ui.compactUseDisplayFilter])
   React.useEffect(() => {
     if (!ready) return
     reload()
     const off = rased.onProjectsChanged(() => reload())
-    return off
+    return () => { queryGeneration.current++; off() }
   }, [ready, reload])
 
   const pin = settings.ui.compactAlwaysOnTop
@@ -49,12 +52,14 @@ export function CompactView(): React.ReactElement {
           aria-pressed={pin}
           onClick={() => {
             // Main persists the pref and broadcasts settingsChanged; no double write here.
-            void rased.setAlwaysOnTop(!pin)
+            void rased.setAlwaysOnTop(!pin).catch(() => setError(true))
           }}
         >
           <Icon name="pin" size={16} />
         </button>
       </div>
+      <div className="compact-caption"><span>{lang === 'ar' ? 'أحدث 8 فرص' : 'Latest 8 opportunities'}</span><label><input type="checkbox" checked={settings.ui.compactUseDisplayFilter} onChange={e => void patch({ui:{...settings.ui,compactUseDisplayFilter:e.target.checked}}).catch(()=>setError(true))}/>{lang === 'ar' ? 'استخدم فلتر القائمة' : 'Use list filter'}</label></div>
+      {error && <p className="field-err" role="alert">{lang === 'ar' ? 'تعذر التحديث. حاول مرة أخرى.' : 'Could not refresh. Try again.'}<button className="btn sm" onClick={reload}>{lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}</button></p>}
       <div className="compact-list" role="list">
         {rows.map((p) => (
           <div key={p.id} className={p.readAt ? 'row' : 'row unread'} role="listitem">
@@ -80,7 +85,7 @@ export function CompactView(): React.ReactElement {
                 aria-pressed={p.saved}
                 onClick={(e) => {
                   e.stopPropagation()
-                  void rased.updateProjectUserState(p.id, { saved: !p.saved }).then(() => reload())
+                  void rased.updateProjectUserState(p.id, { saved: !p.saved }).then(() => reload()).catch(() => setError(true))
                 }}
               >
                 <Icon name={p.saved ? 'bookmarkFill' : 'bookmark'} size={15} />

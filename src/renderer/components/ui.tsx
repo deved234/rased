@@ -7,7 +7,7 @@ export function useDialogFocus(ref: React.RefObject<HTMLElement | null>, enabled
     const panel = ref.current
     if (!enabled || !panel) return
     const previous = document.activeElement as HTMLElement | null
-    const focusable = (): HTMLElement[] => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')).filter(e => e.getClientRects().length > 0)
+    const focusable = (): HTMLElement[] => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]')).filter(e => e.getClientRects().length > 0)
     focusable()[0]?.focus()
     const key = (e: KeyboardEvent): void => {
       if (e.key !== 'Tab') return
@@ -58,6 +58,7 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel,
+  busy = false,
   danger,
   onConfirm,
   onCancel,
@@ -67,6 +68,7 @@ export function ConfirmDialog({
   title: string
   body?: string
   confirmLabel?: string
+  busy?: boolean
   danger?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -77,23 +79,23 @@ export function ConfirmDialog({
   useDialogFocus(panelRef)
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape' && !busy) onCancel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
+  }, [onCancel, busy])
   return (
     <>
-      <div className="scrim" onClick={onCancel} />
+      <div className="scrim" onClick={() => { if (!busy) onCancel() }} />
       <div ref={panelRef} className="dialog" role="alertdialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
         {body && <p className="muted">{body}</p>}
         <div className="actions">
           {extraAction}
-          <button className="btn" onClick={onCancel}>
+          <button className="btn" disabled={busy} onClick={onCancel}>
             {t.cancel}
           </button>
-          <button className={danger ? 'btn danger' : 'btn primary'} onClick={onConfirm} autoFocus>
+          <button className={danger ? 'btn danger' : 'btn primary'} disabled={busy} onClick={onConfirm} autoFocus>
             {confirmLabel ?? t.confirm}
           </button>
         </div>

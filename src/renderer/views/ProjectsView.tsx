@@ -66,6 +66,8 @@ export function ProjectsView({
   const [total, setTotal] = React.useState(0)
   const [unread, setUnread] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
+  const [filterBusy, setFilterBusy] = React.useState(false)
+  const filterMutation = React.useRef(false)
   const [drawer, setDrawer] = React.useState(false)
   const [pendingNew, setPendingNew] = React.useState<number[]>([])
   const [selectedId, setSelectedId] = React.useState<number | null>(memory.selectedId)
@@ -425,7 +427,7 @@ export function ProjectsView({
           <PreviewPanel
             lang={lang}
             project={selected}
-            onClose={() => void patchSettings({ ui: { ...settings.ui, previewOpen: false } })}
+            onClose={() => { void patchSettings({ ui: { ...settings.ui, previewOpen: false } }).then(() => document.querySelector<HTMLElement>(`[data-row="${selected.id}"] .project-title-button`)?.focus()).catch(() => setActionError(lang === 'ar' ? 'تعذر حفظ إعداد المعاينة.' : 'Could not save preview preference.')) }}
             onOpenDetail={() => openDetail(selected.id)}
             onOpenExternal={() => void openExternal(selected.id)}
             onToggleSave={() => void toggleSave(selected)}
@@ -442,7 +444,7 @@ export function ProjectsView({
             <PreviewPanel
               lang={lang}
               project={selected}
-              onClose={() => void patchSettings({ ui: { ...settings.ui, previewOpen: false } })}
+              onClose={() => { void patchSettings({ ui: { ...settings.ui, previewOpen: false } }).then(() => document.querySelector<HTMLElement>(`[data-row="${selected.id}"] .project-title-button`)?.focus()).catch(() => setActionError(lang === 'ar' ? 'تعذر حفظ إعداد المعاينة.' : 'Could not save preview preference.')) }}
               onOpenDetail={() => openDetail(selected.id)}
               onOpenExternal={() => void openExternal(selected.id)}
               onToggleSave={() => void toggleSave(selected)}
@@ -457,13 +459,17 @@ export function ProjectsView({
       {drawer && (
         <FilterDrawer
           lang={lang}
+          busy={filterBusy}
+          error={!!actionError}
           initial={def}
           notifyFilter={settings.notifyFilter}
           linked={settings.linkDisplayAndNotifyFilters}
           onToggleLink={(v) => void patchSettings({ linkDisplayAndNotifyFilters: v })}
           onApply={(d) => { applyDefinition(d); setDrawer(false) }}
           onSave={(name, d) => {
-            void rased.createSavedFilter(name, d).then(() => setDrawer(false))
+            if (filterMutation.current) return
+            filterMutation.current = true; setFilterBusy(true); setActionError(null)
+            void rased.createSavedFilter(name, d).then(() => setDrawer(false)).catch(() => setActionError(lang === 'ar' ? 'تعذر حفظ الفلتر. أعد المحاولة.' : 'Could not save the filter. Retry.')).finally(() => { filterMutation.current = false; setFilterBusy(false) })
           }}
           onClose={() => setDrawer(false)}
         />
@@ -531,6 +537,8 @@ function PreviewPanel({
             ))}
           </div>
         )}
+      </div>
+      <div className="preview-footer">
         <div className="row-actions">
           <QuickApplyButton id={p.id} source={p.source} lang={lang}/>
           <button className="btn primary sm" onClick={onOpenDetail}>

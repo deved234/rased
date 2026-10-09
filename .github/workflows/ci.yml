@@ -24,3 +24,4 @@ jobs:
       - run: npm run test:e2e
       - run: npm run test:ai
       - run: npm run test:quick-apply
+      - run: npm run test:ui

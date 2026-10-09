@@ -177,6 +177,7 @@ export interface UiPreferences {
   /** layout generation, used to migrate the original wide default once */
   previewLayoutVersion: 2
   autoRevealNew: boolean
+  compactUseDisplayFilter: boolean
   compactAlwaysOnTop: boolean
   closeBehavior: 'tray' | 'quit'
 }
@@ -291,6 +292,7 @@ export function defaultUiPreferences(): UiPreferences {
     previewRatio: 0.32,
     previewLayoutVersion: 2,
     autoRevealNew: false,
+    compactUseDisplayFilter: false,
     compactAlwaysOnTop: false,
     closeBehavior: 'tray'
   }
@@ -384,6 +386,7 @@ function sanitizeUiPreferences(v: unknown): UiPreferences {
     previewRatio: Math.min(0.6, Math.max(0.25, ratio)),
     previewLayoutVersion: 2,
     autoRevealNew: o['autoRevealNew'] === true,
+    compactUseDisplayFilter: o['compactUseDisplayFilter'] === true,
     compactAlwaysOnTop: o['compactAlwaysOnTop'] === true,
     closeBehavior: o['closeBehavior'] === 'quit' ? 'quit' : 'tray'
   }

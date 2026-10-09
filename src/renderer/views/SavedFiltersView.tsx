@@ -23,6 +23,9 @@ export function SavedFiltersView({
 }): React.ReactElement {
   const t = STRINGS[lang]
   const [filters, setFilters] = React.useState<SavedFilter[]>([])
+  const mutation = React.useRef(false)
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [editing, setEditing] = React.useState<SavedFilter | null>(null)
   const [deleting, setDeleting] = React.useState<SavedFilter | null>(null)
@@ -32,7 +35,8 @@ export function SavedFiltersView({
     void rased.getSavedFilters().then((f) => {
       setFilters(f)
       setLoading(false)
-    })
+      setError(false)
+    }).catch(() => { setLoading(false); setError(true) })
   }, [])
   React.useEffect(() => {
     reload()
@@ -41,6 +45,7 @@ export function SavedFiltersView({
   return (
     <div className="settings">
       <div className="settings-inner">
+        {error && <p role="alert" className="field-err">{lang === 'ar' ? 'تعذر إتمام العملية. تعديلاتك محفوظة في هذه النافذة.' : 'Could not complete the operation. Your edits remain in this window.'}<button className="btn sm" onClick={reload}>{lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}</button></p>}
         <div className="set-group">
           <h2>{t.navFilters}</h2>
           <p className="desc">{t.keywordExcerptNote}</p>
@@ -70,7 +75,7 @@ export function SavedFiltersView({
                   {t.applyFilterBtn}
                 </button>
                 <button className="btn sm" onClick={() => setEditing(f)}>
-                  {t.rename}
+                  {lang === 'ar' ? 'تعديل الفلتر' : 'Edit filter'}
                 </button>
                 <button className="btn sm danger" onClick={() => setDeleting(f)}>
                   {t.deleteFilterBtn}
@@ -84,7 +89,10 @@ export function SavedFiltersView({
       {(creating || editing) && (
         <FilterDrawer
           lang={lang}
+          busy={busy}
+          error={error}
           initial={editing ? editing.definition : defaultFilterDefinition()}
+          initialName={editing?.name ?? ''}
           notifyFilter={notifyFilter}
           linked={linked}
           onToggleLink={onToggleLink}
@@ -98,16 +106,18 @@ export function SavedFiltersView({
             setEditing(null)
           }}
           onSave={(name, def) => {
+            if (mutation.current) return
+            mutation.current = true; setBusy(true)
             if (editing) {
               void rased.updateSavedFilter(editing.id, name, def).then(() => {
                 setEditing(null)
                 reload()
-              })
+              }).catch(() => setError(true)).finally(() => { mutation.current = false; setBusy(false) })
             } else {
               void rased.createSavedFilter(name, def).then(() => {
                 setCreating(false)
                 reload()
-              })
+              }).catch(() => setError(true)).finally(() => { mutation.current = false; setBusy(false) })
             }
           }}
         />
@@ -118,12 +128,15 @@ export function SavedFiltersView({
           title={t.confirmDeleteFilter}
           body={deleting.name}
           danger
+          busy={busy}
           confirmLabel={t.deleteFilterBtn}
           onConfirm={() => {
+            if (mutation.current) return
+            mutation.current = true; setBusy(true)
             void rased.deleteSavedFilter(deleting.id).then(() => {
               setDeleting(null)
               reload()
-            })
+            }).catch(() => setError(true)).finally(() => { mutation.current = false; setBusy(false) })
           }}
           onCancel={() => setDeleting(null)}
         />

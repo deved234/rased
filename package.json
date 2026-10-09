@@ -119,6 +119,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e": "node scripts/e2e-cdp.mjs",
     "test:ai": "node scripts/ai-e2e.mjs",
+    "test:ui": "node scripts/ui-ux-e2e.mjs",
     "test:quick-apply": "node scripts/quick-apply-e2e.mjs",
     "prebuild": "node scripts/prepare-legal.mjs && npm run build:extension && npm run build:native-host",
     "release": "node scripts/publish-release.mjs",
@@ -127,5 +128,5 @@
     "build:native-host": "node scripts/build-native-host.mjs",
     "test:extension": "node scripts/test-chrome-extension.mjs"
   },
-  "version": "0.5.0"
+  "version": "0.6.0"
 }

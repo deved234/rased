@@ -3,6 +3,7 @@ import { LegalView } from './LegalView.js'
 import { UpdatesView, updatesTitle } from './UpdatesView.js'
 import { ProposalSettings } from './ProposalSettings.js'
 import { QuickApplySettings } from './QuickApplySettings.js'
+import { useUnsavedChanges } from '../components/useUnsavedChanges.js'
 import { rased } from '../api.js'
 import { DEVELOPER_NAME, type AboutLink } from '@shared/about.js'
 import logo from '../assets/logo.svg'
@@ -47,8 +48,8 @@ function CategoryEditor({
   return (
     <>
       <div className="set-row">
-        <label>{t.filterModeAll} / {t.filterModeSelected}</label>
-        <select className="select" value={value.mode} onChange={(e) => onChange({ ...value, mode: e.target.value === 'selected' ? 'selected' : 'all' })}>
+        <label htmlFor="settings-field-1">{t.filterModeAll} / {t.filterModeSelected}</label>
+        <select id="settings-field-1" className="select" value={value.mode} onChange={(e) => onChange({ ...value, mode: e.target.value === 'selected' ? 'selected' : 'all' })}>
           <option value="all">{t.filterModeAll}</option>
           <option value="selected">{t.filterModeSelected}</option>
         </select>
@@ -86,7 +87,7 @@ export function SettingsView({
   health,
   khamsatHealth,
   nafezlyHealth,
-  patchSettings,
+  patchSettings: writeSettings,
   section,
   onSection
 }: {
@@ -99,6 +100,11 @@ export function SettingsView({
   section: string | null
   onSection: (s: Section) => void
 }): React.ReactElement {
+  const [dataBusy, setDataBusy] = React.useState(false)
+  const [saveError, setSaveError] = React.useState(false)
+  const patchSettings = async (value: Partial<AppSettings>): Promise<void> => {
+    try { await writeSettings(value); setSaveError(false) } catch { setSaveError(true) }
+  }
   const t = STRINGS[lang]
   const active: Section = section && (SECTIONS as string[]).includes(section) ? (section as Section) : 'watching'
   const [diag, setDiag] = React.useState<DiagnosticEntry[]>([])
@@ -123,6 +129,14 @@ export function SettingsView({
   React.useEffect(() => setNafezlyAny(settings.nafezlyKeywordsAny.join(', ')), [settings.nafezlyKeywordsAny.join(',')])
   React.useEffect(() => setNafezlyExclude(settings.nafezlyExcludeKeywords.join(', ')), [settings.nafezlyExcludeKeywords.join(',')])
   const splitKeywords = (value: string): string[] => value.split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 100)
+  const keywordDirty = khamsatAny !== settings.khamsatKeywordsAny.join(', ') || khamsatExclude !== settings.khamsatExcludeKeywords.join(', ') || nafezlyAny !== settings.nafezlyKeywordsAny.join(', ') || nafezlyExclude !== settings.nafezlyExcludeKeywords.join(', ')
+  const [keywordBusy, setKeywordBusy] = React.useState(false)
+  const saveKeywords = async (): Promise<boolean> => {
+    if (keywordBusy) return false
+    setKeywordBusy(true)
+    try { await writeSettings({khamsatKeywordsAny:splitKeywords(khamsatAny),khamsatExcludeKeywords:splitKeywords(khamsatExclude),nafezlyKeywordsAny:splitKeywords(nafezlyAny),nafezlyExcludeKeywords:splitKeywords(nafezlyExclude)});setSaveError(false);return true } catch {setSaveError(true);return false} finally {setKeywordBusy(false)}
+  }
+  const keywordDialog = useUnsavedChanges(keywordDirty, lang === 'ar', saveKeywords, active === 'notifications', () => { setKhamsatAny(settings.khamsatKeywordsAny.join(', '));setKhamsatExclude(settings.khamsatExcludeKeywords.join(', '));setNafezlyAny(settings.nafezlyKeywordsAny.join(', '));setNafezlyExclude(settings.nafezlyExcludeKeywords.join(', ')) })
   const openAboutLink = async (link: AboutLink): Promise<void> => {
     try {
       const result = await rased.openAboutLink(link)
@@ -133,8 +147,8 @@ export function SettingsView({
 
   React.useEffect(() => {
     let alive = true
-    void rased.getDiagnostics(20).then((d) => alive && setDiag(d))
-    void rased.getAppInfo().then((a) => alive && setAppInfo(a))
+    void rased.getDiagnostics(20).then((d) => alive && setDiag(d)).catch(() => alive && setSaveError(true))
+    void rased.getAppInfo().then((a) => alive && setAppInfo(a)).catch(() => alive && setAboutError(t.aboutLinkError))
     return () => {
       alive = false
     }
@@ -142,25 +156,27 @@ export function SettingsView({
 
   const dndActive = settings.doNotDisturbUntil && Date.parse(settings.doNotDisturbUntil) > Date.now()
   const setDndMinutes = (m: number): void => {
-    void rased.setDnd(m === 0 ? null : new Date(Date.now() + m * 60_000).toISOString())
+    void rased.setDnd(m === 0 ? null : new Date(Date.now() + m * 60_000).toISOString()).catch(() => setSaveError(true))
   }
 
   return (
     <div className="settings">
-      <div className="settings-inner">
-        <div className="chips" role="tablist" aria-label={t.navSettings}>
-          {SECTIONS.map((s) => (
+      <div className="settings-inner settings-layout">
+        <nav className="settings-nav" aria-label={t.navSettings}>
+          {SECTIONS.map((s, index) => (
+            <React.Fragment key={s}>
+            {[0,2,3,5,7].includes(index) && <span className="settings-nav-heading">{({0:lang==='ar'?'الرصد والتنبيهات':'Monitoring',2:lang==='ar'?'المظهر':'Appearance',3:lang==='ar'?'العروض':'Proposals',5:lang==='ar'?'إدارة التطبيق':'App management',7:lang==='ar'?'المساعدة والمعلومات':'Help and information'} as Record<number,string>)[index]}</span>}
             <button
-              key={s}
-              role="tab"
-              aria-selected={active === s}
-              className={active === s ? 'chip active' : 'chip'}
+              aria-current={active === s ? 'page' : undefined}
+              className={active === s ? 'settings-nav-item active' : 'settings-nav-item'}
               onClick={() => onSection(s)}
             >
               {sectionTitle(s, lang)}
-            </button>
+            </button></React.Fragment>
           ))}
-        </div>
+        </nav>
+        <div className="settings-content">
+        {saveError && <p className="field-err" role="alert">{lang === 'ar' ? 'تعذر حفظ الإعداد. حاول مرة أخرى؛ القيمة المحفوظة لم تتغير.' : 'Could not save the setting. Retry; the saved value has not changed.'}</p>}
 
         {active === 'watching' && (
           <><div className="set-group">
@@ -172,8 +188,8 @@ export function SettingsView({
             </div>
             <p className="hint">{lang === 'ar' ? 'الإيقاف المؤقت يخص مستقل وحده ويُلغى عند إعادة تشغيل راصد.' : 'Pause affects only Mostaql and resets when RASED restarts.'}</p>
             <div className="set-row">
-              <label>{t.settingsInterval}</label>
-              <select
+              <label htmlFor="settings-field-2">{t.settingsInterval}</label>
+              <select id="settings-field-2"
                 className="select"
                 value={settings.pollIntervalMs}
                 onChange={(e) => void patchSettings({ pollIntervalMs: Number(e.target.value) as 2000 | 5000 | 15000 })}
@@ -196,8 +212,8 @@ export function SettingsView({
               <Toggle checked={settings.runAtStartup} onChange={(v) => void patchSettings({ runAtStartup: v })} label={t.settingsStartup} />
             </div>
             <div className="set-row">
-              <label>{t.closeBehavior}</label>
-              <select
+              <label htmlFor="settings-field-3">{t.closeBehavior}</label>
+              <select id="settings-field-3"
                 className="select"
                 value={settings.ui.closeBehavior}
                 onChange={(e) => void patchSettings({ ui: { ...settings.ui, closeBehavior: e.target.value === 'quit' ? 'quit' : 'tray' } })}
@@ -254,6 +270,7 @@ export function SettingsView({
               <div className="set-row">
                 <button
                   className="btn sm"
+                  disabled={dataBusy}
                   onClick={() => {
                     setTestMsg(null)
                     void rased.testNotification().then((r) => setTestMsg(r.ok ? t.testNotificationBtn + ' ✓' : t.testNotificationBtn + ' ✗'))
@@ -263,6 +280,7 @@ export function SettingsView({
                 </button>
                 <button
                   className="btn sm"
+                  disabled={dataBusy}
                   onClick={() => {
                     void rased.testSound().then(() => setTestMsg(t.testSoundBtn + ' ✓'))
                   }}
@@ -290,11 +308,11 @@ export function SettingsView({
               </div>
               <div className="set-row">
                 <label htmlFor="khamsat-any">{lang === 'ar' ? 'أي كلمة من' : 'Any keyword'}</label>
-                <input id="khamsat-any" className="input" value={khamsatAny} onChange={e => setKhamsatAny(e.target.value)} onBlur={() => void patchSettings({ khamsatKeywordsAny: splitKeywords(khamsatAny) })} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
+                <input id="khamsat-any" disabled={keywordBusy} className="input" value={khamsatAny} onChange={e => setKhamsatAny(e.target.value)} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
               </div>
               <div className="set-row">
                 <label htmlFor="khamsat-exclude">{lang === 'ar' ? 'استبعاد كلمات' : 'Exclude keywords'}</label>
-                <input id="khamsat-exclude" className="input" value={khamsatExclude} onChange={e => setKhamsatExclude(e.target.value)} onBlur={() => void patchSettings({ khamsatExcludeKeywords: splitKeywords(khamsatExclude) })} />
+                <input id="khamsat-exclude" disabled={keywordBusy} className="input" value={khamsatExclude} onChange={e => setKhamsatExclude(e.target.value)} />
               </div>
               <p className="hint">{lang === 'ar' ? 'فلترة خمسات تعتمد على عنوان الطلب فقط حاليًا. اترك حقل «أي كلمة» فارغًا للتنبيه بكل الطلبات.' : 'Khamsat filtering currently uses request titles only. Leave “Any keyword” blank for all requests.'}</p>
             </div>
@@ -307,11 +325,11 @@ export function SettingsView({
               </div>
               <div className="set-row">
                 <label htmlFor="nafezly-any">{lang === 'ar' ? 'أي كلمة من' : 'Any keyword'}</label>
-                <input id="nafezly-any" className="input" value={nafezlyAny} onChange={e => setNafezlyAny(e.target.value)} onBlur={() => void patchSettings({ nafezlyKeywordsAny: splitKeywords(nafezlyAny) })} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
+                <input id="nafezly-any" disabled={keywordBusy} className="input" value={nafezlyAny} onChange={e => setNafezlyAny(e.target.value)} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
               </div>
               <div className="set-row">
                 <label htmlFor="nafezly-exclude">{lang === 'ar' ? 'استبعاد كلمات' : 'Exclude keywords'}</label>
-                <input id="nafezly-exclude" className="input" value={nafezlyExclude} onChange={e => setNafezlyExclude(e.target.value)} onBlur={() => void patchSettings({ nafezlyExcludeKeywords: splitKeywords(nafezlyExclude) })} />
+                <input id="nafezly-exclude" disabled={keywordBusy} className="input" value={nafezlyExclude} onChange={e => setNafezlyExclude(e.target.value)} />
               </div>
               <p className="hint">{lang === 'ar' ? 'تُطبّق الكلمات على عنوان المشروع والوصف الكامل الوارد في RSS. اترك «أي كلمة» فارغًا للتنبيه بكل المشاريع.' : 'Keywords match the project title and full RSS description. Leave “Any keyword” blank for all projects.'}</p>
             </div>
@@ -367,29 +385,30 @@ export function SettingsView({
                 <span className="hint">{t.linkFiltersHint}</span>
               </div>
             </div>
+            <div className="set-group"><p className="hint">{lang === 'ar' ? 'كلمات خمسات ونفذلي لا تتغير إلا عند الحفظ. خيارات التبديل الأخرى تحفظ فورًا.' : 'Khamsat and Nafezly keywords change only when saved. Other switches save immediately.'}</p><button className="btn primary" disabled={keywordBusy || !keywordDirty} onClick={()=>void saveKeywords()}>{lang === 'ar' ? 'حفظ كلمات التنبيهات' : 'Save alert keywords'}</button></div>
           </>
         )}
 
-        {active === 'appearance' && (
+        {active === 'appearance'  && (
           <div className="set-group">
             <h2>{t.settingsAppearance}</h2>
             <div className="set-row">
-              <label>{t.settingsLanguage}</label>
-              <select className="select" value={settings.language} onChange={(e) => void patchSettings({ language: e.target.value === 'en' ? 'en' : 'ar' })}>
+              <label htmlFor="settings-field-4">{t.settingsLanguage}</label>
+              <select id="settings-field-4" className="select" value={settings.language} onChange={(e) => void patchSettings({ language: e.target.value === 'en' ? 'en' : 'ar' })}>
                 <option value="ar">العربية</option>
                 <option value="en">English</option>
               </select>
             </div>
             <div className="set-row">
-              <label>{t.themeTitle}</label>
-              <select className="select" value={settings.ui.theme} onChange={(e) => void patchSettings({ ui: { ...settings.ui, theme: e.target.value === 'light' ? 'light' : 'dark' } })}>
+              <label htmlFor="settings-field-5">{t.themeTitle}</label>
+              <select id="settings-field-5" className="select" value={settings.ui.theme} onChange={(e) => void patchSettings({ ui: { ...settings.ui, theme: e.target.value === 'light' ? 'light' : 'dark' } })}>
                 <option value="dark">{t.themeDark}</option>
                 <option value="light">{t.themeLight}</option>
               </select>
             </div>
             <div className="set-row">
-              <label>{t.textScaleTitle}</label>
-              <select
+              <label htmlFor="settings-field-6">{t.textScaleTitle}</label>
+              <select id="settings-field-6"
                 className="select"
                 value={settings.ui.textScale}
                 onChange={(e) => void patchSettings({ ui: { ...settings.ui, textScale: Number(e.target.value) as 90 | 100 | 110 | 125 } })}
@@ -401,8 +420,8 @@ export function SettingsView({
               </select>
             </div>
             <div className="set-row">
-              <label>{t.densityTitle}</label>
-              <select
+              <label htmlFor="settings-field-7">{t.densityTitle}</label>
+              <select id="settings-field-7"
                 className="select"
                 value={settings.ui.density}
                 onChange={(e) => void patchSettings({ ui: { ...settings.ui, density: e.target.value === 'compact' ? 'compact' : 'comfortable' } })}
@@ -412,8 +431,8 @@ export function SettingsView({
               </select>
             </div>
             <div className="set-row">
-              <label>{t.sidebarTitle}</label>
-              <select
+              <label htmlFor="settings-field-8">{t.sidebarTitle}</label>
+              <select id="settings-field-8"
                 className="select"
                 value={settings.ui.sidebarCollapsed ? 'collapsed' : 'expanded'}
                 onChange={(e) => void patchSettings({ ui: { ...settings.ui, sidebarCollapsed: e.target.value === 'collapsed' } })}
@@ -466,25 +485,29 @@ export function SettingsView({
               </div>
             </div>
             <div className="set-group">
-              <h2>{t.exportSettings} / {t.importSettings}</h2>
+              <h2>{t.exportSettings} / {t.importSettings}</h2><p className="hint">{lang === 'ar' ? 'يشمل الإعدادات والفلاتر وقالب التقديم. ليس نسخة احتياطية كاملة للمشروعات أو الملاحظات أو المسودات؛ المفاتيح وجلسات المتصفح غير مشمولة.' : 'Includes settings, filters, and the proposal template. This is not a full backup of projects, notes, or drafts; keys and browser sessions are excluded.'}</p>
               <div className="set-row">
                 <button
                   className="btn sm"
+                  disabled={dataBusy}
                   onClick={() => {
                     setExportMsg(null)
+                    setDataBusy(true)
                     void rased.exportSettings().then((r) => {
                       if (r.ok) setExportMsg(r.path ?? t.exportSettings + ' ✓')
                       else if (r.error) setExportMsg(r.error)
-                    })
+                    }).catch(() => setExportMsg(lang === 'ar' ? 'تعذر التصدير. أعد المحاولة.' : 'Export failed. Retry.')).finally(() => setDataBusy(false))
                   }}
                 >
                   {t.exportSettings}
                 </button>
                 <button
                   className="btn sm"
+                  disabled={dataBusy}
                   onClick={() => {
                     setImportMsg(null)
                     setImportSummary(null)
+                    setDataBusy(true)
                     void rased.validateImport().then((s) => {
                       if (!s.ok && !s.error) return // user cancelled the dialog
                       if (!s.ok) {
@@ -493,7 +516,7 @@ export function SettingsView({
                       }
                       setImportSummary(s)
                       setImportStartup(false)
-                    })
+                    }).catch(() => setImportMsg(lang === 'ar' ? 'تعذر قراءة ملف الإعدادات.' : 'Could not read the settings file.')).finally(() => setDataBusy(false))
                   }}
                 >
                   {t.importSettings}
@@ -520,13 +543,15 @@ export function SettingsView({
                   <div className="row-actions">
                     <button
                       className="btn primary sm"
+                      disabled={dataBusy}
                       onClick={() => {
-                        void rased.applyImport(importMode, importStartup).then((r) => {
+                        setDataBusy(true)
+                    void rased.applyImport(importMode, importStartup).then((r) => {
                           if (r.ok) {
                             setImportSummary(null)
                             setImportMsg(t.importConfirm + ' ✓')
                           } else if (r.error) setImportMsg(r.error)
-                        })
+                        }).catch(() => setImportMsg(lang === 'ar' ? 'تعذر الاستيراد. أعد المحاولة.' : 'Import failed. Retry.')).finally(() => setDataBusy(false))
                       }}
                     >
                       {t.importConfirm}
@@ -539,8 +564,8 @@ export function SettingsView({
               <h2>{t.purgeTitle}</h2>
               <p className="desc">{t.purgeDesc}</p>
               <div className="set-row">
-                <label>{t.purgeCutoff}</label>
-                <select className="select" value={purgeDays} onChange={(e) => { setPurgeDays(Number(e.target.value)); setPurgeCount(null) }}>
+                <label htmlFor="settings-field-9">{t.purgeCutoff}</label>
+                <select disabled={dataBusy} id="settings-field-9" className="select" value={purgeDays} onChange={(e) => { setPurgeDays(Number(e.target.value)); setPurgeCount(null) }}>
                   <option value={7}>7</option>
                   <option value={30}>30</option>
                   <option value={90}>90</option>
@@ -548,12 +573,14 @@ export function SettingsView({
                 </select>
                 <button
                   className="btn sm"
+                  disabled={dataBusy}
                   onClick={() => {
                     const iso = new Date(Date.now() - purgeDays * 86400_000).toISOString()
+                    setDataBusy(true)
                     void rased.purgeHistoryPreview(iso).then((r) => {
                       if (r.ok) setPurgeCount(r.affected ?? 0)
                       else setPurgeMsg(r.error ?? '?')
-                    })
+                    }).catch(() => setPurgeMsg(lang === 'ar' ? 'تعذرت معاينة عدد الفرص.' : 'Could not preview the opportunity count.')).finally(() => setDataBusy(false))
                   }}
                 >
                   {t.purgePreviewBtn}
@@ -565,7 +592,7 @@ export function SettingsView({
               <div className="set-row"><span className="hint">{t.purgeBackupNote}</span></div>
               {purgeMsg && <FieldError message={purgeMsg} />}
               <div className="row-actions">
-                <button className="btn danger sm" disabled={purgeCount === null || purgeCount === 0} onClick={() => setPurgeConfirm(true)}>
+                <button className="btn danger sm" disabled={dataBusy || purgeCount === null || purgeCount === 0} onClick={() => setPurgeConfirm(true)}>
                   {t.purgeApplyBtn}
                 </button>
               </div>
@@ -625,24 +652,28 @@ export function SettingsView({
             </details>
           </div>
         )}
+        </div>
+        {keywordDialog}
       </div>
 
       {purgeConfirm && (
         <ConfirmDialog
           lang={lang}
+          busy={dataBusy}
           title={t.purgeConfirm}
           body={`${t.purgeConfirmBody} (${t.purgeAffected}: ${purgeCount ?? 0})`}
           danger
           confirmLabel={t.purgeApplyBtn}
           onConfirm={() => {
             const iso = new Date(Date.now() - purgeDays * 86400_000).toISOString()
-            void rased.purgeHistoryApply(iso).then((r) => {
+            setDataBusy(true)
+                    void rased.purgeHistoryApply(iso).then((r) => {
               setPurgeConfirm(false)
               if (r.ok) {
                 setPurgeCount(null)
                 setPurgeMsg(`${t.purgeApplyBtn} ✓ (${r.deleted ?? 0})`)
               } else if (r.error) setPurgeMsg(r.error)
-            })
+            }).catch(() => setPurgeMsg(lang === 'ar' ? 'تعذر حذف السجل.' : 'Could not remove history.')).finally(() => setDataBusy(false))
           }}
           onCancel={() => setPurgeConfirm(false)}
         />

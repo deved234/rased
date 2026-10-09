@@ -22,6 +22,8 @@ Vitest tests belong in `tests/*.test.ts`; deterministic samples belong in `tests
 
 After building, run `npm run test:ai` for AI settings, consent, encryption and provider integration; `npm run test:quick-apply` for Chrome setup and broker UI. `npm run test:extension` exercises a real Chromium/native-host/form-filling chain using intercepted HTTPS fixtures. It requires Chrome for Testing; set `RASED_TEST_CHROME` to its executable path. These tests never submit real proposals. Integration profiles and generated screenshots are temporary/ignored; never pass a real user profile.
 
+`npm run test:ui` verifies UI navigation, saved-filter editing, actual SQLite save failures, field names, legal-tab keyboard behavior and responsive layouts in isolated Electron. Its screenshots/results go to ignored `.local/`. Build first.
+
 Check Arabic RTL, English LTR, keyboard focus, both themes and unsaved edits for interface changes. Include representative screenshots in the PR. OS notification payload tests do not prove a real Windows toast click; document any manual checks separately.
 
 ## Pull requests
