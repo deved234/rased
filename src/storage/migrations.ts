@@ -121,6 +121,36 @@ const MIGRATIONS: string[] = [
     questions_json TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT NOT NULL
   );
+  `,
+  /* 5 */ `
+  CREATE TABLE IF NOT EXISTS quick_apply_tickets (
+    ticket TEXT PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL,
+    consumed_at INTEGER NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_quick_ticket_expiry ON quick_apply_tickets(expires_at);
+  `
+  ,/* 6 */ `
+  CREATE TABLE IF NOT EXISTS extension_jobs (
+    ticket TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL UNIQUE,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    phase TEXT NOT NULL DEFAULT 'issued',
+    expires_at INTEGER NOT NULL,
+    activated_at INTEGER,
+    client_id TEXT,
+    tab_id INTEGER,
+    error TEXT,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_extension_jobs_expiry ON extension_jobs(expires_at);
+  `
+  ,/* 7 */ `
+  ALTER TABLE proposal_drafts ADD COLUMN provider TEXT NULL;
+  ALTER TABLE proposal_drafts ADD COLUMN model TEXT NULL;
+  ALTER TABLE proposal_drafts ADD COLUMN prompt_version TEXT NULL;
+  ALTER TABLE proposal_drafts ADD COLUMN generated_at TEXT NULL;
   `
 ]
 

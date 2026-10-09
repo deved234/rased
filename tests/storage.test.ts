@@ -67,7 +67,7 @@ describe('migrations', () => {
     const path = join(dir, 'test.db')
     closeDatabase(db)
     db = openDatabase(path)
-    db.exec('DROP TABLE pending_classifications; PRAGMA user_version = 1;')
+    db.exec('DROP TABLE extension_jobs; DROP TABLE quick_apply_tickets; DROP TABLE proposal_drafts; DROP TABLE project_user_state; DROP TABLE project_details; DROP TABLE saved_filters; DROP TABLE tombstones; DROP TABLE pending_classifications; PRAGMA user_version = 1;')
     closeDatabase(db)
     db = openDatabase(path)
     expect(getProjectById(db, 1)?.externalId).toBe('upgrade')

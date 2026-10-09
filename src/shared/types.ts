@@ -1,6 +1,7 @@
 // Shared domain types — used by main, preload, renderer and tests.
 // Times are ISO-8601 UTC strings in storage; UI formats them locally.
 
+import { defaultQuickApply, validQuickApply, type QuickApplySettings } from './quickApply.js'
 export type DiscoveryKind = 'initial' | 'live' | 'recovered'
 export type EnrichmentStatus = 'not_requested' | 'pending' | 'ready' | 'failed'
 export type NotifyEventStatus = 'pending' | 'dispatching' | 'submitted' | 'failed' | 'uncertain' | 'suppressed'
@@ -50,6 +51,7 @@ export interface CategoryFilter {
 }
 
 export interface AppSettings {
+  quickApply: QuickApplySettings
   language: 'ar' | 'en'
   /** polling interval chosen by the user; backoff/Retry-After override it */
   pollIntervalMs: 2000 | 5000 | 15000
@@ -253,6 +255,7 @@ export function defaultCategoryFilter(): CategoryFilter {
 
 export function defaultSettings(): AppSettings {
   return {
+    quickApply: defaultQuickApply(),
     language: 'ar',
     pollIntervalMs: 5000,
     notificationsEnabled: true,
@@ -318,6 +321,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
   const lang = o['language'] === 'en' ? 'en' : 'ar'
   const poll = POLL_CHOICES.includes(o['pollIntervalMs'] as 2000) ? (o['pollIntervalMs'] as 2000 | 5000 | 15000) : 5000
   return {
+    quickApply: validQuickApply(o['quickApply']) ? { ...o['quickApply'] } : defaultQuickApply(),
     language: lang,
     pollIntervalMs: poll,
     notificationsEnabled: typeof o['notificationsEnabled'] === 'boolean' ? o['notificationsEnabled'] : true,

@@ -1,6 +1,7 @@
 import React from 'react'
 import { rased } from '../api.js'
 import type { Lang } from '../i18n.js'
+import type { AboutLink } from '@shared/about.js'
 import { LEGAL_DOCUMENTS, LEGAL_UPDATED_AT } from '@shared/legal.js'
 import notices from '../../../resources/legal/THIRD_PARTY_NOTICES.txt?raw'
 import license from '../../../LICENSE?raw'
@@ -10,7 +11,7 @@ export function LegalView({ lang }: { lang: Lang }): React.ReactElement {
   const [error, setError] = React.useState(false)
   const ar = lang === 'ar'
   const content = LEGAL_DOCUMENTS[lang]
-  const open = async (id: 'mostaqlTerms' | 'mostaqlPrivacy' | 'geminiTerms' | 'issues'): Promise<void> => {
+  const open = async (id: AboutLink): Promise<void> => {
     try { setError(!(await rased.openAboutLink(id)).ok) } catch { setError(true) }
   }
   return <div className="legal-page">
@@ -20,7 +21,7 @@ export function LegalView({ lang }: { lang: Lang }): React.ReactElement {
       {content[doc].sections.map(([title,body])=><section className="legal-section" key={title}><h3>{title}</h3><p>{body}</p></section>)}
       {doc==='licenses' && <><details><summary>MIT — RASED</summary><pre className="license-text" dir="ltr">{license}</pre></details><details><summary>{ar ? 'نصوص رخص المكونات والخطوط' : 'Component and font license texts'}</summary><pre className="license-text" dir="ltr">{notices}</pre></details></>}
     </article>
-    <div className="set-group about-links"><button className="btn" onClick={()=>void open('mostaqlTerms')}>{ar?'شروط مستقل الرسمية ↗':'Mostaql terms ↗'}</button><button className="btn" onClick={()=>void open('mostaqlPrivacy')}>{ar?'خصوصية مستقل ↗':'Mostaql privacy ↗'}</button><button className="btn" onClick={()=>void open('geminiTerms')}>{ar?'شروط Gemini الرسمية ↗':'Gemini terms ↗'}</button><button className="btn" onClick={()=>void open('issues')}>{ar?'بلاغ أو استفسار ↗':'Report an issue ↗'}</button></div>
+    <div className="set-group about-links"><button className="btn" onClick={()=>void open('mostaqlTerms')}>{ar?'شروط مستقل الرسمية ↗':'Mostaql terms ↗'}</button><button className="btn" onClick={()=>void open('mostaqlPrivacy')}>{ar?'خصوصية مستقل ↗':'Mostaql privacy ↗'}</button><button className="btn" onClick={()=>void open('geminiTerms')}>{ar?'شروط Gemini الرسمية ↗':'Gemini terms ↗'}</button><button className="btn" onClick={()=>void open('openaiData')}>{ar?'بيانات OpenAI API الرسمية ↗':'OpenAI API data controls ↗'}</button><button className="btn" onClick={()=>void open('claudeTerms')}>{ar?'شروط Claude API الرسمية ↗':'Claude API terms ↗'}</button><button className="btn" onClick={()=>void open('claudeData')}>{ar?'خصوصية Claude API ↗':'Claude API privacy ↗'}</button><button className="btn" onClick={()=>void open('issues')}>{ar?'بلاغ أو استفسار ↗':'Report an issue ↗'}</button></div>
     {error && <p role="alert">{ar?'تعذر فتح المتصفح. حاول مرة أخرى.':'Could not open the browser. Please try again.'}</p>}
   </div>
 }

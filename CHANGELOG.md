@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-10-09
+
+- Added Gemini, OpenAI and Claude proposal generation with independent encrypted keys, model catalogs/manual IDs, per-draft selection, explicit consent and cancellation. Existing Gemini keys and local drafts migrate without intentional data loss. The assistant remains Mostaql-only.
+- Added a free unpacked Chrome extension and bundled native-messaging helper for Quick Apply on Mostaql/Nafezly. Pair one browser profile, fill a saved template/budget position/extra days, then review and submit manually. Khamsat is excluded.
+- Removed the embedded Quick Apply browser and its old sessions/tickets; normal browser login is used instead. Saved templates and source history remain local.
+- Fixed the development taskbar icon by launching a branded executable; retained packaged application branding.
+- Updated privacy/terms and reorganized public documentation. Internal plans, reviews, experimental designs and generated QA screenshots are retained locally outside Git.
+- Expanded Windows CI to cover real Electron integration, AI wiring and extension setup in isolated profiles. Live provider accounts, platform forms and physical toast clicks are not certified by fixture tests.
+
 ## 0.4.0 — 2026-09-29
 
 - Added read-only monitoring of public Nafezly project RSS with an independent 15–18 second scheduler, silent first scan, local full-description storage, source-specific pause and keyword alerts, and conservative backoff on access errors.
@@ -50,5 +59,5 @@ Validation: 88 unit tests and 49 integration assertions passed locally on the pa
 ## 0.1.1 — 2026-09-25
 
 - Initial published open-source release under MIT.
-- Reliability fixes documented in [FIX_REPORT.md](FIX_REPORT.md).
+- Improved collector shutdown, filter consistency and persisted backoff.
 - Follow-up fixes for downloading a missing Electron executable and development CSS/CSP behavior.

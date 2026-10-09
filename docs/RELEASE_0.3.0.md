@@ -8,7 +8,7 @@ Windows notification priority has a stronger presentation hint, and Settings exp
 
 ## Verification and limits
 
-Typecheck, lint, 108 unit tests, build and 69 Electron integration assertions passed on the development tree before packaging. A ten-minute live Khamsat listing probe returned 120/120 HTTP 200 with median response time 474 ms; it did **not** encounter a genuinely new publication, so end-to-end publication-to-notification latency is not yet measured. The first listing page can omit a new request during heavy activity, and Khamsat can change its markup or restrict requests. A direct detail fetch returned HTTP 202 with no description. See [Khamsat monitoring evidence](KHAMSAT_MONITORING.md).
+Typecheck, lint, 108 unit tests, build and 69 Electron integration assertions passed on the development tree before packaging. A ten-minute live Khamsat listing probe returned 120/120 HTTP 200 with median response time 474 ms; it did **not** encounter a genuinely new publication, so end-to-end publication-to-notification latency is not yet measured. The first listing page can omit a new request during heavy activity, and Khamsat can change its markup or restrict requests. A direct detail fetch returned HTTP 202 with no description. See [Khamsat monitoring evidence](ARCHITECTURE.md).
 
 Gemini behavior was exercised with a user-supplied key during development and deterministic integration fixtures; model availability and API quotas may change. A real Windows fullscreen visibility test and a real newly published Khamsat request test remain outstanding. Platform content and access are governed by the source sites; RASED does not log in or post automatically.
 

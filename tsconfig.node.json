@@ -1,1 +1,40 @@
-{"compilerOptions": {"allowSyntheticDefaultImports": true, "baseUrl": ".", "esModuleInterop": true, "forceConsistentCasingInFileNames": true, "lib": ["ES2023"], "module": "ESNext", "moduleResolution": "bundler", "noEmit": true, "noFallthroughCasesInSwitch": true, "noUncheckedIndexedAccess": true, "paths": {"@shared/*": ["src/shared/*"]}, "resolveJsonModule": true, "skipLibCheck": true, "strict": true, "target": "ES2022", "types": ["node"]}, "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/collector/**/*", "src/storage/**/*", "tests/**/*", "scripts/**/*", "electron.vite.config.ts", "eslint.config.mjs"]}
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": [
+      "ES2023"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@shared/*": [
+        "src/shared/*"
+      ]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "src/collector/**/*",
+    "src/storage/**/*",
+    "tests/**/*",
+    "scripts/**/*",
+    "electron.vite.config.ts",
+    "eslint.config.mjs",
+    "native-host/**/*"
+  ]
+}

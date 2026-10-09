@@ -1,4 +1,5 @@
 import React from 'react'
+import { QuickApplyButton } from '../components/QuickApplyButton.js'
 import { rased } from '../api.js'
 import { categoryDisplay } from '@shared/categories.js'
 import type { PersonalStatus, ProjectDetails, ProjectFull } from '@shared/types.js'
@@ -271,6 +272,7 @@ export function ProjectDetailView({
 
       <aside className="detail-rail" aria-label={t.projectDetails}>
         <div className="detail-wrap">
+          <QuickApplyButton id={project.id} source={project.source} lang={lang}/>
           {actionError && <p role="alert" className="field-err">{actionError}</p>}
           <button className="btn primary" onClick={() => void openExternal()}>
             <Icon name="external" size={16} /> {openOnSource(project.source, lang)}

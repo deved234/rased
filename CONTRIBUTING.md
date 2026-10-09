@@ -1,19 +1,39 @@
 # Contributing to RASED
 
-RASED is a local Windows app that watches the public Mostaql RSS feed. Contributions are welcome, especially fixes to reliability, accessibility, Arabic/English UI, and tests.
+RASED monitors Mostaql, Nafezly and Khamsat on Windows. Reliability, accessibility, Arabic/English usability and reproducible tests are welcome contributions.
 
-1. Open an issue describing the change or bug. For small fixes, you can send a pull request directly.
-2. Install Node.js 24, clone the repository, run `npm ci`, then `npm run dev`.
-3. Before a pull request, run `npm run typecheck`, `npm run lint`, and `npm test`.
-4. Keep the collector respectful of Mostaql: no login scraping, no bypassing protection, and always honor backoff and `Retry-After`.
-5. Do not commit credentials, user databases, generated `out/` or `release/` files, or captured third-party pages.
+## Get started
 
-For UI changes, check Arabic RTL and English LTR, keyboard focus and dirty-note navigation. Use `npm run build` then `npm run test:e2e` for real Electron/preload/SQLite integration checks. This test uses a new temporary profile and substitutes network/OS boundaries; it does not prove a manually clicked Windows toast. Windows CI runs typecheck, lint, unit tests and build on pushes and pull requests. Installer packaging and interactive desktop checks are separate local checks.
+Use Windows x64 and Node.js 24. Fork/clone the repository, run `npm ci`, then `npm run dev`. Electron, SQLite, the Chrome extension and its native host are built by the project; no separate SQLite installation is required.
 
-Project map: `src/main` owns Electron, polling, IPC and notification dispatch; `src/preload` exposes the restricted API; `src/renderer` contains React; `src/collector` fetches/parses source data; `src/storage` owns SQLite; `src/shared` contains contracts and shared rules. Runtime data is in the user's application-data directory, never in the repository. See [release notes](docs/RELEASE_0.2.4.md) for current behavior and limits.
+Open an issue for substantial changes. Small fixes may go straight to a pull request. Follow neighboring TypeScript/CSS style: two spaces, single quotes, generally no semicolons. React components use PascalCase; functions use camelCase. ESLint and TypeScript are the configured checks.
 
-Keep Mostaql access limitations and independent branding explicit. Do not describe public RSS or MIT as permission for automated access; consult [legal review](docs/legal/LEGAL_REVIEW.md). Please redact personal notes and diagnostics before attaching them to public issues.
+## Validate your change
 
-The app is licensed under [MIT](LICENSE). By submitting a contribution, you agree that your contribution is licensed under the same terms.
+```powershell
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run test:e2e
+```
 
-For updater changes, read [UPDATES.md](docs/UPDATES.md). Keep downloading and installation explicit, retain the dirty-note guard and graceful shutdown, and never allow renderer-controlled feeds or bundle publishing tokens. `npm run test:update-install` performs a real isolated QA NSIS upgrade on Windows and can take several minutes; it does not use a normal RASED install/profile. Publishing is a separate explicit `npm run release` command after validation/build/commit/push; `dist` never publishes.
+Vitest tests belong in `tests/*.test.ts`; deterministic samples belong in `tests/fixtures/`. Add regression coverage for behavior changes. There is no numeric coverage target.
+
+After building, run `npm run test:ai` for AI settings, consent, encryption and provider integration; `npm run test:quick-apply` for Chrome setup and broker UI. `npm run test:extension` exercises a real Chromium/native-host/form-filling chain using intercepted HTTPS fixtures. It requires Chrome for Testing; set `RASED_TEST_CHROME` to its executable path. These tests never submit real proposals. Integration profiles and generated screenshots are temporary/ignored; never pass a real user profile.
+
+Check Arabic RTL, English LTR, keyboard focus, both themes and unsaved edits for interface changes. Include representative screenshots in the PR. OS notification payload tests do not prove a real Windows toast click; document any manual checks separately.
+
+## Pull requests
+
+Use an imperative commit subject, for example `Preserve selected provider after restart`. Conventional Commit prefixes are optional. Explain the problem, resulting behavior, checks and remaining limits; link relevant issues. Keep unrelated changes separate.
+
+See [Architecture](docs/ARCHITECTURE.md) for code ownership and [Updates](docs/UPDATES.md) for release commands. CI checks types, lint, unit tests, builds and Electron integration on Windows. Packaging and installer QA remain explicit local checks.
+
+## Safety and repository hygiene
+
+Never commit keys, databases, browser profiles, builds, captured platform pages or personal diagnostics. Internal plans/reviews and generated QA evidence belong in ignored `.local/`; public `docs/` is for maintained user/developer guides and release notes.
+
+Keep renderer isolation, trusted IPC callers, URL validation, source backoff and explicit update installation. Monitoring is read-only. Quick Apply is Mostaql/Nafezly only, must preserve existing drafts, and must never submit a form or copy browser cookies. AI generation requires consent and must not silently retry or switch companies. Do not claim speed guarantees or platform permission based on RSS availability.
+
+Version bumps and publication require maintainer authorization. Contributions are licensed under [MIT](LICENSE). For security reports, follow [SECURITY.md](SECURITY.md).

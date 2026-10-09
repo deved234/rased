@@ -217,3 +217,16 @@
 .proposal-consent { display: flex; align-items: center; gap: 8px; }
 .proposal-field { display: grid; gap: 6px; margin-block: 10px; }
 .proposal-field .textarea { min-height: 80px; }
+.ai-picker { display: grid; gap: 10px; min-inline-size: 0; }
+.ai-picker .select { max-inline-size: 100%; inline-size: 100%; }
+.ai-picker .set-row .select { inline-size: auto; }
+.ai-picker > .btn { justify-self: start; }
+.ai-manual summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.ai-manual[open] summary { margin-block-end: 10px; }
+.proposal-consent { align-items: flex-start; overflow-wrap: anywhere; }
+.proposal-consent input { flex-shrink: 0; margin-block-start: 5px; }
+.quick-setup-steps { display: grid; gap: 16px; padding-inline-start: 26px; }
+.quick-setup-steps > li { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; }
+.quick-setup-steps h3 { margin-block: 0 8px; font-size: 15px; }
+.quick-setup-steps code { display: block; overflow-wrap: anywhere; padding: 10px; font-size: 12px; border-radius: 8px; background: var(--bg); }
+.quick-setup-steps .row-actions { margin-block-start: 10px; flex-wrap: wrap; }

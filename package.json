@@ -8,7 +8,9 @@
       "output": "release"
     },
     "files": [
-      "out/**/*",
+      "out/main/**/*",
+      "out/preload/**/*",
+      "out/renderer/**/*",
       "package.json",
       "resources/*.png"
     ],
@@ -51,6 +53,22 @@
       {
         "from": "resources/icon.png",
         "to": "branding/icon.png"
+      },
+      {
+        "from": "resources/chrome-extension",
+        "to": "chrome-extension"
+      },
+      {
+        "from": "resources/chrome-bridge",
+        "to": "chrome-bridge"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "RASED Quick Apply",
+        "schemes": [
+          "rased"
+        ]
       }
     ]
   },
@@ -63,6 +81,7 @@
   "description": "RASED (راصد) — local Windows watcher for freelance opportunities across supported platforms. No cloud backend or app account.",
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@types/chrome": "^0.3.4",
     "@types/node": "24.13.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -70,12 +89,14 @@
     "electron": "44.4.5",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "10.11.0",
     "fast-xml-parser": "5.11.1",
     "globals": "17.12.0",
     "js-yaml": "4.3.2",
     "playwright-core": "^1.63.0",
     "png-to-ico": "3.0.2",
+    "postject": "^1.0.0-alpha.6",
     "typescript": "5.9.2",
     "typescript-eslint": "8.70.1",
     "vite": "7.3.6",
@@ -87,19 +108,24 @@
   "private": true,
   "scripts": {
     "build": "electron-vite build",
-    "dev": "electron-vite dev",
+    "dev": "node scripts/run-desktop.mjs dev",
     "dist": "npm run build && electron-builder --win nsis --publish never",
     "icons": "node scripts/generate-icons.mjs",
-    "lint": "eslint src tests scripts electron.vite.config.ts",
-    "predev": "node scripts/ensure-electron.mjs",
-    "preview": "electron-vite preview",
-    "start": "electron-vite preview",
+    "lint": "eslint src tests scripts extension native-host electron.vite.config.ts",
+    "predev": "node scripts/ensure-electron.mjs && npm run build:extension && npm run build:native-host",
+    "preview": "node scripts/run-desktop.mjs preview",
+    "start": "node scripts/run-desktop.mjs preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e": "node scripts/e2e-cdp.mjs",
-    "prebuild": "node scripts/prepare-legal.mjs",
+    "test:ai": "node scripts/ai-e2e.mjs",
+    "test:quick-apply": "node scripts/quick-apply-e2e.mjs",
+    "prebuild": "node scripts/prepare-legal.mjs && npm run build:extension && npm run build:native-host",
     "release": "node scripts/publish-release.mjs",
-    "test:update-install": "node scripts/test-update-install.mjs"
+    "test:update-install": "node scripts/test-update-install.mjs",
+    "build:extension": "node scripts/build-extension.mjs",
+    "build:native-host": "node scripts/build-native-host.mjs",
+    "test:extension": "node scripts/test-chrome-extension.mjs"
   },
-  "version": "0.4.0"
+  "version": "0.5.0"
 }

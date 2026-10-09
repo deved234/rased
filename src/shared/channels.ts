@@ -1,9 +1,17 @@
 // Narrow, typed IPC surface. The renderer never sees Node, SQL or fetch.
 // Every channel used by the renderer MUST be listed here exactly once.
 export const IPC = {
+  extensionStatus: 'rased:extension-status',
+  getExtensionStatus: 'rased:get-extension-status',
+  extensionAction: 'rased:extension-action',
+  quickApplyProject: 'rased:quick-apply-project',
   getProposalSetup: 'rased:get-proposal-setup',
-  saveGeminiKey: 'rased:save-gemini-key',
-  deleteGeminiKey: 'rased:delete-gemini-key',
+  getAiSetup: 'rased:get-ai-setup',
+  saveAiSettings: 'rased:save-ai-settings',
+  saveAiKey: 'rased:save-ai-key',
+  deleteAiKey: 'rased:delete-ai-key',
+  listAiModels: 'rased:list-ai-models',
+  testAiModel: 'rased:test-ai-model',
   saveProposalProfile: 'rased:save-proposal-profile',
   getProposalPreview: 'rased:get-proposal-preview',
   generateProposal: 'rased:generate-proposal',

@@ -2,6 +2,7 @@ import React from 'react'
 import { LegalView } from './LegalView.js'
 import { UpdatesView, updatesTitle } from './UpdatesView.js'
 import { ProposalSettings } from './ProposalSettings.js'
+import { QuickApplySettings } from './QuickApplySettings.js'
 import { rased } from '../api.js'
 import { DEVELOPER_NAME, type AboutLink } from '@shared/about.js'
 import logo from '../assets/logo.svg'
@@ -16,11 +17,12 @@ import { ConfirmDialog, FieldError, Toggle } from '../components/ui.js'
 import { KeywordTokens } from '../components/FilterDrawer.js'
 import { statusText, togglePause } from '../components/shell.js'
 
-type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'data' | 'about' | 'legal' | 'updates'
+type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'quick' | 'data' | 'about' | 'legal' | 'updates'
 
-const SECTIONS: Section[] = ['watching', 'notifications', 'appearance', 'ai', 'data', 'updates', 'about', 'legal']
+const SECTIONS: Section[] = ['watching', 'notifications', 'appearance', 'ai', 'quick', 'data', 'updates', 'about', 'legal']
 
 function sectionTitle(s: Section, lang: Lang): string {
+  if (s === 'quick') return lang === 'ar' ? 'التقديم السريع' : 'Quick apply'
   const t = STRINGS[lang]
   if (s === 'watching') return t.settingsWatching
   if (s === 'notifications') return t.settingsNotifications
@@ -573,6 +575,7 @@ export function SettingsView({
 
         {active === 'legal' && <LegalView lang={lang} />}
         {active === 'ai' && <ProposalSettings lang={lang} />}
+        {active === 'quick' && <QuickApplySettings settings={settings} />}
         {active === 'updates' && <UpdatesView lang={lang} />}
 
         {active === 'about' && (

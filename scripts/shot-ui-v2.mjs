@@ -1,12 +1,12 @@
 // Real packaged UI evidence with live RSS in a NEW TEMP profile. No deletion.
-// Usage: node scripts/shot-ui-v2.mjs --exe="release/win-unpacked/RASED.exe" --out="docs/screenshots/ui-fixes"
+// Usage: node scripts/shot-ui-v2.mjs --exe="release/win-unpacked/RASED.exe" --out=".local/qa/screenshots/ui-fixes"
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { call, evaluate, eventually, newProfile, pageWs, parseArgs, sleep, startApp, stopApp } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(args.profile)
-const out = resolve(args.out ?? 'docs/screenshots/ui-fixes')
+const out = resolve(args.out ?? '.local/qa/screenshots/ui-fixes')
 mkdirSync(out, { recursive: true })
 const port = Number(args.port ?? 9347)
 const child = startApp({ exe: args.exe ?? 'release/win-unpacked/RASED.exe', app: '', profile, port, test: false })

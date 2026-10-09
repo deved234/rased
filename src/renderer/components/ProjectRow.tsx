@@ -1,4 +1,5 @@
 import React from 'react'
+import { QuickApplyButton } from './QuickApplyButton.js'
 import { categoryDisplay } from '@shared/categories.js'
 import type { ProjectWithUser } from '@shared/types.js'
 import { STRINGS, type Lang } from '../i18n.js'
@@ -68,6 +69,7 @@ export function ProjectRow({
         </div>
       </div>
       <div className="opportunity-actions">
+        <QuickApplyButton id={p.id} source={p.source} lang={lang}/>
         <button className="btn sm ghost preview-action" title={t.previewTitle} aria-label={`${t.previewAction}: ${p.title}`} onClick={(e) => { e.stopPropagation(); onPreview() }}><Icon name="eye" size={16} />{t.previewAction}</button>
         <button className="btn sm external-action" title={openOnSource(p.source, lang)} onClick={(e) => { e.stopPropagation(); onOpenExternal() }}>{openOnSource(p.source, lang)} <Icon name="external" size={15} /></button>
         <button className={p.saved ? 'icon-btn on' : 'icon-btn'} title={p.saved ? t.unsaveProject : t.saveProject} aria-label={p.saved ? t.unsaveProject : t.saveProject} aria-pressed={p.saved} onClick={(e) => { e.stopPropagation(); onToggleSave() }}><Icon name={p.saved ? 'bookmarkFill' : 'bookmark'} size={16} /></button>

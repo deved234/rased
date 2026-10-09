@@ -98,10 +98,47 @@ import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 import { browserToastXml, supportsUrgentToasts } from './toast.js'
-import { deleteGeminiKey, generateGeminiProposal, getProposalPreview, getProposalProfile, hasGeminiKey, saveGeminiKey, saveProposalProfile } from './proposals.js'
+import { getProposalProfile, saveProposalProfile } from './proposals.js'
+import { AiService } from './ai/service.js'
+import { saveAiSettings } from './ai/settings.js'
+import { isAiProvider, sanitizeSelection } from '../shared/ai.js'
 import { deleteProposalDraft, getProposalDraft, saveProposalDraft } from '../storage/proposalDrafts.js'
 import type { ProposalDraft } from '../shared/proposals.js'
+import { validQuickApply } from '../shared/quickApply.js'
+import { retireQuickBrowser } from './retireQuickBrowser.js'
+import { ExtensionBroker } from './extension/broker.js'
+import { parseExtensionTicket, nonce, record, EXTENSION_VERSION, type ExtensionStatus } from '../shared/extension/protocol.js'
+import { clipboard } from 'electron'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
+let extension:ExtensionBroker|null=null
+let extensionReady=false
+const pendingExtensionUrls=new Set<string>()
+function extensionSnapshot():ExtensionStatus{return extension?.status()??{installed:false,registered:false,folder:join(app.getPath('userData'),'chrome-link','extension'),extensionVersion:EXTENSION_VERSION,clients:[],pairing:[],selectedId:null,lastJob:null,protocolReady:false,error:'bridge-unavailable'}}
+const execChrome=promisify(execFile)
+async function launchChrome(url='about:blank'):Promise<void> {
+  const candidates=[join(process.env['PROGRAMFILES']??'C:\\Program Files','Google','Chrome','Application','chrome.exe'),join(process.env['PROGRAMFILES(X86)']??'C:\\Program Files (x86)','Google','Chrome','Application','chrome.exe'),join(process.env['LOCALAPPDATA']??'','Google','Chrome','Application','chrome.exe')]
+  const executable=candidates.find(path=>{try{return statSync(path).isFile()}catch{return false}})
+  if(!executable)throw Error('chrome-unavailable')
+  // Normal installed Chrome uses its own cookies. No debugging or profile access.
+  void execChrome(executable,[url],{windowsHide:true}).catch(()=>undefined)
+}
+async function activateExtensionUrl(raw:string):Promise<void> {
+  const ticket=parseExtensionTicket(raw);if(!ticket)return
+  if(!extensionReady){if(pendingExtensionUrls.size<10)pendingExtensionUrls.add(raw);return}
+  if(!extension||!await extension.activate(ticket)){
+    win?.show();win?.webContents.send(IPC.openSettings)
+    if(!testHarness)void dialog.showMessageBox({type:'info',message:settings.language==='ar'?'تعذر بدء التقديم السريع. راجع ربط Chrome وإعدادات القالب، أو ابدأ من بطاقة المشروع.':'Quick Apply could not start. Check Chrome pairing and your template, or start from the project card.'})
+  }
+}
+
+// Renaming the dev executable changes app.isPackaged on Windows; defaultApp
+// still identifies a source launch and prevents installer paths/updates in dev.
+const IS_PACKAGED=app.isPackaged && !process.defaultApp
+const RASED_APP_ID=IS_PACKAGED?'com.rased.app':'com.rased.app.development'
+// Keep the installer-registered notification identity; window/taskbar identity
+// is set separately below to avoid grouping dev with a stale Electron pin.
 app.setAppUserModelId('com.rased.app')
 
 const sessionId = randomUUID()
@@ -147,7 +184,7 @@ let episode = 0
 let hintShown = false
 const uncertainWaits = new Map<number, number>()
 let activeRss: AbortController | null = null
-let activeProposal: AbortController | null = null
+let aiService: AiService | null = null
 let flushing: Promise<void> | null = null
 const detailBudget = new DetailBudget()
 const work = new Set<Promise<unknown>>()
@@ -179,6 +216,13 @@ function notificationAllowed(): boolean {
 }
 
 const singleInstance = app.requestSingleInstanceLock()
+if(singleInstance){
+  app.on('second-instance',(_event,argv)=>{
+    for(const arg of argv)if(parseExtensionTicket(arg))void activateExtensionUrl(arg)
+    if(win){if(win.isMinimized())win.restore();win.show();win.focus()}
+  })
+  app.on('open-url',(event,url)=>{event.preventDefault();void activateExtensionUrl(url)})
+}
 
 // ---------------------------------------------------------------- settings
 
@@ -194,6 +238,8 @@ function loadSettings(): AppSettings {
 }
 
 function saveSettings(s: AppSettings): void {
+  if(s.quickApply.enabled&&!extension?.available())s={...s,quickApply:{...s.quickApply,enabled:false}}
+  if(!s.quickApply.enabled)extension?.cancel()
   settings = s
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
   applyAutoStart()
@@ -264,9 +310,9 @@ function projectLine(p: { title: string }): string {
 // Keep native notification objects alive until Windows closes or activates them.
 const activeNotifications = new Set<Notification>()
 
-function showToast(title: string, body: string, onClick: () => void, url: string): Promise<boolean> {
+function showToast(title: string, body: string, onClick: () => void, url: string, quickLink?:string): Promise<boolean> {
   const toastXml = process.platform === 'win32'
-    ? browserToastXml(title, body, url, app.isPackaged ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'), supportsUrgentToasts(process.platform, osRelease()))
+    ? browserToastXml(title, body, url, IS_PACKAGED ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'), supportsUrgentToasts(process.platform, osRelease()),quickLink?{link:quickLink,language:settings.language}:undefined)
     : undefined
   if (testHarness) {
     testHarness.record('toast', { title, body, toastXml, urgency: 'critical' })
@@ -319,7 +365,7 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
     void openProjectById(id, true, url).then(result => {
       if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
     })
-  }, url)
+  }, url,extension?.protocolReady?extension.ticket(id)??undefined:undefined)
 }
 
 function snapshotKhamsatHealth(): SourceHealth {
@@ -876,8 +922,13 @@ async function openProjectById(id: number, fromNotification: boolean, notificati
 // ---------------------------------------------------------------- window/tray
 
 function iconPath(name: string): string {
-  if (app.isPackaged && name === 'icon.ico') return join(process.resourcesPath, 'branding', name)
-  return join(app.getAppPath(), 'resources', name)
+  if (IS_PACKAGED) {
+    if (name === 'icon.ico' || name === 'icon.png') return join(process.resourcesPath, 'branding', name)
+    return join(app.getAppPath(), 'resources', name)
+  }
+  // electron-vite can launch out/main directly, so app.getAppPath() may point
+  // there rather than at the repository root. Windows then falls back to Electron.
+  return join(__dirname, '../../resources', name)
 }
 
 // Content-Security-Policy is set here per environment, not (only) via the
@@ -901,7 +952,8 @@ function applyCspPolicy(session: Session): void {
 }
 
 function attachWindowChrome(window: BrowserWindow): void {
-  window.setAppDetails({ appId: 'com.rased.app', appIconPath: iconPath('icon.ico'), appIconIndex: 0, relaunchDisplayName: 'RASED' })
+  window.setIcon(iconPath('icon.ico'))
+  window.setAppDetails({ appId: RASED_APP_ID, appIconPath: iconPath('icon.ico'), appIconIndex: 0, relaunchDisplayName: 'RASED' })
   const emit = (): void => { if (!window.isDestroyed()) window.webContents.send(IPC.windowState, { maximized: window.isMaximized() }) }
   window.on('maximize', emit)
   window.on('unmaximize', emit)
@@ -1175,7 +1227,7 @@ async function shutdown(): Promise<void> {
   activeRss?.abort()
   khamsatAbort?.abort()
   nafezlyAbort?.abort()
-  activeProposal?.abort()
+  const closingAi = aiService?.close()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
@@ -1185,10 +1237,12 @@ async function shutdown(): Promise<void> {
   if (updateStartupTimer) clearTimeout(updateStartupTimer)
   if (updateTimer) clearInterval(updateTimer)
   updates?.dispose()
+  extension?.dispose()
   shutdownWork = (async () => {
   try {
     while (work.size) await Promise.allSettled([...work])
     if (flushing) await Promise.allSettled([flushing])
+    await closingAi
     if (db) {
       const st = getSourceState(db, SOURCE)
       saveSourceState(db, { ...st, runId });
@@ -1206,39 +1260,67 @@ async function shutdown(): Promise<void> {
 // ---------------------------------------------------------------- IPC
 
 function registerIpc(): void {
+  const localSender = (event: Electron.IpcMainInvokeEvent): boolean => !quitRequested && (event.sender === win?.webContents || event.sender === compactWin?.webContents)
   const mainSender = (event: Electron.IpcMainInvokeEvent): boolean => event.sender === win?.webContents && !quitRequested
   const proposalId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0
   const proposalNotes = (value: unknown): value is string => typeof value === 'string' && value.length <= 2000
-  ipcMain.handle(IPC.getProposalSetup, event => mainSender(event) && db ? { hasKey: hasGeminiKey(app.getPath('userData')), profile: getProposalProfile(db) } : null)
-  ipcMain.handle(IPC.saveGeminiKey, (event, v: { key?: unknown }) => ({ ok: mainSender(event) && saveGeminiKey(app.getPath('userData'), v?.key) }))
-  ipcMain.handle(IPC.deleteGeminiKey, event => { if (!mainSender(event)) return { ok: false }; deleteGeminiKey(app.getPath('userData')); return { ok: true } })
-  ipcMain.handle(IPC.saveProposalProfile, (event, v: { profile?: unknown }) => ({ ok: !!(mainSender(event) && db && saveProposalProfile(db, v?.profile)) }))
-  ipcMain.handle(IPC.getProposalPreview, (event, v: { id?: unknown; projectNotes?: unknown }) => mainSender(event) && db && proposalId(v?.id) && proposalNotes(v?.projectNotes) ? getProposalPreview(db, v.id, v.projectNotes) : null)
-  ipcMain.handle(IPC.generateProposal, async (event, v: { id?: unknown; projectNotes?: unknown; fingerprint?: unknown }) => {
-    if (!mainSender(event) || !db || !proposalId(v?.id) || !proposalNotes(v?.projectNotes) || typeof v?.fingerprint !== 'string') return { ok: false, error: 'bad-request' }
-    if (activeProposal) return { ok: false, error: 'busy' }
-    const preview = getProposalPreview(db, v.id, v.projectNotes)
-    if (!preview || preview.fingerprint !== v.fingerprint) return { ok: false, error: 'preview-changed' }
-    const controller = new AbortController()
-    activeProposal = controller
-    let timedOut = false
-    const timeout = setTimeout(() => { timedOut = true; controller.abort() }, 45_000)
-    try {
-      const draft = await generateGeminiProposal(app.getPath('userData'), preview, controller.signal, testHarness?.geminiFetchImpl)
-      if (quitRequested) return { ok: false, error: 'cancelled' }
-      saveProposalDraft(db, draft)
-      return { ok: true, draft }
-    } catch (err) {
-      const code = timedOut ? 'timeout' : err instanceof Error && /^(cancelled|key-unavailable|key-rejected|rate-limited|model-unavailable|invalid-response|output-truncated|response-blocked|provider-http-\d+)$/.test(err.message) ? err.message : 'network-error'
-      return { ok: false, error: code }
-    } finally { clearTimeout(timeout); if (activeProposal === controller) activeProposal = null }
+  ipcMain.handle(IPC.getExtensionStatus,event=>mainSender(event)?extensionSnapshot():null)
+  ipcMain.handle(IPC.quickApplyProject,async(event,v:{id?:unknown})=>({ok:!!(mainSender(event)&&proposalId(v?.id)&&await extension?.quick(v.id))}))
+  ipcMain.handle(IPC.extensionAction,async(event,v:unknown)=>{
+    if(!mainSender(event)||!extension||!record(v))return {ok:false,error:'bad-request'}
+    try{
+      if(v.action==='prepare'){await extension.prepare();return {ok:true}}
+      if(v.action==='folder'){const error=await shell.openPath(extension.setup.folder);return {ok:!error}}
+      if(v.action==='copy-path'){clipboard.writeText(extension.setup.folder);return {ok:true}}
+      if(v.action==='chrome-extensions'){await launchChrome('chrome://extensions/');return {ok:true}}
+      if(v.action==='cancel'){extension.cancel();return {ok:true}}
+      if(v.action==='approve'&&nonce(v.id)&&typeof v.code==='string'&&typeof v.label==='string')return {ok:extension.approve(v.id,v.code,v.label)}
+      if(v.action==='select'&&nonce(v.id))return {ok:extension.select(v.id)}
+      if(v.action==='revoke'&&nonce(v.id)){const ok=extension.revoke(v.id);if(!extension.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}});return {ok}}
+      return {ok:false,error:'bad-request'}
+    }catch{return {ok:false,error:'extension-action-failed'}}
   })
-  ipcMain.handle(IPC.cancelProposal, event => { if (mainSender(event)) activeProposal?.abort() })
+  ipcMain.handle(IPC.getProposalSetup, event => {
+    if (!mainSender(event) || !db || !aiService) return null
+    const setup = aiService.setup()
+    return { hasKey: setup.providers[setup.settings.activeProvider].hasKey, profile: getProposalProfile(db) }
+  })
+  ipcMain.handle(IPC.getAiSetup, event => mainSender(event) ? aiService?.setup() : null)
+  ipcMain.handle(IPC.saveAiSettings, (event, v) => ({ ok: !!(mainSender(event) && db && saveAiSettings(db, v?.settings)) }))
+  ipcMain.handle(IPC.saveAiKey, (event, v) => {
+    const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.saveKey(v.provider, v?.key))
+    return { ok, error: ok ? undefined : 'key-save-failed' }
+  })
+  ipcMain.handle(IPC.deleteAiKey, (event, v) => {
+    const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.deleteKey(v.provider))
+    return { ok, error: ok ? undefined : 'key-save-failed' }
+  })
+  ipcMain.handle(IPC.listAiModels, (event, v) => mainSender(event) && isAiProvider(v?.provider) && aiService ? aiService.listModels(v.provider) : { ok: false, error: 'bad-request' })
+  ipcMain.handle(IPC.testAiModel, (event, v) => {
+    const selection = sanitizeSelection(v?.selection)
+    return mainSender(event) && selection && aiService ? aiService.test(selection) : { ok: false, error: 'bad-request' }
+  })
+  ipcMain.handle(IPC.saveProposalProfile, (event, v: { profile?: unknown }) => ({ ok: !!(mainSender(event) && db && saveProposalProfile(db, v?.profile)) }))
+  const selectionFor = (value: unknown) => {
+    if (value !== undefined) return sanitizeSelection(value)
+    const setup = aiService?.setup()
+    return setup ? sanitizeSelection({ provider: setup.settings.activeProvider, model: setup.settings.modelByProvider[setup.settings.activeProvider] }) : null
+  }
+  ipcMain.handle(IPC.getProposalPreview, (event, v) => {
+    const selection = selectionFor(v?.selection)
+    return mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && selection ? aiService?.preview(v.id, v.projectNotes, selection) : null
+  })
+  ipcMain.handle(IPC.generateProposal, (event, v) => {
+    const selection = selectionFor(v?.selection)
+    return mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && typeof v?.fingerprint === 'string' && v.fingerprint.length === 64 && selection && aiService ? aiService.generate(v.id, v.projectNotes, v.fingerprint, selection) : { ok: false, error: 'bad-request' }
+  })
+  ipcMain.handle(IPC.cancelProposal, event => { if (mainSender(event)) aiService?.cancel() })
   ipcMain.handle(IPC.getProposalDraft, (event, v: { id?: unknown }) => mainSender(event) && db && proposalId(v?.id) ? getProposalDraft(db, v.id) : null)
   ipcMain.handle(IPC.saveProposalDraft, (event, v: { draft?: ProposalDraft }) => {
     const draft = v?.draft
     if (!mainSender(event) || !db || !draft || !proposalId(draft.projectId) || !getProjectById(db, draft.projectId) || typeof draft.proposal !== 'string' || draft.proposal.length > 12000 || !Array.isArray(draft.assumptions) || !Array.isArray(draft.questions)) return { ok: false, error: 'bad-draft' }
-    saveProposalDraft(db, { projectId: draft.projectId, proposal: draft.proposal, assumptions: draft.assumptions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), questions: draft.questions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), updatedAt: new Date().toISOString() })
+    const existing = getProposalDraft(db, draft.projectId)
+    saveProposalDraft(db, { provider: existing?.provider, model: existing?.model, promptVersion: existing?.promptVersion, generatedAt: existing?.generatedAt, projectId: draft.projectId, proposal: draft.proposal, assumptions: draft.assumptions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), questions: draft.questions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), updatedAt: new Date().toISOString() })
     return { ok: true }
   })
   ipcMain.handle(IPC.deleteProposalDraft, (event, v: { id?: unknown }) => { if (!mainSender(event) || !db || !proposalId(v?.id)) return { ok: false }; deleteProposalDraft(db, v.id); return { ok: true } })
@@ -1322,6 +1404,9 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.getSettings, () => settings)
   ipcMain.handle(IPC.updateSettings, (_e, patch: Partial<AppSettings>) => {
+    if (!localSender(_e)) throw new Error('untrusted-sender')
+    if (patch?.quickApply !== undefined && !validQuickApply(patch.quickApply)) throw new Error('invalid-quick-apply-settings')
+    if(patch?.quickApply?.enabled&&!extension?.available())throw Error('extension-not-paired')
     const p = (patch ?? {}) as Partial<AppSettings>
     const next = mergeSettings(settings, p)
     const intervalChanged = next.pollIntervalMs !== settings.pollIntervalMs
@@ -1623,16 +1708,25 @@ async function boot(): Promise<void> {
     return
   }
   await app.whenReady()
-  app.on('second-instance', () => {
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.show()
-      win.focus()
-    }
-  })
 
   db = openDatabase(join(app.getPath('userData'), 'rased.db'))
+  aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi)
   settings = loadSettings()
+  // Retire only the old embedded-browser profiles, leaving all other app data intact.
+  try {
+    await retireQuickBrowser(app.getPath('userData'))
+    db.exec('DELETE FROM quick_apply_tickets')
+  } catch {
+    recordDiagnostic(db, { at: new Date().toISOString(), endpointKind: 'quick-apply', status: 'retirement-failed', durationMs: 0, itemCount: null, errorCategory: 'legacy-browser-cleanup-failed', detail: null })
+  }
+  try{
+    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>settings,()=>broadcast(IPC.extensionStatus,extensionSnapshot()),()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
+    await extension.start()
+  }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
+  if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
+  if(!testHarness&&extension){
+    extension.protocolReady=IS_PACKAGED?app.setAsDefaultProtocolClient('rased'):app.setAsDefaultProtocolClient('rased',process.execPath,[app.getAppPath()])
+  }
   if (testHarness) { paused = true; khamsatPaused = true; nafezlyPaused = true }
   const savedState = getSourceState(db, SOURCE)
   const savedBackoff = savedState.backoffUntil ? Date.parse(savedState.backoffUntil) : NaN
@@ -1665,7 +1759,7 @@ async function boot(): Promise<void> {
 
   // Development never installs updates over a working checkout. Test mode
   // replaces only the updater boundary inside the explicitly marked profile.
-  const updatePort = testHarness ? testUpdater(app.getPath('userData'), testHarness.record) : app.isPackaged && process.platform === 'win32' ? new NsisUpdater() : null
+  const updatePort = testHarness ? testUpdater(app.getPath('userData'), testHarness.record) : IS_PACKAGED && process.platform === 'win32' ? new NsisUpdater() : null
   updates = new UpdateController(updatePort, APP_VERSION, state => broadcast(IPC.updateState, state), error => auditUi(`update-error ${String(error).slice(0, 200)}`))
   if (updatePort && !testHarness) {
     updateStartupTimer = setTimeout(() => { if (!quitRequested) void updates?.check() }, 10_000)
@@ -1675,6 +1769,10 @@ async function boot(): Promise<void> {
   registerIpc()
   createWindow()
   createTray()
+  extensionReady=true
+  for(const url of pendingExtensionUrls)void activateExtensionUrl(url)
+  pendingExtensionUrls.clear()
+  for(const arg of process.argv)if(parseExtensionTicket(arg))void activateExtensionUrl(arg)
   app.on('before-quit', (event) => {
     if (quitComplete) return
     event.preventDefault()
@@ -1779,6 +1877,7 @@ function settingsExportPayload(): {
       linkDisplayAndNotifyFilters: settings.linkDisplayAndNotifyFilters,
       notifyUncertainCategory: settings.notifyUncertainCategory,
       showUnreadOnly: settings.showUnreadOnly,
+      quickApply: settings.quickApply,
       ui: settings.ui
     },
     savedFilters: db ? listSavedFilters(db) : []
@@ -1817,6 +1916,8 @@ function validateSettingsImport(): ImportSummary {
   }
   if (!Array.isArray(o['savedFilters'])) return { ok: false, error: 'bad-schema' }
   const full = sanitizeSettings(o['settings'] ?? {})
+  const importedSettings = o['settings'] as Record<string, unknown> | undefined
+  if (importedSettings?.['quickApply'] !== undefined && !validQuickApply(importedSettings['quickApply'])) return { ok: false, error: 'invalid-quick-apply-settings' }
   const present = typeof o['settings'] === 'object' && o['settings'] !== null ? Object.keys(o['settings'] as object) : []
   const allowed: (keyof AppSettings)[] = [
     'language',
@@ -1830,6 +1931,7 @@ function validateSettingsImport(): ImportSummary {
     'linkDisplayAndNotifyFilters',
     'notifyUncertainCategory',
     'showUnreadOnly',
+    'quickApply',
     'ui'
   ]
   const partial: Partial<AppSettings> = {}

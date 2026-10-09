@@ -1,4 +1,5 @@
 import React from 'react'
+import { QuickApplyButton } from '../components/QuickApplyButton.js'
 import { rased } from '../api.js'
 import { matchesDefinition } from '@shared/filters.js'
 import {
@@ -531,6 +532,7 @@ function PreviewPanel({
           </div>
         )}
         <div className="row-actions">
+          <QuickApplyButton id={p.id} source={p.source} lang={lang}/>
           <button className="btn primary sm" onClick={onOpenDetail}>
             {t.previewFullDetails}
           </button>

@@ -23,7 +23,7 @@ GitHub and metadata URLs use hyphenated filenames, so filename normalization can
 
 ## Publishing the next release
 
-1. Bump version (`npm version patch --no-git-tag-version`), update README/CHANGELOG and add `docs/RELEASE_<version>.md`.
+1. Choose patch for fixes, minor for features, or major for breaking changes (`npm version <version> --no-git-tag-version`), update README/CHANGELOG and add `docs/RELEASE_<version>.md`.
 2. Run typecheck, lint and tests; run relevant integration checks for changed behavior. Build with `npm run dist`.
 3. Commit all source changes and push `main`. Wait for GitHub checks to pass.
 4. Run `npm run release` after authenticating `gh` to the repository. This command **publishes**, unlike `npm run dist`.
@@ -37,10 +37,9 @@ Fork maintainers must change `build.publish.owner/repo` and app identity intenti
 - `tests/updates.test.ts`: 6 unit cases for gating/concurrency/retries/invalid metadata/install errors/late error cleanup.
 - `scripts/e2e-cdp.mjs`: real app IPC and UI with an updater boundary fixture; notes and metadata use real SQLite.
 - `npm run test:update-install`: a real NSIS upgrade of a uniquely named QA app built from the controller. Requires Windows, Node/npm and Electron builder; installs only the QA ID in a verified TEMP directory, disables shortcuts and uninstalls it afterward. QA build/profile files are retained for diagnosis. It does not publish anything or modify RASED's normal install/data folders.
-- A real local QA upgrade succeeded on 2026-09-26 in `C:\Users\DAVIDA~1\AppData\Local\Temp\rased-upgrade-qa-VzBBAO`: 1.0.0 → 1.0.1, real metadata/download/checksum/NSIS/relaunch and preserved SQLite note.
 - This does not prove every Windows version, recovery from power loss during installation, or a full production RASED upgrade via a future GitHub release. Packaged production checks cover the current feed when published; future metadata must remain correct.
 
-After publishing v0.2.5, the real packaged RASED app was launched without the integration harness in a new TEMP profile (`rased-test-sS2ZJP`). A manual check through the real IPC/NSIS updater read the public GitHub feed successfully: `phase=idle`, `currentVersion=0.2.5`, `checkedAt=2026-09-26T14:21:57.683Z`, `error=null`. No fixture or overridden feed was used. GitHub's EXE digest matched local SHA256 `B51A325F2A950ED9D16CCF6446053681B513F9BFC8C14CEE2F63AEBA2E50A8BA`; all four published assets were validated before the draft became public. This is a live check for the current release, not an invented future production upgrade.
+A prior isolated QA cycle verified real NSIS update installation, relaunch and SQLite preservation. These tests do not guarantee every future production upgrade. Published asset digests are validated against local files before each release.
 
 The upstream `lazy-val` package declares MIT but supplies no license/copyright file in npm or its repository. Its declaration and standard MIT terms are transparently documented in `docs/legal/lazy-val-license-declaration.txt`; no copyright year or recovered upstream notice is invented. The generated notices now include updater runtime dependencies.
 

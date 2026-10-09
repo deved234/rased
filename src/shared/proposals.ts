@@ -1,3 +1,4 @@
+import type { AiProviderId } from './ai.js'
 export const GEMINI_MODEL = 'gemini-2.5-flash'
 
 export interface ProposalProfile {
@@ -22,6 +23,8 @@ export interface ProposalPreview {
   projectNotes: string
   fingerprint: string
   model: string
+  provider: AiProviderId
+  promptVersion: string
 }
 
 export interface ProposalDraft {
@@ -30,11 +33,16 @@ export interface ProposalDraft {
   assumptions: string[]
   questions: string[]
   updatedAt: string
+  provider?: AiProviderId | null
+  model?: string | null
+  promptVersion?: string | null
+  generatedAt?: string | null
 }
 
 export interface ProposalResult {
   ok: boolean
   error?: string
+  retryAfterSeconds?: number
   draft?: ProposalDraft
 }
 

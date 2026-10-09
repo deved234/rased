@@ -1,10 +1,14 @@
 # شروط الاستخدام
 
-2026-09-29 · RASED · david atef
+2026-10-09 · RASED · david atef
+
+## قالب التقديم السريع
+
+يمكنك حفظ نص العرض وموضع السعر داخل الميزانية والأيام الإضافية محليًا. تعمل التعبئة الاختيارية عبر إضافة Chrome محلية مرتبطة براصد لمستقل ونفذلي فقط. تحتاج تثبيت الإضافة يدويًا وربط بروفايل برمز مطابق. تجهز النص والسعر والمدة وتترك زر تقديم العرض لك؛ راجع المعلومات بنفسك. خمسات غير مشمول. حفظ القالب لا يقدم عرضًا ولا يرسل النص لأي موفر ذكاء اصطناعي. شروط المنصات تظل واجبة.
 
 ## وظيفة البرنامج
 
-راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل، وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وخلاصة RSS العامة لمشاريع نفذلي، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات؛ يقرأ وصف نفذلي من RSS ولا يطلب صفحات تفاصيله، وتفاصيل طلبات خمسات الكاملة تُفتح على موقعها في المتصفح. تقديم العروض والتواصل والتعاقد والدفع يتم بواسطتك على المنصة المعنية؛ البرنامج لا يدخل حسابك ولا يرسل عروضًا أو ردودًا آلية.
+راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل، وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وخلاصة RSS العامة لمشاريع نفذلي، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات؛ الرصد العام يقرأ وصف نفذلي من RSS دون صفحات تفاصيله أو حساب. التواصل والتعاقد والدفع يتم بواسطتك على المنصة؛ البرنامج لا يرسل عروضًا أو ردودًا آلية.
 
 ## علاقة المنصة وحقوق المحتوى
 
@@ -20,7 +24,7 @@
 
 ## مساعد العروض
 
-يمكنك طلب مسودة عرض من Gemini لمشروع مستقل بعد معاينة البيانات والموافقة على إرسالها. راجع المسودة وعدّلها قبل نسخها وتقديمها بنفسك؛ قد تكون غير دقيقة أو تتضمن خبرات أو وعودًا لم تقدمها. لا ينشئ راصد حساب مستقل ولا يقدم عروضًا آليًا. استخدام Gemini ومفتاحك يخضع لشروط Google، ومنها متطلبات السن والمنطقة والخطة المتاحة: https://ai.google.dev/gemini-api/terms . ولا تمنح هذه الميزة حقوقًا إضافية في محتوى المشاريع.
+يمكنك طلب مسودة لمشروع مستقل من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموفر والموافقة لكل طلب. راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms .
 
 ## الترخيص والمسؤولية
 
@@ -34,11 +38,15 @@
 
 # Terms of use
 
-2026-09-29 · RASED · david atef
+2026-10-09 · RASED · david atef
+
+## Saved quick-apply template
+
+You can save a proposal template, budget position and extra days locally. Optional form filling uses a locally paired Chrome extension for Mostaql and Nafezly only; Khamsat is excluded. Install the unpacked extension manually, match the pairing code, and select a profile. It fills the template and available price/duration, leaving submission to you. Review every value yourself. Saving a template submits nothing and sends no text to an AI provider. Platform rules still apply.
 
 ## Purpose
 
-RASED is a local tool for following the public Mostaql RSS feed, Khamsat unavailable-service requests listing and Nafezly projects RSS feed, organizing results and showing alerts. It may fetch public Mostaql detail pages; Nafezly descriptions come from RSS without detail-page requests, and full Khamsat request details open in your browser. You reply, submit proposals, contract and pay yourself on the relevant platform. RASED does not access your accounts or submit automated proposals or replies.
+RASED follows public Mostaql and Nafezly RSS feeds and Khamsat unavailable-service requests, organizing results and showing alerts. Public monitoring needs no platform account; Mostaql details may be fetched while Nafezly descriptions come from RSS. You reply, submit, contract and pay yourself; RASED does not send automated proposals or replies.
 
 ## Platform and content rights
 
@@ -54,7 +62,7 @@ Information may be incomplete or stale and alerts may be delayed or missed. Chec
 
 ## Proposal Assistant
 
-You can ask Gemini to draft a proposal for a Mostaql project after previewing and approving the data sent. Review and edit the draft before copying and submitting it yourself; it can contain mistakes, invented experience or unsupported promises. RASED does not create a Mostaql account or submit proposals automatically. Use of Gemini and your key is subject to Google terms, including age, regional and service-tier restrictions: https://ai.google.dev/gemini-api/terms . This feature grants no additional rights to project content.
+Request a Mostaql draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each request. Review and submit it yourself; output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
 
 ## License and liability
 

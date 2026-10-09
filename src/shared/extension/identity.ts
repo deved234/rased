@@ -1,0 +1,6 @@
+// Public identity only. No private key is persisted.
+export const EXTENSION_ID = 'glnlaggogbgimbnbmeebfejnfjehlhgd'
+export const EXTENSION_PUBLIC_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvHG0sBtWwOfnK+8DaunWzDZnHxFmowdNG43oLJMgKxGCu21C7xufEF+qYZ6sUGokiKFhH2uInZVIby2o0xQxPrCjw9j1y9AkXKW4um0ii2ZZVDCZgD+z8crrHNDbhDNsB+5x6v2PjwbgdcYdXw4bhS5Gx57ZtXIgJVwXGaH/niWETmMBqNTBBeXzVAC8mpqmE/cX3VrxYyHrOij3j1i6b8jem1sP0/adkQ4W7KELH5ThgItue1iQNCVZ5p8dVeR0jRFwCXKW9ce6JXh8sNBX/+LjBWrvQUFET+PLtr4obSdONONBo5OsV1sj4x1jPcg5nkC3k1nSXeDNb2U4zs/2/QIDAQAB'
+export const HOST_NAME = 'com.rased.quick_apply'
+export const EXTENSION_VERSION = '0.1.0'
+export const PROTOCOL_VERSION = 1

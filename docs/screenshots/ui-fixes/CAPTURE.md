@@ -1,1 +1,0 @@
-Live RSS; packaged version 0.2.1; real OS browser opener succeeded. Pause intentionally enabled for screenshots. TEMP profile: C:\Users\DAVIDA~1\AppData\Local\Temp\rased-test-VYakFZ. No OS toast click/audibility assertion.

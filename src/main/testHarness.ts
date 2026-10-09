@@ -8,7 +8,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 export function isolatedTestHarness(profile: string, argv: string[]): null | {
   fetchImpl: typeof fetch
-  geminiFetchImpl: typeof fetch
+  aiFetchImpl: typeof fetch
   record: (kind: string, data: unknown) => void
 } {
   const rel = relative(resolve(tmpdir()), resolve(profile))
@@ -26,12 +26,32 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
     const rss = String(url).endsWith('/rss')
     return new Response(readFileSync(join(profile, rss ? 'rss-fixture.xml' : 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': rss ? 'application/rss+xml' : 'text/html' } })
   }) as typeof fetch
-  const geminiFetchImpl = (async (url, options) => {
+  const aiFetchImpl = (async (input, options) => {
+    const url = new URL(String(input))
     if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    record('gemini-generate', String(url))
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ proposal: 'A focused proposal for the review project.', assumptions: ['Confirm scope'], questions: ['What is the deadline?'] }) }] } }] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    const provider = url.hostname === 'generativelanguage.googleapis.com' ? 'gemini' : url.hostname === 'api.openai.com' ? 'openai' : url.hostname === 'api.anthropic.com' ? 'anthropic' : null
+    if (!provider) throw Error('Unexpected test destination')
+    const configPath = join(profile, 'ai-fixture.json')
+    const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) as { delay?: number; status?: number } : {}
+    if (config.delay) await new Promise<void>((resolve, reject) => {
+      const abort = (): void => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')) }
+      const timer = setTimeout(() => { options?.signal?.removeEventListener('abort', abort); resolve() }, config.delay)
+      options?.signal?.addEventListener('abort', abort, { once: true })
+    })
+    if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const body = options?.body ? JSON.parse(String(options.body)) as Record<string, unknown> : null
+    record('ai-request', { provider, method: options?.method, model: body?.model ?? url.pathname.split('/').at(-1)?.split(':')[0], synthetic: JSON.stringify(body).includes('Synthetic test profile only') })
+    if (config.status) return new Response(JSON.stringify({ error: { type: 'rate_limit_error' } }), { status: config.status })
+    if (options?.method === 'GET') {
+      const data = provider === 'gemini' ? { models: [{ name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent'] }] } : provider === 'openai' ? { data: [{ id: 'gpt-4.1-mini' }] } : { data: [{ id: 'claude-sonnet-4-5', display_name: 'Claude Sonnet 4.5', capabilities: { structured_outputs: { supported: true } } }], has_more: false }
+      return new Response(JSON.stringify(data))
+    }
+    if (provider === 'gemini') record('gemini-generate', String(input))
+    const text = JSON.stringify({ proposal: 'A focused proposal for the review project.', assumptions: ['Confirm scope'], questions: ['What is the deadline?'] })
+    const data = provider === 'gemini' ? { candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] } }] } : provider === 'openai' ? { status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text }] }] } : { stop_reason: 'end_turn', content: [{ type: 'text', text }] }
+    return new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
-  return { fetchImpl, geminiFetchImpl, record }
+  return { fetchImpl, aiFetchImpl, record }
 }
 
 /** Only constructed after isolatedTestHarness validated the opt-in TEMP marker. */

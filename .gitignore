@@ -1,6 +1,8 @@
 # RASED — never commit these
 node_modules/
 out/
+resources/chrome-bridge/
+resources/chrome-extension/
 release/
 dist/
 *.log
@@ -27,3 +29,18 @@ MUSE_SPARK_IMPLEMENTATION_PROMPT.md
 IMPLEMENTATION_REPORT.md
 IMPLEMENTATION_STATUS.md
 docs/*_PROMPT.md
+
+# Private plans, reviews, research and generated QA evidence stay on this device
+.local/
+docs/*_PLAN.md
+docs/*_REPORT.md
+docs/*_STATUS.md
+docs/*_REVIEW.md
+docs/*_BENCHMARK.md
+docs/screenshots/
+*.enc
+# Historical handoffs and root-level execution notes must not re-enter Git.
+*_PLAN.md
+*_REPORT.md
+*_REVIEW.md
+PROJECT_HANDOFF.md

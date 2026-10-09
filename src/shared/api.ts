@@ -1,6 +1,9 @@
 import type { AboutLink } from './about.js'
+import type { ExtensionStatus } from './extension/protocol.js'
+export type ExtensionAction = { action:'prepare'|'folder'|'copy-path'|'chrome-extensions'|'cancel' } | { action:'approve'; id:string; code:string; label:string } | { action:'select'|'revoke'; id:string }
 import type { UpdateState } from './updates.js'
 import type { ProposalDraft, ProposalPreview, ProposalProfile, ProposalResult } from './proposals.js'
+import type { AiOperationResult, AiProviderId, AiSelection, AiSettings, AiSetup } from './ai.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
@@ -48,12 +51,20 @@ export interface AppInfo {
 }
 
 export interface RasedApi {
+  getExtensionStatus():Promise<ExtensionStatus>
+  extensionAction(action:ExtensionAction):Promise<MutationResult>
+  quickApplyProject(id:number):Promise<MutationResult>
+  onExtensionStatus(cb:(status:ExtensionStatus)=>void):()=>void
   getProposalSetup(): Promise<{ hasKey: boolean; profile: ProposalProfile }>
-  saveGeminiKey(key: string): Promise<MutationResult>
-  deleteGeminiKey(): Promise<MutationResult>
+  getAiSetup(): Promise<AiSetup>
+  saveAiSettings(settings: AiSettings): Promise<MutationResult>
+  saveAiKey(provider: AiProviderId, key: string): Promise<MutationResult>
+  deleteAiKey(provider: AiProviderId): Promise<MutationResult>
+  listAiModels(provider: AiProviderId): Promise<AiOperationResult>
+  testAiModel(selection: AiSelection): Promise<AiOperationResult>
   saveProposalProfile(profile: ProposalProfile): Promise<MutationResult>
-  getProposalPreview(id: number, projectNotes: string): Promise<ProposalPreview | null>
-  generateProposal(id: number, projectNotes: string, fingerprint: string): Promise<ProposalResult>
+  getProposalPreview(id: number, projectNotes: string, selection?: AiSelection): Promise<ProposalPreview | null>
+  generateProposal(id: number, projectNotes: string, fingerprint: string, selection?: AiSelection): Promise<ProposalResult>
   cancelProposal(): Promise<void>
   getProposalDraft(id: number): Promise<ProposalDraft | null>
   saveProposalDraft(draft: ProposalDraft): Promise<MutationResult>

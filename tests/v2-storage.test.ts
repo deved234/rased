@@ -64,7 +64,7 @@ afterEach(() => {
 
 describe('migration v3', () => {
   it('creates v3 tables and preserves stored data across reopen', () => {
-    expect(SCHEMA_VERSION).toBe(4)
+    expect(SCHEMA_VERSION).toBe(7)
     const ids = seed(3)
     updateUserState(db, ids[0] as number, { saved: true, note: 'keep me' })
     const path = join(dir, 't.db')

@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { closeDatabase, openDatabase, type Db } from '../src/storage/db.js'
 import { countPurgeable, purgeHistory, upsertProjectsBatch, upsertProjectDetails } from '../src/storage/repositories.js'
 import { deleteProposalDraft, getProposalDraft, saveProposalDraft } from '../src/storage/proposalDrafts.js'
-import { buildProposalPrompt, deleteGeminiKey, generateGeminiProposal, getProposalPreview, hasGeminiKey, parseGeminiDraft, saveGeminiKey, saveProposalProfile } from '../src/main/proposals.js'
+import { buildProposalPrompt, generateProposalDraft, getProposalPreview, parseProposalDraft, saveProposalProfile } from '../src/main/proposals.js'
+
+import { deleteAiKey, keyStatus, saveAiKey } from '../src/main/ai/keyStore.js'
 
 vi.mock('electron', () => ({ safeStorage: { isEncryptionAvailable: () => true, encryptString: (s: string) => Buffer.from(`enc:${s}`), decryptString: (b: Buffer) => b.toString().replace(/^enc:/, '') } }))
 
@@ -34,15 +36,15 @@ describe('proposal assistant data boundaries', () => {
   })
 
   it('encrypts the key outside SQLite and makes a single bounded Gemini request', async () => {
-    expect(saveGeminiKey(dir, 'fake-test-key-123456')).toBe(true)
-    expect(hasGeminiKey(dir)).toBe(true)
+    expect(saveAiKey(dir, 'gemini', 'fake-test-key-123456')).toBe(true)
+    expect(keyStatus(dir, 'gemini').hasKey).toBe(true)
     const mock = vi.fn(async (url: string, options: RequestInit) => {
       expect(url).toContain('gemini-2.5-flash')
       expect(options.headers).toHaveProperty('x-goog-api-key', 'fake-test-key-123456')
       return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ proposal: 'Hello client', assumptions: ['Timeline unclear'], questions: ['Any design?'] }) }] } }] }), { status: 200 })
     })
     vi.stubGlobal('fetch', mock)
-    const draft = await generateGeminiProposal(dir, getProposalPreview(db, id, '')!, new AbortController().signal)
+    const draft = await generateProposalDraft(dir, getProposalPreview(db, id, '')!, new AbortController().signal)
     expect(draft.proposal).toBe('Hello client')
     expect(mock).toHaveBeenCalledTimes(1)
     const request = mock.mock.calls[0]
@@ -51,18 +53,18 @@ describe('proposal assistant data boundaries', () => {
     const body = JSON.parse(String((request?.[1] as RequestInit).body))
     expect(body.generationConfig.thinkingConfig.thinkingBudget).toBe(0)
     expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(2048)
-    deleteGeminiKey(dir)
-    expect(hasGeminiKey(dir)).toBe(false)
+    deleteAiKey(dir, 'gemini')
+    expect(keyStatus(dir, 'gemini').hasKey).toBe(false)
   })
 
   it('reports token-limited responses instead of treating partial JSON as a bad key', async () => {
-    expect(saveGeminiKey(dir, 'fake-test-key-123456')).toBe(true)
+    expect(saveAiKey(dir, 'gemini', 'fake-test-key-123456')).toBe(true)
     const truncated = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"proposal":"incomplete' }] } }] }), { status: 200 }))
-    await expect(generateGeminiProposal(dir, getProposalPreview(db, id, '')!, new AbortController().signal, truncated as typeof fetch)).rejects.toThrow('output-truncated')
+    await expect(generateProposalDraft(dir, getProposalPreview(db, id, '')!, new AbortController().signal, undefined, truncated as typeof fetch)).rejects.toThrow('output-truncated')
   })
 
   it('persists and deletes editable drafts without touching projects', () => {
-    const draft = parseGeminiDraft({ proposal: 'Work plan', assumptions: [], questions: [] }, id)!
+    const draft = parseProposalDraft({ proposal: 'Work plan', assumptions: [], questions: [] }, id)!
     saveProposalDraft(db, draft)
     expect(getProposalDraft(db, id)?.proposal).toBe('Work plan')
     expect(countPurgeable(db, '2099-01-01T00:00:00.000Z', ['live'])).toBe(0)
