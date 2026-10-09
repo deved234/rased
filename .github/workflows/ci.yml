@@ -16,6 +16,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: node scripts/ensure-electron.mjs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
