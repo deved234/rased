@@ -4,11 +4,11 @@
 
 Select an opportunity title or Preview to open the side panel. Its fixed footer provides full in-app details, the platform link and bookmarking. The platform button opens your normal browser. The side preview does not block the list at supported desktop widths; narrow layouts put card actions below the title. Enter or Space previews a focused card; Ctrl+Enter opens its platform URL.
 
-Source controls pause/resume Mostaql, Nafezly and Khamsat independently. Applying a list filter does not silently change notification filtering. Saved filters retain their names when edited.
+Source controls pause/resume Mostaql, Nafezly, Khamsat and KAF independently. Applying a list filter does not silently change notification filtering. Saved filters retain their names when edited. KAF cards show platform status independently of your personal status, verified budgets and detection time. Full details are requested when opened; raw publication times have no assumed timezone. KAF alerts use title/excerpt keywords and only open projects qualify. [KAF guide](KAF.md).
 
 ## Settings and unsaved work
 
-Settings are grouped by monitoring, appearance, proposals, data and updates, and information. Language, theme, density and text size apply immediately. Quick Apply templates, AI settings/profile, proposal edits and Khamsat/Nafezly notification keywords have explicit saving. Before leaving edited work, choose Save and continue, Discard edits or Stay here. A failed save leaves the page and text available for retry. Forced termination and power loss cannot be protected by a navigation dialog.
+Settings are grouped by monitoring, appearance, proposals, data and updates, and information. Language, theme, density and text size apply immediately. Quick Apply templates, AI settings/profile, proposal edits and source notification keywords have explicit saving. Before leaving edited work, choose Save and continue, Discard edits or Stay here. A failed save leaves the page and text available for retry. Forced termination and power loss cannot be protected by a navigation dialog.
 
 ## Compact window and local data
 

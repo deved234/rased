@@ -64,6 +64,9 @@ interface ProjectRow {
   budget_min: number | null
   budget_max: number | null
   currency: string | null
+  platform_status: string | null
+  duration_days: number | null
+  duration_raw: string | null
   budget_raw: string | null
   enrichment_status: EnrichmentStatus
 }
@@ -100,6 +103,9 @@ export function mapProject(row: ProjectRow): Project {
     budgetMin: row.budget_min,
     budgetMax: row.budget_max,
     currency: row.currency,
+    platformStatus: row.platform_status,
+    durationDays: row.duration_days,
+    durationRaw: row.duration_raw,
     budgetRaw: row.budget_raw,
     enrichmentStatus: row.enrichment_status
   }

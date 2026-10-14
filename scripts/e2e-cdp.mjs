@@ -25,7 +25,7 @@ for (let id = 1; id <= 450; id++) {
 }
 db.exec(`INSERT INTO project_details SELECT id,'Cached review description','full','2020-01-01T00:00:00.000Z','ready',NULL FROM projects;`)
 db.prepare(`INSERT INTO source_state(source,baseline_complete,last_success_at,consecutive_failures) VALUES ('mostaql',1,?,0)`).run(stamp)
-db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({khamsatEnabled:false,nafezlyEnabled:false}))
+db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({khamsatEnabled:false,nafezlyEnabled:false,kafEnabled:false}))
 const def = { scope: 'all', unreadOnly: false, statuses: [], search: '', categoryFilter: { mode: 'all', categories: [], keywordsAny: [], keywordsAll: [], excludeKeywords: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true, sort: 'latestDetected' }
 const rss = items => `<?xml version="1.0"?><rss version="2.0"><channel><title>مستقل</title>${items.map(p => `<item><title>${p.title}</title><link>https://mostaql.com/go/${p.external}</link><description>React work</description><pubDate>${new Date().toUTCString()}</pubDate></item>`).join('')}</channel></rss>`
 const writeRss = items => writeFileSync(join(profile, 'rss-fixture.xml'), rss(items))

@@ -1,3 +1,4 @@
+import { isKafProjectUrl } from '../collector/kaf.js'
 // URL allow-list for opening projects in the user's default browser.
 // Only exact mostaql.com HTTPS project links. `openProject` prefers the
 // stored DB URL for a project id over any renderer-supplied string.
@@ -19,6 +20,7 @@ export function isAllowedProjectUrl(raw: string): boolean {
   } catch {
     return false
   }
+  if (u.hostname === 'kafiil.com') return isKafProjectUrl(raw)
   if (u.protocol !== 'https:') return false
   if (u.username || u.password) return false
   if (u.hostname.toLowerCase() === 'nafezly.com') return !u.search && !u.hash && /^\/project\/\d+(?:-[^/]*)?\/?$/.test(u.pathname)
@@ -33,5 +35,6 @@ export function isAllowedProjectUrl(raw: string): boolean {
 export function resolveProjectUrl(db: Db, projectId: number): string | null {
   const p = getProjectById(db, projectId)
   if (!p) return null
+  if (p.source === 'kaf' && (!isKafProjectUrl(p.url) || new URL(p.url).pathname.match(/^\/project\/(\d+)/)?.[1] !== p.externalId)) return null
   return isAllowedProjectUrl(p.url) ? p.url : null
 }

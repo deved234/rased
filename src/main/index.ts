@@ -1,3 +1,5 @@
+import { KafController } from './kaf.js'
+import { matchesKafKeywords } from '../collector/kaf.js'
 // RASED main process: lifecycle, collector loop, IPC, tray, notifications.
 // The collector lives here (outside React). Renderer is display-only.
 
@@ -173,6 +175,8 @@ let khamsatLastItemCount: number | null = null
 let nafezlyTimer: NodeJS.Timeout | null = null
 let nafezlyInFlight = false
 let nafezlyAbort: AbortController | null = null
+let kaf: KafController | null = null
+function snapshotKafHealth(): SourceHealth { return kaf?.health() ?? { state: 'initializing', paused: false, lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: null, lastError: null, consecutiveFailures: 0, lastDurationMs: null, lastItemCount: null, effectiveIntervalMs: 5500 } }
 let nafezlyNextAttemptMs: number | null = null
 let nafezlyLastDurationMs: number | null = null
 let nafezlyLastItemCount: number | null = null
@@ -242,6 +246,7 @@ function saveSettings(s: AppSettings): void {
   // Persist first: a failed write must not change live settings or cancel work.
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
   settings = s
+  kaf?.settingsChanged()
   if(!s.quickApply.enabled)extension?.cancel()
   applyAutoStart()
   broadcast(IPC.settingsChanged, s)
@@ -358,9 +363,9 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
   const lang = settings.language
   const tags: string[] = []
   if (p.project.discoveryKind === 'recovered') tags.push(lang === 'ar' ? 'فائت' : 'catch-up')
-  if (p.uncertain) tags.push(lang === 'ar' ? 'تصنيف غير مؤكد' : 'uncertain category')
+  if (p.uncertain && p.project.source === 'mostaql') tags.push(lang === 'ar' ? 'تصنيف غير مؤكد' : 'uncertain category')
   const title = tags.length > 0 ? `${projectLine(p.project)} (${tags.join('، ')})` : projectLine(p.project)
-  const body = p.project.source === KHAMSAT_SOURCE ? (lang === 'ar' ? 'طلب خدمة جديد على خمسات — اضغط لفتح الطلب' : 'New Khamsat request — click to open') : p.project.descriptionExcerpt.slice(0, 180)
+  const body = p.project.source === 'kaf' ? (lang === 'ar' ? 'فرصة ظهرت على كاف — اضغط لفتح المشروع' : 'Opportunity appeared on KAF — click to open') : p.project.source === KHAMSAT_SOURCE ? (lang === 'ar' ? 'طلب خدمة جديد على خمسات — اضغط لفتح الطلب' : 'New Khamsat request — click to open') : p.project.descriptionExcerpt.slice(0, 180)
   const { id, url } = p.project
   return showToast(title, body, () => {
     void openProjectById(id, true, url).then(result => {
@@ -397,11 +402,11 @@ async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<
   const lang = settings.language
   const n = p.projects.length
   const title =
-    p.projects.every(project => project.source === NAFEZLY_SOURCE)
+    p.projects.every(project => project.source === 'kaf') ? (lang === 'ar' ? `${n} فرص ظهرت على كاف` : `${n} opportunities appeared on KAF`) : p.projects.every(project => project.source === NAFEZLY_SOURCE)
       ? (lang === 'ar' ? `${n} مشاريع جديدة على نفذلي` : `${n} new Nafezly projects`)
       : p.projects.every(project => project.source === KHAMSAT_SOURCE)
       ? (lang === 'ar' ? `${n} طلبات جديدة على خمسات` : `${n} new Khamsat requests`)
-      : p.projects.some(project => project.source === KHAMSAT_SOURCE || project.source === NAFEZLY_SOURCE)
+      : p.projects.some(project => project.source === KHAMSAT_SOURCE || project.source === NAFEZLY_SOURCE || project.source === 'kaf')
       ? (lang === 'ar' ? `${n} فرص جديدة` : `${n} new opportunities`)
       : lang === 'ar'
       ? p.recovering
@@ -486,6 +491,7 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
       shouldSend: (p) => {
         if (!notificationAllowed()) return false
         if (getUserState(d, p.id).hiddenAt !== null) return false
+        if (p.source === 'kaf') return settings.kafEnabled && settings.kafNotificationsEnabled && !snapshotKafHealth().paused && p.platformStatus === 'open' && matchesKafKeywords(p.title, p.descriptionExcerpt, settings.kafKeywordsAny, settings.kafExcludeKeywords)
         if (p.source === KHAMSAT_SOURCE) return settings.khamsatEnabled && settings.khamsatNotificationsEnabled && matchesKhamsatKeywords(p.title, settings.khamsatKeywordsAny, settings.khamsatExcludeKeywords)
         if (p.source === NAFEZLY_SOURCE) {
           const description = getProjectDetailsRow(d, p.id).text ?? p.descriptionExcerpt
@@ -1026,7 +1032,8 @@ function trayLabel(): string {
   const stateValue = overallSourceState([
     snapshotHealth(),
     ...(settings.khamsatEnabled ? [snapshotKhamsatHealth()] : []),
-    ...(settings.nafezlyEnabled ? [snapshotNafezlyHealth()] : [])
+    ...(settings.nafezlyEnabled ? [snapshotNafezlyHealth()] : []),
+    ...(settings.kafEnabled ? [snapshotKafHealth()] : [])
   ])
   const state = ar
     ? { watching: 'الرصد نشط', partial: 'رصد جزئي', paused: 'متوقف', 'backing-off': 'تهدئة وإعادة', error: 'خطأ', offline: 'غير متصل', 'needs-review': 'يحتاج مراجعة', initializing: 'يبدأ…' }[stateValue]
@@ -1051,6 +1058,10 @@ function updateTray(): void {
       ...(settings.nafezlyEnabled ? [nafezlyPaused
         ? { label: ar ? 'استئناف نفذلي' : 'Resume Nafezly', click: () => void doResumeNafezly() }
         : { label: ar ? 'إيقاف نفذلي مؤقتًا' : 'Pause Nafezly', click: () => void doPauseNafezly() }] : []),
+      ...(settings.kafEnabled ? [
+        { label: ar ? (kaf?.health().paused ? 'استئناف كاف' : 'إيقاف كاف مؤقتًا') : (kaf?.health().paused ? 'Resume KAF' : 'Pause KAF'), click: () => kaf?.setPaused(!kaf.health().paused) },
+        { label: ar ? 'كتم تنبيهات كاف' : 'Mute KAF alerts', type: 'checkbox' as const, checked: !settings.kafNotificationsEnabled, click: () => saveSettings({ ...settings, kafNotificationsEnabled: !settings.kafNotificationsEnabled }) }
+      ] : []),
       {
         label: settings.soundEnabled ? (ar ? 'كتم الصوت' : 'Mute sound') : ar ? 'تفعيل الصوت' : 'Enable sound',
         click: () => saveSettings({ ...settings, soundEnabled: !settings.soundEnabled })
@@ -1228,6 +1239,7 @@ async function shutdown(): Promise<void> {
   activeRss?.abort()
   khamsatAbort?.abort()
   nafezlyAbort?.abort()
+  const closingKaf = kaf?.close()
   const closingAi = aiService?.close()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
@@ -1243,6 +1255,7 @@ async function shutdown(): Promise<void> {
   try {
     while (work.size) await Promise.allSettled([...work])
     if (flushing) await Promise.allSettled([flushing])
+    await closingKaf
     await closingAi
     if (db) {
       const st = getSourceState(db, SOURCE)
@@ -1432,6 +1445,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.getHealth, () => snapshotHealth())
   ipcMain.handle(IPC.getKhamsatHealth, () => snapshotKhamsatHealth())
   ipcMain.handle(IPC.getNafezlyHealth, () => snapshotNafezlyHealth())
+  ipcMain.handle(IPC.getKafHealth, () => snapshotKafHealth())
+  ipcMain.handle(IPC.pauseKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); return kaf?.setPaused(true) })
+  ipcMain.handle(IPC.resumeKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); return kaf?.setPaused(false) })
   ipcMain.handle(IPC.pause, () => doPause())
   ipcMain.handle(IPC.resume, () => doResume())
   ipcMain.handle(IPC.pauseKhamsat, () => doPauseKhamsat())
@@ -1439,6 +1455,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.pauseNafezly, () => doPauseNafezly())
   ipcMain.handle(IPC.resumeNafezly, () => doResumeNafezly())
   ipcMain.handle(IPC.refresh, () => {
+    void kaf?.poll()
     void trackWork(runKhamsatCycle())
     void trackWork(runNafezlyCycle())
     return trackWork(runCycle())
@@ -1482,6 +1499,7 @@ function registerIpc(): void {
     if (!db || !Number.isInteger(v.id)) return null
     const p = getProjectById(db, v.id)
     if (!p) return null
+    if (p.source === 'kaf') return kaf?.requestDetails(v.id, v.force === true) ?? getProjectDetailsRow(db, v.id)
     if (p.source === KHAMSAT_SOURCE || p.source === NAFEZLY_SOURCE) return getProjectDetailsRow(db, v.id)
     const row = detailsFetcher.request(v.id, p.url, v.force === true)
     void trackWork(detailsFetcher.pump())
@@ -1767,7 +1785,13 @@ async function boot(): Promise<void> {
     updateTimer = setInterval(() => { if (!quitRequested) void updates?.check() }, 6 * 60 * 60 * 1000)
     updateTimer.unref()
   }
+  kaf = new KafController({
+    db: () => db, settings: () => settings, runId, fetchImpl: testHarness?.fetchImpl,
+    health: h => { broadcast(IPC.kafHealthChanged, h); updateTray() },
+    projects: emitProjects, details: id => emitDetails([id]), flush: () => flushNotifications(null).then(() => undefined)
+  })
   registerIpc()
+  kaf.start(!!testHarness)
   createWindow()
   createTray()
   extensionReady=true
@@ -1786,6 +1810,7 @@ async function boot(): Promise<void> {
     else win?.show()
   })
   powerMonitor.on('suspend', () => {
+    kaf?.sleep()
     activeRss?.abort()
     khamsatAbort?.abort()
     nafezlyAbort?.abort()
@@ -1801,6 +1826,7 @@ async function boot(): Promise<void> {
     }
   })
   powerMonitor.on('resume', () => {
+    kaf?.wake()
     if (!paused) {
       lastRecovering = true
       setTimeout(() => void trackWork(runCycle()), 2000)
@@ -1867,6 +1893,10 @@ function settingsExportPayload(): {
     format: 'rased-settings',
     version: SETTINGS_EXPORT_VERSION,
     settings: {
+      kafEnabled: settings.kafEnabled,
+      kafNotificationsEnabled: settings.kafNotificationsEnabled,
+      kafKeywordsAny: settings.kafKeywordsAny,
+      kafExcludeKeywords: settings.kafExcludeKeywords,
       language: settings.language,
       pollIntervalMs: settings.pollIntervalMs,
       notificationsEnabled: settings.notificationsEnabled,
@@ -1921,6 +1951,7 @@ function validateSettingsImport(): ImportSummary {
   if (importedSettings?.['quickApply'] !== undefined && !validQuickApply(importedSettings['quickApply'])) return { ok: false, error: 'invalid-quick-apply-settings' }
   const present = typeof o['settings'] === 'object' && o['settings'] !== null ? Object.keys(o['settings'] as object) : []
   const allowed: (keyof AppSettings)[] = [
+    'kafEnabled', 'kafNotificationsEnabled', 'kafKeywordsAny', 'kafExcludeKeywords',
     'language',
     'pollIntervalMs',
     'notificationsEnabled',

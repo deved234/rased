@@ -151,6 +151,10 @@ const MIGRATIONS: string[] = [
   ALTER TABLE proposal_drafts ADD COLUMN model TEXT NULL;
   ALTER TABLE proposal_drafts ADD COLUMN prompt_version TEXT NULL;
   ALTER TABLE proposal_drafts ADD COLUMN generated_at TEXT NULL;
+  `,/* 8 */ `
+  ALTER TABLE projects ADD COLUMN platform_status TEXT NULL;
+  ALTER TABLE projects ADD COLUMN duration_days INTEGER NULL;
+  ALTER TABLE projects ADD COLUMN duration_raw TEXT NULL;
   `
 ]
 

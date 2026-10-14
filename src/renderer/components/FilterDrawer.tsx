@@ -133,15 +133,16 @@ export function FilterDrawer({
           <label htmlFor="filter-field-1">{t.filterSource}</label>
           <select id="filter-field-1" className="select" value={def.source} onChange={(e) => {
             const source = e.target.value as FilterDefinition['source']
-            setDef(source === 'khamsat' || source === 'nafezly' ? { ...def, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...def, source })
+            setDef(source === 'khamsat' || source === 'nafezly' || source === 'kaf' ? { ...def, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, ...(source === 'kaf' ? {} : { budgetMin: null, budgetMax: null, includeUnknownBudget: true }) } : { ...def, source })
           }}>
             <option value="all">{lang === 'ar' ? 'كل المصادر' : 'All sources'}</option>
             <option value="mostaql">{t.sourceMostaql}</option>
             <option value="khamsat">{t.sourceKhamsat}</option>
             <option value="nafezly">{t.sourceNafezly}</option>
+            <option value="kaf">{t.sourceKaf}</option>
           </select>
         </div>
-        <p className="hint">{def.source === 'khamsat' ? t.filterKhamsatScope : def.source === 'nafezly' ? (lang === 'ar' ? 'نفذلي: البحث في العنوان ومقتطف الوصف؛ المجال والميزانية غير مؤكدين.' : 'Nafezly: search the title and description excerpt; category and budget are unverified.') : t.filterCategoryScope}</p>
+        <p className="hint">{def.source === 'khamsat' ? t.filterKhamsatScope : def.source === 'nafezly' ? (lang === 'ar' ? 'نفذلي: البحث في العنوان ومقتطف الوصف؛ المجال والميزانية غير مؤكدين.' : 'Nafezly: search the title and description excerpt; category and budget are unverified.') : def.source === 'kaf' ? (lang === 'ar' ? 'كاف: الميزانية من القائمة، وكلمات البحث في العنوان والمقتطف. فلتر مجالات مستقل لا ينطبق هنا.' : 'KAF: list budgets and title/excerpt search. Mostaql category filters do not apply here.') : t.filterCategoryScope}</p>
 
         <div className="set-row">
           <label htmlFor="filter-field-2">{t.scopeAll}</label>
@@ -207,7 +208,7 @@ export function FilterDrawer({
         <KeywordTokens label={t.keywordsAll} values={def.categoryFilter.keywordsAll} onChange={(v) => setKw('keywordsAll', v)} />
         <KeywordTokens label={t.excludeKeywords} values={def.categoryFilter.excludeKeywords} onChange={(v) => setKw('excludeKeywords', v)} />
 
-        {(def.source === 'mostaql' || def.source === 'all') && <div className="set-row">
+        {(def.source === 'mostaql' || def.source === 'all' || def.source === 'kaf') && <div className="set-row">
           <label>{t.budget}</label>
           <input
             className="input num"
@@ -234,7 +235,7 @@ export function FilterDrawer({
             }}
           />
         </div>}
-        {(def.source === 'mostaql' || def.source === 'all') && <div className="set-row">
+        {(def.source === 'mostaql' || def.source === 'all' || def.source === 'kaf') && <div className="set-row">
           <label>{t.includeUnknownBudget}</label>
           <Toggle checked={def.includeUnknownBudget} onChange={(v) => setDef({ ...def, includeUnknownBudget: v })} label={t.includeUnknownBudget} />
         </div>}

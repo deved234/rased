@@ -5,7 +5,7 @@ import type { ProjectWithUser } from '@shared/types.js'
 import { STRINGS, type Lang } from '../i18n.js'
 import { budgetLabel, timeAgo } from '../format.js'
 import { Icon } from './Icon.js'
-import { openOnSource, sourceName } from '../sourceCopy.js'
+import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
 
 export function CategoryTag({ lang, slug, confirmed }: { lang: Lang; slug: string | null; confirmed: boolean }): React.ReactElement | null {
   const t = STRINGS[lang]
@@ -58,11 +58,13 @@ export function ProjectRow({
         {p.descriptionExcerpt && <p className="ex clamp-1" dir="auto">{p.descriptionExcerpt}</p>}
         <div className="meta opportunity-meta">
           <span className="tag">{sourceName(p.source, lang)}</span>
+          {p.source === 'kaf' && <span className="tag" title={lang === 'ar' ? 'حالة المشروع على كاف' : 'Project status on KAF'}>{platformStatusName(p.platformStatus, lang)}</span>}
           {isNew && <span className="tag fresh">{t.newBadge}</span>}
           {!p.readAt && !isNew && <span className="tag fresh">{t.unreadBadge}</span>}
           <span title={p.publishedAt ?? p.firstSeenAt}>{p.publishedAt ? t.publishedAt : t.discoveredAt}: {timeAgo(p.publishedAt ?? p.firstSeenAt, lang)}</span>
           {p.source === 'mostaql' && <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />}
-          {p.source === 'mostaql' && budget && <span className="tag num" dir="ltr">{budget}</span>}
+          {(p.source === 'mostaql' || p.source === 'kaf') && budget && <span className="tag num" dir="ltr">{budget}</span>}
+          {p.source === 'kaf' && p.skills?.slice(0, 3).map(skill => <span className="tag" dir="auto" key={skill}>{skill}</span>)}
           {p.discoveryKind === 'recovered' && <span className="tag">{t.catchUpTag}</span>}
           {p.personalStatus !== 'none' && <span className="tag good">{p.personalStatus === 'interested' ? t.statusInterested : p.personalStatus === 'submitted' ? t.statusSubmitted : t.statusIgnored}</span>}
         </div>

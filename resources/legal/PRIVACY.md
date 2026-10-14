@@ -1,6 +1,10 @@
 # الخصوصية
 
-2026-10-09 · RASED · david atef
+2026-10-14 · RASED · david atef
+
+## اتصالات كاف
+
+عند تفعيل كاف يتصل جهازك مباشرة بـ kafiil.com لقراءة قائمة المشاريع العامة، وبصفحة المشروع عند طلب التفاصيل، دون ملفات تعريف ارتباط أو تسجيل دخول. يستقبل الموقع عنوان IP وبيانات الطلب. تُخزّن العناوين والمقتطفات والميزانية والمهارات وحالة المنصة والتفاصيل والمدة والوقت الخام محليًا. لا تُرسل بيانات كاف إلى مزودي الذكاء الاصطناعي أو إضافة التقديم السريع. يمكنك تعطيل رصده وتنبيهاته مستقلاً.
 
 ## قالب التقديم السريع وإزالة الجلسات القديمة
 
@@ -50,7 +54,11 @@
 
 # Privacy
 
-2026-10-09 · RASED · david atef
+2026-10-14 · RASED · david atef
+
+## KAF connections
+
+When enabled, your device contacts kafiil.com directly for public project listings and requested detail pages, without cookies or sign-in. The site receives your IP and request metadata. Titles, excerpts, budgets, skills, platform status, details, duration and raw times are stored locally. KAF data is not sent to AI providers or the Quick Apply extension. Monitoring and alerts can be disabled independently.
 
 ## Template and retired browser sessions
 

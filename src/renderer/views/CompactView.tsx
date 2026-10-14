@@ -2,12 +2,12 @@ import React from 'react'
 import { rased } from '../api.js'
 import { defaultFilterDefinition, type ProjectWithUser } from '@shared/types.js'
 import { STRINGS } from '../i18n.js'
-import { applyUiPrefs, useHealth, useKhamsatHealth, useNafezlyHealth, useNow, useSettings } from '../hooks.js'
+import { applyUiPrefs, useHealth, useKhamsatHealth, useNafezlyHealth, useKafHealth, useNow, useSettings } from '../hooks.js'
 import { timeAgo } from '../format.js'
 import { Icon } from '../components/Icon.js'
 import { overallDot, overallText } from '../components/shell.js'
 import { overallSourceState } from '@shared/sourceStatus.js'
-import { openOnSource, sourceName } from '../sourceCopy.js'
+import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
 
 /** Mini follower window: latest headlines, same services, no collector of its own. */
 export function CompactView(): React.ReactElement {
@@ -17,7 +17,8 @@ export function CompactView(): React.ReactElement {
   const health = useHealth(ready)
   const khamsatHealth = useKhamsatHealth(ready)
   const nafezlyHealth = useNafezlyHealth(ready)
-  const overall = overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : [])])
+  const kafHealth = useKafHealth(ready)
+  const overall = overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : []), ...(settings.kafEnabled ? [kafHealth] : [])])
   const [error, setError] = React.useState(false)
   const [rows, setRows] = React.useState<ProjectWithUser[]>([])
   void useNow(5000)
@@ -75,6 +76,7 @@ export function CompactView(): React.ReactElement {
             </h3>
             <div className="meta">
               <span className="tag">{sourceName(p.source, lang)}</span>
+              {p.source === 'kaf' && <span className="tag">{platformStatusName(p.platformStatus, lang)}</span>}
               <span>
                 {timeAgo(p.publishedAt ?? p.firstSeenAt, lang)}
               </span>

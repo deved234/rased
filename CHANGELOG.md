@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 — 2026-10-14
+
+- Added KAF (formerly Kafiil) as a fourth independent source using its public project list, with a silent initial baseline, 5–6 second healthy polling, open-project alerts and persisted source backoff.
+- Added bounded catch-up with a persisted cursor, cancellation on pause/disable/sleep/quit, on-demand cached descriptions and verified budget, skill, category, duration and platform-status data.
+- Integrated KAF into Arabic/English lists, previews, details, source controls, saved filters, compact view, tray, notification keywords and settings transfer. KAF links open in the default browser; AI and Quick Apply remain excluded for this source.
+- Preserved raw KAF publication times without assuming a timezone, and kept platform status separate from personal status. Scoped paused-source messages to their actual source.
+- Updated terms, privacy and maintained guides. Added collector/storage/scheduler regressions, real Electron KAF integration and four-source responsive UI coverage to Windows CI.
+
+
 ## 0.6.0 — 2026-10-09
 
 - Refined Arabic/English layouts, text contrast, keyboard focus, cards and settings navigation. Preview actions stay available while the description scrolls.

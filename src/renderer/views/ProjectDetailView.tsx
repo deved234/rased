@@ -7,7 +7,7 @@ import { STRINGS, type Lang } from '../i18n.js'
 import { budgetLabel, fullDate, timeAgo } from '../format.js'
 import { ConfirmDialog, EmptyState, SkeletonList } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
-import { openOnSource, sourceName } from '../sourceCopy.js'
+import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
 import { go, registerNavigationBlocker, requestAction } from '../router.js'
 
 function statusLabel(s: PersonalStatus, lang: Lang): string {
@@ -58,7 +58,7 @@ export function ProjectDetailView({
     setMissing(false)
     setDetails(d)
     // on-demand full text: once per mount (retry button handles the rest)
-    if (!autoRequested.current && d && p.source === 'mostaql') {
+    if (!autoRequested.current && d && (p.source === 'mostaql' || p.source === 'kaf')) {
       autoRequested.current = true
       const fresh = await rased.requestProjectDetails(projectId, d.status === 'failed')
       if (my !== generation.current) return
@@ -205,14 +205,14 @@ export function ProjectDetailView({
           </div>
 
           <div className="facts">
-            {project.source === 'mostaql' && <div className="fact">
+            {(project.source === 'mostaql' || project.source === 'kaf') && <div className="fact">
               <div className="k">{t.factsCategory}</div>
               <div className="v" dir="auto">
-                {project.categorySlug ? (categoryDisplay(project.categorySlug, lang) ?? project.categorySlug) : t.unknownCategory}
-                {!project.categoryConfirmed && <div className="faint small">{t.uncertainCategory}</div>}
+                {project.source === 'kaf' ? project.categoryName ?? t.unknownCategory : project.categorySlug ? (categoryDisplay(project.categorySlug, lang) ?? project.categorySlug) : t.unknownCategory}
+                {project.source === 'mostaql' && !project.categoryConfirmed && <div className="faint small">{t.uncertainCategory}</div>}
               </div>
             </div>}
-            {project.source === 'mostaql' && <div className="fact">
+            {(project.source === 'mostaql' || project.source === 'kaf') && <div className="fact">
               <div className="k">{t.factsBudget}</div>
               <div className="v num" dir="ltr">
                 {budget ?? t.budgetUnknown}
@@ -221,9 +221,14 @@ export function ProjectDetailView({
             <div className="fact">
               <div className="k">{t.factsPublished}</div>
               <div className="v" title={fullDate(project.publishedAt, lang)}>
-                {timeAgo(project.publishedAt, lang)}
+                {project.source === 'kaf' ? project.publishedRaw ?? '—' : timeAgo(project.publishedAt, lang)}
+                {project.source === 'kaf' && <div className="faint small">{lang === 'ar' ? 'كما ورد من المنصة؛ المنطقة الزمنية غير مؤكدة' : 'As shown by the platform; timezone unverified'}</div>}
               </div>
             </div>
+            {project.source === 'kaf' && <>
+              <div className="fact"><div className="k">{lang === 'ar' ? 'حالة المنصة' : 'Platform status'}</div><div className="v">{platformStatusName(project.platformStatus, lang)}</div></div>
+              <div className="fact"><div className="k">{lang === 'ar' ? 'مدة المشروع' : 'Project duration'}</div><div className="v" dir="auto">{project.durationDays ? `${project.durationDays} ${lang === 'ar' ? 'أيام' : 'days'}` : project.durationRaw ?? '—'}</div></div>
+            </>}
             <div className="fact">
               <div className="k">{t.factsDiscovered}</div>
               <div className="v" title={fullDate(project.firstSeenAt, lang)}>
@@ -247,7 +252,7 @@ export function ProjectDetailView({
               <p key={i}>{para}</p>
             ))}
           </div>
-          {project.source === 'mostaql' && details?.status === 'failed' && (
+          {(project.source === 'mostaql' || project.source === 'kaf') && (details?.status === 'failed' || details?.errorCode === 'kaf-detail-failed') && (
             <div className="banner warn">
               {t.detailsUnavailable}
               <span className="spacer" />
@@ -256,8 +261,8 @@ export function ProjectDetailView({
               </button>
             </div>
           )}
-          {project.source === 'mostaql' && details?.status === 'loading' && <p className="muted">{t.loadingDetails}</p>}
-          {project.source === 'mostaql' && <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load()).catch(() => setActionError(lang === 'ar' ? 'تعذر إتمام العملية. أعد المحاولة.' : 'Could not complete the operation. Retry.'))}>{t.retryFetch}</button>}
+          {(project.source === 'mostaql' || project.source === 'kaf') && details?.status === 'loading' && <p className="muted" role="status">{t.loadingDetails}</p>}
+          {(project.source === 'mostaql' || project.source === 'kaf') && <button className="btn sm" onClick={() => void rased.requestProjectDetails(project.id, true).then(() => load()).catch(() => setActionError(lang === 'ar' ? 'تعذر إتمام العملية. أعد المحاولة.' : 'Could not complete the operation. Retry.'))}>{t.retryFetch}</button>}
           </>}
 
           {project.skills && project.skills.length > 0 && (

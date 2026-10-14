@@ -87,6 +87,7 @@ export function SettingsView({
   health,
   khamsatHealth,
   nafezlyHealth,
+  kafHealth,
   patchSettings: writeSettings,
   section,
   onSection
@@ -96,6 +97,7 @@ export function SettingsView({
   health: SourceHealth | null
   khamsatHealth: SourceHealth | null
   nafezlyHealth: SourceHealth | null
+  kafHealth: SourceHealth | null
   patchSettings: (p: Partial<AppSettings>) => Promise<void>
   section: string | null
   onSection: (s: Section) => void
@@ -123,20 +125,24 @@ export function SettingsView({
   const [khamsatAny, setKhamsatAny] = React.useState(settings.khamsatKeywordsAny.join(', '))
   const [khamsatExclude, setKhamsatExclude] = React.useState(settings.khamsatExcludeKeywords.join(', '))
   const [nafezlyAny, setNafezlyAny] = React.useState(settings.nafezlyKeywordsAny.join(', '))
+  const [kafAny, setKafAny] = React.useState(settings.kafKeywordsAny.join(', '))
   const [nafezlyExclude, setNafezlyExclude] = React.useState(settings.nafezlyExcludeKeywords.join(', '))
+  const [kafExclude, setKafExclude] = React.useState(settings.kafExcludeKeywords.join(', '))
   React.useEffect(() => setKhamsatAny(settings.khamsatKeywordsAny.join(', ')), [settings.khamsatKeywordsAny.join(',')])
   React.useEffect(() => setKhamsatExclude(settings.khamsatExcludeKeywords.join(', ')), [settings.khamsatExcludeKeywords.join(',')])
   React.useEffect(() => setNafezlyAny(settings.nafezlyKeywordsAny.join(', ')), [settings.nafezlyKeywordsAny.join(',')])
+  React.useEffect(() => setKafAny(settings.kafKeywordsAny.join(', ')), [settings.kafKeywordsAny.join(',')])
   React.useEffect(() => setNafezlyExclude(settings.nafezlyExcludeKeywords.join(', ')), [settings.nafezlyExcludeKeywords.join(',')])
+  React.useEffect(() => setKafExclude(settings.kafExcludeKeywords.join(', ')), [settings.kafExcludeKeywords.join(',')])
   const splitKeywords = (value: string): string[] => value.split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 100)
-  const keywordDirty = khamsatAny !== settings.khamsatKeywordsAny.join(', ') || khamsatExclude !== settings.khamsatExcludeKeywords.join(', ') || nafezlyAny !== settings.nafezlyKeywordsAny.join(', ') || nafezlyExclude !== settings.nafezlyExcludeKeywords.join(', ')
+  const keywordDirty = khamsatAny !== settings.khamsatKeywordsAny.join(', ') || khamsatExclude !== settings.khamsatExcludeKeywords.join(', ') || nafezlyAny !== settings.nafezlyKeywordsAny.join(', ') || nafezlyExclude !== settings.nafezlyExcludeKeywords.join(', ') || kafAny !== settings.kafKeywordsAny.join(', ') || kafExclude !== settings.kafExcludeKeywords.join(', ')
   const [keywordBusy, setKeywordBusy] = React.useState(false)
   const saveKeywords = async (): Promise<boolean> => {
     if (keywordBusy) return false
     setKeywordBusy(true)
-    try { await writeSettings({khamsatKeywordsAny:splitKeywords(khamsatAny),khamsatExcludeKeywords:splitKeywords(khamsatExclude),nafezlyKeywordsAny:splitKeywords(nafezlyAny),nafezlyExcludeKeywords:splitKeywords(nafezlyExclude)});setSaveError(false);return true } catch {setSaveError(true);return false} finally {setKeywordBusy(false)}
+    try { await writeSettings({khamsatKeywordsAny:splitKeywords(khamsatAny),khamsatExcludeKeywords:splitKeywords(khamsatExclude),nafezlyKeywordsAny:splitKeywords(nafezlyAny),nafezlyExcludeKeywords:splitKeywords(nafezlyExclude),kafKeywordsAny:splitKeywords(kafAny),kafExcludeKeywords:splitKeywords(kafExclude)});setSaveError(false);return true } catch {setSaveError(true);return false} finally {setKeywordBusy(false)}
   }
-  const keywordDialog = useUnsavedChanges(keywordDirty, lang === 'ar', saveKeywords, active === 'notifications', () => { setKhamsatAny(settings.khamsatKeywordsAny.join(', '));setKhamsatExclude(settings.khamsatExcludeKeywords.join(', '));setNafezlyAny(settings.nafezlyKeywordsAny.join(', '));setNafezlyExclude(settings.nafezlyExcludeKeywords.join(', ')) })
+  const keywordDialog = useUnsavedChanges(keywordDirty, lang === 'ar', saveKeywords, active === 'notifications', () => { setKhamsatAny(settings.khamsatKeywordsAny.join(', '));setKhamsatExclude(settings.khamsatExcludeKeywords.join(', '));setNafezlyAny(settings.nafezlyKeywordsAny.join(', '));setNafezlyExclude(settings.nafezlyExcludeKeywords.join(', '));setKafAny(settings.kafKeywordsAny.join(', '));setKafExclude(settings.kafExcludeKeywords.join(', ')) })
   const openAboutLink = async (link: AboutLink): Promise<void> => {
     try {
       const result = await rased.openAboutLink(link)
@@ -252,6 +258,19 @@ export function SettingsView({
               <button className="btn sm" disabled={!settings.nafezlyEnabled || !nafezlyHealth} onClick={() => void togglePause('nafezly', nafezlyHealth)}>{settings.nafezlyEnabled && nafezlyHealth?.paused ? t.resume : t.pause} {t.sourceNafezly}</button>
             </div>
             <p className="hint">{lang === 'ar' ? 'يفحص RSS العام كل 15–18 ثانية تقريبًا. يتباطأ تلقائيًا عند أخطاء الوصول. الإيقاف المؤقت مستقل عن باقي المصادر ويُلغى بعد إعادة التشغيل.' : 'Checks the public RSS feed roughly every 15–18 seconds. Automatically backs off on access errors. Pause is independent and resets on restart.'}</p>
+          </div>
+          <div className="set-group">
+            <h2>{lang === 'ar' ? 'رصد كاف' : 'Kaf monitoring'}</h2>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'تفعيل المصدر' : 'Enable source'}</label>
+              <Toggle checked={settings.kafEnabled} onChange={(v) => void patchSettings({ kafEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد كاف' : 'Enable Kaf monitoring'} />
+            </div>
+            <div className="set-row">
+              <label>{lang === 'ar' ? 'حالة رصد كاف' : 'Kaf status'}</label>
+              <span className="muted">{settings.kafEnabled ? statusText(kafHealth, lang) : t.statusDisabled}</span>
+              <button className="btn sm" disabled={!settings.kafEnabled || !kafHealth} onClick={() => void togglePause('kaf', kafHealth)}>{settings.kafEnabled && kafHealth?.paused ? t.resume : t.pause} {t.sourceKaf}</button>
+            </div>
+            <p className="hint">{lang === 'ar' ? 'يفحص قائمة المشاريع العامة كل 5–6 ثوانٍ تقريبًا؛ أول رصد صامت. يتباطأ تلقائيًا عند أخطاء الوصول. الإيقاف المؤقت مستقل عن باقي المصادر ويُلغى بعد إعادة التشغيل.' : 'Checks the public project list roughly every 5–6 seconds; the initial baseline is silent. Automatically backs off on access errors. Pause is independent and resets on restart.'}</p>
           </div></>
         )}
 
@@ -333,6 +352,22 @@ export function SettingsView({
               </div>
               <p className="hint">{lang === 'ar' ? 'تُطبّق الكلمات على عنوان المشروع والوصف الكامل الوارد في RSS. اترك «أي كلمة» فارغًا للتنبيه بكل المشاريع.' : 'Keywords match the project title and full RSS description. Leave “Any keyword” blank for all projects.'}</p>
             </div>
+            <div className="set-group">
+              <h2>{lang === 'ar' ? 'تنبيهات كاف' : 'Kaf notifications'}</h2>
+              <div className="set-row">
+                <label>{lang === 'ar' ? 'تنبيهات المشاريع الجديدة' : 'New project alerts'}</label>
+                <Toggle checked={settings.kafNotificationsEnabled} onChange={(v) => void patchSettings({ kafNotificationsEnabled: v })} label={lang === 'ar' ? 'تفعيل تنبيهات كاف' : 'Enable Kaf alerts'} />
+              </div>
+              <div className="set-row">
+                <label htmlFor="kaf-any">{lang === 'ar' ? 'أي كلمة من' : 'Any keyword'}</label>
+                <input id="kaf-any" disabled={keywordBusy} className="input" value={kafAny} onChange={e => setKafAny(e.target.value)} placeholder={lang === 'ar' ? 'مثال: React، تصميم، برمجة' : 'React, design, development'} />
+              </div>
+              <div className="set-row">
+                <label htmlFor="kaf-exclude">{lang === 'ar' ? 'استبعاد كلمات' : 'Exclude keywords'}</label>
+                <input id="kaf-exclude" disabled={keywordBusy} className="input" value={kafExclude} onChange={e => setKafExclude(e.target.value)} />
+              </div>
+              <p className="hint">{lang === 'ar' ? 'تُطبّق الكلمات على عنوان المشروع ومقتطف القائمة، والتنبيهات للمشاريع المفتوحة فقط. اترك «أي كلمة» فارغًا للتنبيه بكل الفرص المفتوحة الجديدة.' : 'Keywords match the title and list excerpt. Only open projects trigger alerts. Leave “Any keyword” blank for all newly detected open opportunities.'}</p>
+            </div>
 
             <div className="set-group">
               <h2>{t.dndTitle}</h2>
@@ -385,7 +420,7 @@ export function SettingsView({
                 <span className="hint">{t.linkFiltersHint}</span>
               </div>
             </div>
-            <div className="set-group"><p className="hint">{lang === 'ar' ? 'كلمات خمسات ونفذلي لا تتغير إلا عند الحفظ. خيارات التبديل الأخرى تحفظ فورًا.' : 'Khamsat and Nafezly keywords change only when saved. Other switches save immediately.'}</p><button className="btn primary" disabled={keywordBusy || !keywordDirty} onClick={()=>void saveKeywords()}>{lang === 'ar' ? 'حفظ كلمات التنبيهات' : 'Save alert keywords'}</button></div>
+            <div className="set-group"><p className="hint">{lang === 'ar' ? 'كلمات خمسات ونفذلي وكاف لا تتغير إلا عند الحفظ. خيارات التبديل الأخرى تحفظ فورًا.' : 'Khamsat, Nafezly and KAF keywords change only when saved. Other switches save immediately.'}</p><button className="btn primary" disabled={keywordBusy || !keywordDirty} onClick={()=>void saveKeywords()}>{lang === 'ar' ? 'حفظ كلمات التنبيهات' : 'Save alert keywords'}</button></div>
           </>
         )}
 

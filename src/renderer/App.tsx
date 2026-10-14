@@ -4,7 +4,7 @@ import { ScreenBoundary } from './components/ScreenBoundary.js'
 import { rased } from './api.js'
 import { defaultFilterDefinition } from '@shared/types.js'
 import { STRINGS } from './i18n.js'
-import { applyUiPrefs, useHashRoute, useHealth, useKhamsatHealth, useNafezlyHealth, useSettings } from './hooks.js'
+import { applyUiPrefs, useHashRoute, useHealth, useKhamsatHealth, useNafezlyHealth, useKafHealth, useSettings } from './hooks.js'
 import { go, navigateHash, requestAction, type Route } from './router.js'
 import { playBeep } from './sound.js'
 import { Sidebar, Statusbar, Topbar, togglePause } from './components/shell.js'
@@ -44,6 +44,7 @@ export function App(): React.ReactElement {
   const health = useHealth(boot === 'ready')
   const khamsatHealth = useKhamsatHealth(boot === 'ready')
   const nafezlyHealth = useNafezlyHealth(boot === 'ready')
+  const kafHealth = useKafHealth(boot === 'ready')
 
   // bootstrap: settings + local list (RSS runs independently in main)
   React.useEffect(() => {
@@ -174,8 +175,8 @@ export function App(): React.ReactElement {
   const title =
     route.name === 'saved' ? t.navSaved : route.name === 'filters' ? t.navFilters : route.name === 'settings' ? t.navSettings : route.name === 'project' ? t.projectDetails : route.name === 'proposal' ? (lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant') : t.allProjects
 
-  const pause = (source: 'mostaql' | 'khamsat' | 'nafezly'): void => {
-    void togglePause(source, source === 'mostaql' ? health : source === 'khamsat' ? khamsatHealth : nafezlyHealth)
+  const pause = (source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf'): void => {
+    void togglePause(source, source === 'mostaql' ? health : source === 'khamsat' ? khamsatHealth : source === 'kaf' ? kafHealth : nafezlyHealth)
   }
   const refresh = (): void => {
     void rased.refresh()
@@ -199,8 +200,8 @@ export function App(): React.ReactElement {
           health={health}
           khamsatHealth={khamsatHealth}
           khamsatEnabled={settings.khamsatEnabled}
-          nafezlyHealth={nafezlyHealth}
-          nafezlyEnabled={settings.nafezlyEnabled}
+          nafezlyHealth={nafezlyHealth} kafHealth={kafHealth}
+          nafezlyEnabled={settings.nafezlyEnabled} kafEnabled={settings.kafEnabled}
           showSearch={route.name === 'projects' || route.name === 'saved'}
           search={searchInput}
           onSearch={setSearchInput}
@@ -219,7 +220,7 @@ export function App(): React.ReactElement {
             patchSettings={patchSettings}
             health={health}
             khamsatHealth={khamsatHealth}
-            nafezlyHealth={nafezlyHealth}
+            nafezlyHealth={nafezlyHealth} kafHealth={kafHealth}
             search={search}
             onSearch={(value) => { setSearchInput(value); setSearch(value) }}
             memory={memory}
@@ -247,7 +248,7 @@ export function App(): React.ReactElement {
             settings={settings}
             health={health}
             khamsatHealth={khamsatHealth}
-            nafezlyHealth={nafezlyHealth}
+            nafezlyHealth={nafezlyHealth} kafHealth={kafHealth}
             patchSettings={patchSettings}
             section={route.section}
             onSection={(s) => go({ name: 'settings', section: s })}
@@ -259,7 +260,7 @@ export function App(): React.ReactElement {
             patchSettings={patchSettings}
             health={health}
             khamsatHealth={khamsatHealth}
-            nafezlyHealth={nafezlyHealth}
+            nafezlyHealth={nafezlyHealth} kafHealth={kafHealth}
             search={search}
             onSearch={(value) => { setSearchInput(value); setSearch(value) }}
             memory={memory}
@@ -268,7 +269,7 @@ export function App(): React.ReactElement {
             scope="all"
           />
         )}
-        <Statusbar lang={lang} health={health} khamsatHealth={khamsatHealth} nafezlyHealth={nafezlyHealth} settings={settings} />
+        <Statusbar lang={lang} health={health} khamsatHealth={khamsatHealth} nafezlyHealth={nafezlyHealth} kafHealth={kafHealth} settings={settings} />
       </div>
     </div></div>
   )

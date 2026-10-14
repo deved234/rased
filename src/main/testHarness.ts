@@ -23,6 +23,20 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
     if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (String(url) === 'https://khamsat.com/community/requests') return new Response(readFileSync(join(profile, 'khamsat-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': 'text/html' } })
     if (String(url) === 'https://nafezly.com/feed') return new Response(readFileSync(join(profile, 'nafezly-fixture.xml'), 'utf8'), { status: 200, headers: { 'content-type': 'text/xml' } })
+    if (String(url).startsWith('https://kafiil.com/')) {
+      const address = new URL(String(url))
+      const configPath = join(profile, 'kaf-config.json')
+      const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) as { status?: number; delay?: number; retryAfter?: string } : {}
+      if (config.delay) await new Promise<void>((resolve, reject) => {
+        const abort = (): void => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')) }
+        const timer = setTimeout(() => { options?.signal?.removeEventListener('abort', abort); resolve() }, config.delay)
+        options?.signal?.addEventListener('abort', abort, { once: true })
+      })
+      if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const name = address.pathname === '/projects' ? 'kaf-list-' + (address.searchParams.get('page') ?? '1') + '.html' : 'kaf-detail.html'
+      const file = join(profile, name)
+      return new Response(existsSync(file) ? readFileSync(file, 'utf8') : '<html>fixture not supplied</html>', { status: config.status ?? 200, headers: { 'content-type': 'text/html', ...(config.retryAfter ? { 'retry-after': config.retryAfter } : {}) } })
+    }
     const rss = String(url).endsWith('/rss')
     return new Response(readFileSync(join(profile, rss ? 'rss-fixture.xml' : 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': rss ? 'application/rss+xml' : 'text/html' } })
   }) as typeof fetch

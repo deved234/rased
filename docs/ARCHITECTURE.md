@@ -22,6 +22,8 @@ Mostaql uses public RSS with optional detail enrichment; Khamsat uses its public
 
 The first successful fetch creates a silent baseline. Later discoveries are deduplicated and saved before filtered notification dispatch. The UI reads local data; it does not scrape account pages to monitor opportunities.
 
+KAF is a fourth independent source from RASED 0.7.0. Its controller polls the public HTML fragment every 5–6 seconds, bounds catch-up to three pages per cycle and persists the cursor/backoff. Only newly visible open projects notify; baseline and recovery are silent. Details use a separate on-demand queue and 24-hour cache. Raw publication times retain their unverified timezone rather than populating `publishedAt`. Migration 8 adds nullable status/duration fields. KAF is excluded from AI and Quick Apply. [User guide](KAF.md); `npm run test:kaf` exercises actual Electron wiring with isolated fixtures.
+
 ## Optional workflows
 
 AI generation is user initiated, uses one chosen provider and requires a preview/consent fingerprint. The app saves editable drafts and never submits them. [Assistant guide](AI_ASSISTANT.md).

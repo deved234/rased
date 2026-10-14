@@ -10,13 +10,14 @@ mkdirSync(join(output,'screenshots'),{recursive:true})
 const db=new DatabaseSync(join(profile,'rased.db')),schema=readFileSync('src/storage/migrations.ts','utf8'),migrations=[...schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
 for(const m of migrations)db.exec(m[1]);db.exec(`PRAGMA user_version=${migrations.length}`)
 const now=new Date().toISOString()
-const sources=['mostaql','nafezly','khamsat']
+const sources=['mostaql','nafezly','khamsat','kaf']
 for(let id=1;id<=30;id++){
- const source=sources[(id-1)%3],external=String(900000+id)
+ const source=sources[(id-1)%4],external=String(900000+id)
  const title=id===28?'تطوير لوحة تحكم لإدارة المبيعات والمخزون باستخدام React وTypeScript مع دعم اللغة العربية والإنجليزية وتقارير تفصيلية للمستخدمين':'فرصة تجريبية: '+(source==='khamsat'?'طلب تصميم هوية بصرية احترافية':'تطوير واجهة عربية وإنجليزية لتطبيق إدارة المشاريع')+' '+id
- const url=source==='mostaql'?`https://mostaql.com/go/${external}`:source==='nafezly'?`https://nafezly.com/project/${external}`:`https://khamsat.com/community/requests/${external}`
+ const url=source==='mostaql'?`https://mostaql.com/go/${external}`:source==='nafezly'?`https://nafezly.com/project/${external}`:source==='kaf'?`https://kafiil.com/project/${external}-sample`:`https://khamsat.com/community/requests/${external}`
  db.prepare("INSERT INTO projects(id,source,external_id,url,title,description_excerpt,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at,category_slug,category_confirmed,budget_min,budget_max,enrichment_status,published_at) VALUES(?,?,?,?,?,?,?,?,'initial',?,?,'development',1,100,250,'ready',?)").run(id,source,external,url,title,'مطلوب تنفيذ واجهة واضحة وسهلة الاستخدام، مع تحسين تجربة التنقل ومعالجة حالات التحميل والخطأ.',now,now,now,now,now)
  db.prepare("INSERT INTO project_details VALUES(?,?,'full',?,'ready',NULL)").run(id,'وصف تجريبي للفحص فقط.\nالمطلوب تطوير شاشة متابعة مشاريع، واجهة عربية وإنجليزية، وتصميم متجاوب مع أحجام نوافذ Windows المختلفة.\nالمدة المقترحة 7 أيام.\nمخرجات العمل: الكود المصدري والتوثيق ومراجعة جودة الواجهة.',now)
+ if(source==='kaf')db.prepare("UPDATE projects SET platform_status='open',duration_days=7,duration_raw='7 أيام',published_at=NULL,category_confirmed=0,category_slug=NULL WHERE id=?").run(id)
 }
 db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({language:'ar',khamsatEnabled:true,nafezlyEnabled:true,quickApply:{enabled:false,template:'قالب محفوظ للفحص',budgetPositionPercent:50,extraDays:1}}))
 db.prepare("INSERT INTO project_user_state VALUES(1,?,NULL,'interested','ملاحظة تجريبية محفوظة',?)").run(now,now)
@@ -44,7 +45,7 @@ try{
  const prefs=await ev('window.rased.getSettings()')
  await ev(`window.rased.createSavedFilter('تصميم وتطوير',{...${JSON.stringify(prefs.displayQuery)},search:''})`)
  await shot('ar-dark-projects')
- await ev('document.querySelector("[data-row] article").focus()');await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:' ',code:'Space',windowsVirtualKeyCode:32});await call(ws,'Input.dispatchKeyEvent',{type:'keyUp',key:' ',code:'Space',windowsVirtualKeyCode:32});results.checks.rowSpaceOpensPreview=await ev('!!document.querySelector(".preview-pane")');assert.ok(results.checks.rowSpaceOpensPreview,'Space opens focused opportunity preview')
+ await ev('document.querySelector("[data-row] article").focus()');await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:' ',code:'Space',windowsVirtualKeyCode:32});await call(ws,'Input.dispatchKeyEvent',{type:'keyUp',key:' ',code:'Space',windowsVirtualKeyCode:32});await wait('!!document.querySelector(".preview-pane")');results.checks.rowSpaceOpensPreview=await ev('!!document.querySelector(".preview-pane")');assert.ok(results.checks.rowSpaceOpensPreview,'Space opens focused opportunity preview')
  await click('[data-row] article');await wait('!!document.querySelector(".preview-pane")');await shot('ar-dark-preview')
  await nav('#/project/1');await wait('!!document.querySelector(".detail-rail")');await shot('ar-dark-detail')
  await nav('#/project/3');await wait('document.querySelector(".detail-article")?.textContent.includes("خمسات")');await shot('ar-dark-khamsat-detail')

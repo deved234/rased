@@ -104,6 +104,8 @@ export function HealthPopover({
   khamsatEnabled,
   nafezlyHealth,
   nafezlyEnabled,
+  kafHealth,
+  kafEnabled,
   onTogglePause,
   onRefresh,
   onClose
@@ -114,7 +116,9 @@ export function HealthPopover({
   khamsatEnabled: boolean
   nafezlyHealth: SourceHealth | null
   nafezlyEnabled: boolean
-  onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly') => void
+  kafHealth: SourceHealth | null
+  kafEnabled: boolean
+  onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf') => void
   onRefresh: () => void
   onClose: () => void
 }): React.ReactElement {
@@ -127,12 +131,13 @@ export function HealthPopover({
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
   }, [onClose])
-  const state = overallSourceState([health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : [])])
-  const refreshDisabled = [health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : [])].every(value => !value || value.paused || value.state === 'backing-off')
-  const sources: { id: 'mostaql' | 'khamsat' | 'nafezly'; name: string; value: SourceHealth | null }[] = [
+  const state = overallSourceState([health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : []), ...(kafEnabled ? [kafHealth] : [])])
+  const refreshDisabled = [health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : []), ...(kafEnabled ? [kafHealth] : [])].every(value => !value || value.paused || value.state === 'backing-off')
+  const sources: { id: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf'; name: string; value: SourceHealth | null }[] = [
     { id: 'mostaql', name: t.sourceMostaql, value: health },
     ...(khamsatEnabled ? [{ id: 'khamsat' as const, name: t.sourceKhamsat, value: khamsatHealth }] : []),
-    ...(nafezlyEnabled ? [{ id: 'nafezly' as const, name: t.sourceNafezly, value: nafezlyHealth }] : [])
+    ...(nafezlyEnabled ? [{ id: 'nafezly' as const, name: t.sourceNafezly, value: nafezlyHealth }] : []),
+    ...(kafEnabled ? [{ id: 'kaf' as const, name: t.sourceKaf, value: kafHealth }] : [])
   ]
   return (
     <>
@@ -168,6 +173,8 @@ export function Topbar({
   khamsatEnabled,
   nafezlyHealth,
   nafezlyEnabled,
+  kafHealth,
+  kafEnabled,
   showSearch,
   search,
   onSearch,
@@ -182,16 +189,18 @@ export function Topbar({
   khamsatEnabled: boolean
   nafezlyHealth: SourceHealth | null
   nafezlyEnabled: boolean
+  kafHealth: SourceHealth | null
+  kafEnabled: boolean
   showSearch: boolean
   search: string
   onSearch: (v: string) => void
   searchRef: React.RefObject<HTMLInputElement | null>
-  onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly') => void
+  onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf') => void
   onRefresh: () => void
 }): React.ReactElement {
   const t = STRINGS[lang]
   const [pop, setPop] = React.useState(false)
-  const sourcePill = (source: 'mostaql' | 'khamsat' | 'nafezly', name: string, value: SourceHealth | null, enabled = true): React.ReactElement => (
+  const sourcePill = (source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf', name: string, value: SourceHealth | null, enabled = true): React.ReactElement => (
     <div className="source-pill" key={source}>
       <button className="source-health-btn" onClick={() => setPop((v) => !v)} aria-haspopup="dialog" aria-expanded={pop} aria-label={`${name}: ${enabled ? statusText(value, lang) : t.statusDisabled}`}>
         <span className={`dot ${enabled ? dotClass(value) : ''}`} aria-hidden="true" />
@@ -218,9 +227,10 @@ export function Topbar({
         {sourcePill('mostaql', t.sourceMostaql, health)}
         {sourcePill('khamsat', t.sourceKhamsat, khamsatHealth, khamsatEnabled)}
         {sourcePill('nafezly', t.sourceNafezly, nafezlyHealth, nafezlyEnabled)}
+        {sourcePill('kaf', t.sourceKaf, kafHealth, kafEnabled)}
       </div>
       {pop && (
-        <HealthPopover lang={lang} health={health} khamsatHealth={khamsatHealth} khamsatEnabled={khamsatEnabled} nafezlyHealth={nafezlyHealth} nafezlyEnabled={nafezlyEnabled} onTogglePause={onTogglePause} onRefresh={onRefresh} onClose={() => setPop(false)} />
+        <HealthPopover lang={lang} health={health} khamsatHealth={khamsatHealth} khamsatEnabled={khamsatEnabled} nafezlyHealth={nafezlyHealth} nafezlyEnabled={nafezlyEnabled} kafHealth={kafHealth} kafEnabled={kafEnabled} onTogglePause={onTogglePause} onRefresh={onRefresh} onClose={() => setPop(false)} />
       )}
     </div>
   )
@@ -231,20 +241,22 @@ export function Statusbar({
   health,
   khamsatHealth,
   nafezlyHealth,
+  kafHealth,
   settings
 }: {
   lang: Lang
   health: SourceHealth | null
   khamsatHealth: SourceHealth | null
   nafezlyHealth: SourceHealth | null
+  kafHealth: SourceHealth | null
   settings: AppSettings
 }): React.ReactElement {
   const t = STRINGS[lang]
   useNow(1000)
   return (
     <div className="statusbar" role="status">
-      <span title={[statusText(health, lang), statusText(khamsatHealth, lang), statusText(nafezlyHealth, lang)].join(' · ')}>
-        {overallText(overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : [])]), lang)}
+      <span title={[statusText(health, lang), statusText(khamsatHealth, lang), statusText(nafezlyHealth, lang), statusText(kafHealth, lang)].join(' · ')}>
+        {overallText(overallSourceState([health, ...(settings.khamsatEnabled ? [khamsatHealth] : []), ...(settings.nafezlyEnabled ? [nafezlyHealth] : []), ...(settings.kafEnabled ? [kafHealth] : [])]), lang)}
       </span>
       <span className="sep" aria-hidden="true">·</span>
       <span className="muted">{lang === 'ar' ? 'تفاصيل كل مصدر في الشريط العلوي' : 'Source details are in the top bar'}</span>
@@ -258,9 +270,12 @@ export function Statusbar({
   )
 }
 
-export async function togglePause(source: 'mostaql' | 'khamsat' | 'nafezly', health: SourceHealth | null): Promise<void> {
+export async function togglePause(source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf', health: SourceHealth | null): Promise<void> {
   if (!health) return
-  if (source === 'nafezly') {
+  if (source === 'kaf') {
+    if (health.paused) await rased.resumeKaf()
+    else await rased.pauseKaf()
+  } else if (source === 'nafezly') {
     if (health.paused) await rased.resumeNafezly()
     else await rased.pauseNafezly()
   } else if (source === 'khamsat') {

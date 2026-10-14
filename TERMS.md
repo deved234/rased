@@ -1,6 +1,10 @@
 # شروط الاستخدام
 
-2026-10-09 · RASED · david atef
+2026-10-14 · RASED · david atef
+
+## رصد كاف (كفيل سابقًا)
+
+يقرأ راصد قائمة المشاريع العامة على kafiil.com دون حساب، ويجلب تفاصيل المشروع عند فتحها. أول رصد صامت والتنبيهات للمشاريع المفتوحة المكتشفة حديثًا؛ المكتمل يبقى في السجل. الظهور في القائمة ليس إثباتًا لوقت النشر، والمنطقة الزمنية لوقت كاف غير مؤكدة. كاف وعلاماته ومحتوى المستخدمين تخص أصحابها؛ وصول القراءة لا يمنح إذن إعادة نشر أو جلب غير محدود. مساعد العروض والتقديم السريع لا يدعمان كاف حاليًا.
 
 ## قالب التقديم السريع
 
@@ -38,7 +42,11 @@
 
 # Terms of use
 
-2026-10-09 · RASED · david atef
+2026-10-14 · RASED · david atef
+
+## KAF monitoring (formerly Kafiil)
+
+RASED reads the public kafiil.com project listing without an account and fetches project details on demand. Initial monitoring is silent; newly detected open projects may trigger alerts, while completed projects stay in history. Listing visibility does not prove publication time; KAF timestamps have an unverified timezone. KAF marks and user content belong to their owners; public access does not authorize republication or unlimited fetching. Proposal Assistant and Quick Apply do not support KAF currently.
 
 ## Saved quick-apply template
 

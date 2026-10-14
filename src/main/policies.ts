@@ -11,7 +11,7 @@ export function mergeSettings(settings: AppSettings, patch: Partial<AppSettings>
   const linked = patch.linkDisplayAndNotifyFilters ?? settings.linkDisplayAndNotifyFilters
   // Khamsat and Nafezly have no confirmed category taxonomy; switching their display views must not
   // replace Mostaql notification categories with an empty filter.
-  if (linked && !['khamsat', 'nafezly'].includes((patch.displayQuery ?? settings.displayQuery).source)) {
+  if (linked && !['khamsat', 'nafezly', 'kaf'].includes((patch.displayQuery ?? settings.displayQuery).source)) {
     if (patch.notifyFilter && !patch.displayQuery && !patch.displayFilter) merged.displayFilter = patch.notifyFilter
     else if (merged.displayFilter) merged.notifyFilter = merged.displayFilter
     else if (patch.linkDisplayAndNotifyFilters === true) merged.notifyFilter = settings.displayQuery.categoryFilter

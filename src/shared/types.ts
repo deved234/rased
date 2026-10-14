@@ -34,6 +34,9 @@ export interface Project {
   budgetMin: number | null
   budgetMax: number | null
   currency: string | null
+  platformStatus?: string | null
+  durationDays?: number | null
+  durationRaw?: string | null
   budgetRaw: string | null
   enrichmentStatus: EnrichmentStatus
 }
@@ -61,6 +64,10 @@ export interface AppSettings {
   /** Khamsat has no verified categories or description in the public list. */
   khamsatKeywordsAny: string[]
   khamsatExcludeKeywords: string[]
+  kafEnabled: boolean
+  kafNotificationsEnabled: boolean
+  kafKeywordsAny: string[]
+  kafExcludeKeywords: string[]
   nafezlyEnabled: boolean
   nafezlyNotificationsEnabled: boolean
   nafezlyKeywordsAny: string[]
@@ -144,7 +151,7 @@ export interface ProjectDetails {
 
 /** Full list-query definition. Every constraint applies before pagination AND count. */
 export interface FilterDefinition {
-  source: 'all' | 'mostaql' | 'khamsat' | 'nafezly'
+  source: 'all' | 'mostaql' | 'khamsat' | 'nafezly' | 'kaf'
   scope: FilterScope
   unreadOnly: boolean
   /** empty = any status (stored NULL counts as 'none') */
@@ -264,6 +271,10 @@ export function defaultSettings(): AppSettings {
     khamsatNotificationsEnabled: true,
     khamsatKeywordsAny: [],
     khamsatExcludeKeywords: [],
+    kafEnabled: true,
+    kafNotificationsEnabled: true,
+    kafKeywordsAny: [],
+    kafExcludeKeywords: [],
     nafezlyEnabled: true,
     nafezlyNotificationsEnabled: true,
     nafezlyKeywordsAny: [],
@@ -331,6 +342,10 @@ export function sanitizeSettings(input: unknown): AppSettings {
     khamsatNotificationsEnabled: o['khamsatNotificationsEnabled'] !== false,
     khamsatKeywordsAny: stringList(o['khamsatKeywordsAny']),
     khamsatExcludeKeywords: stringList(o['khamsatExcludeKeywords']),
+    kafEnabled: o['kafEnabled'] !== false,
+    kafNotificationsEnabled: o['kafNotificationsEnabled'] !== false,
+    kafKeywordsAny: [...new Set(stringList(o['kafKeywordsAny']).map(v => v.trim()).filter(Boolean))],
+    kafExcludeKeywords: [...new Set(stringList(o['kafExcludeKeywords']).map(v => v.trim()).filter(Boolean))],
     nafezlyEnabled: o['nafezlyEnabled'] !== false,
     nafezlyNotificationsEnabled: o['nafezlyNotificationsEnabled'] !== false,
     nafezlyKeywordsAny: stringList(o['nafezlyKeywordsAny']),
@@ -416,7 +431,7 @@ export function sanitizeFilterDefinition(v: unknown): FilterDefinition {
   let budgetMax = sanitizeBudgetBound(o['budgetMax'])
   if (budgetMin !== null && budgetMax !== null && budgetMin > budgetMax) budgetMax = budgetMin
   return {
-    source: o['source'] === 'mostaql' || o['source'] === 'khamsat' || o['source'] === 'nafezly' ? o['source'] : 'all',
+    source: o['source'] === 'mostaql' || o['source'] === 'khamsat' || o['source'] === 'nafezly' || o['source'] === 'kaf' ? o['source'] : 'all',
     scope: scope === 'saved' || scope === 'hidden' ? scope : 'all',
     unreadOnly: o['unreadOnly'] === true,
     statuses,

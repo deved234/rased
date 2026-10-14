@@ -92,6 +92,18 @@ export function useNafezlyHealth(enabled: boolean): SourceHealth | null {
   return health
 }
 
+export function useKafHealth(enabled: boolean): SourceHealth | null {
+  const [health, setHealth] = useState<SourceHealth | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    let alive = true
+    void rased.getKafHealth().then((h) => alive && setHealth(h)).catch(() => {})
+    const off = rased.onKafHealthChanged((h) => alive && setHealth(h))
+    return () => { alive = false; off() }
+  }, [enabled])
+  return health
+}
+
 /** Ticking clock for countdowns/time-ago labels; no data refetch. */
 export function useNow(stepMs = 1000): number {
   const [now, setNow] = useState(() => Date.now())

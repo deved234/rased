@@ -126,7 +126,8 @@
     "test:update-install": "node scripts/test-update-install.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "build:native-host": "node scripts/build-native-host.mjs",
-    "test:extension": "node scripts/test-chrome-extension.mjs"
+    "test:extension": "node scripts/test-chrome-extension.mjs",
+    "test:kaf": "node scripts/kaf-e2e.mjs"
   },
-  "version": "0.6.0"
+  "version": "0.7.0"
 }

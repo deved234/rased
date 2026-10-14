@@ -16,7 +16,7 @@ import { CategoryTag, ProjectRow } from '../components/ProjectRow.js'
 import { FilterDrawer } from '../components/FilterDrawer.js'
 import { EmptyState, IconBtn, SkeletonList, useDialogFocus } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
-import { openOnSource, sourceName } from '../sourceCopy.js'
+import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
 import { budgetLabel, timeAgo } from '../format.js'
 
 const PAGE = 50
@@ -39,6 +39,7 @@ export function ProjectsView({
   health,
   khamsatHealth,
   nafezlyHealth,
+  kafHealth,
   search,
   onSearch,
   memory,
@@ -52,6 +53,7 @@ export function ProjectsView({
   health: SourceHealth | null
   khamsatHealth: SourceHealth | null
   nafezlyHealth: SourceHealth | null
+  kafHealth: SourceHealth | null
   search: string
   onSearch: (value: string) => void
   memory: ListMemory
@@ -334,19 +336,20 @@ export function ProjectsView({
     <div className="split" ref={splitRef}>
       <div className="list-pane">
         {actionError && <div className="banner bad" role="alert">{actionError}</div>}
-        {showBanner && (health?.state === 'paused' || def.source === 'mostaql' || def.source === 'all') && <div className={bannerClass}>{health?.state === 'paused' ? bannerText : `${t.sourceMostaql}: ${bannerText}`}</div>}
+        {showBanner && (def.source === 'mostaql' || def.source === 'all') && <div className={bannerClass}>{t.sourceMostaql}: {bannerText}</div>}
         {settings.khamsatEnabled && (def.source === 'all' || def.source === 'khamsat') && khamsatHealth && ['error', 'backing-off'].includes(khamsatHealth.state) && (
           <div className="banner warn">{lang === 'ar' ? 'رصد خمسات متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Khamsat monitoring is temporarily unavailable; it will retry automatically.'}</div>
         )}
         {settings.nafezlyEnabled && (def.source === 'all' || def.source === 'nafezly') && nafezlyHealth && ['error', 'backing-off'].includes(nafezlyHealth.state) && (
           <div className="banner warn">{lang === 'ar' ? 'رصد نفذلي متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Nafezly monitoring is temporarily unavailable; it will retry automatically.'}</div>
         )}
+        {settings.kafEnabled && (def.source === 'all' || def.source === 'kaf') && kafHealth?.lastError && <div className="banner warn" role="status">{t.sourceKaf}: {kafHealth.lastError === 'catch-up-incomplete' ? (lang === 'ar' ? 'استرجاع دفعة سابقة ما زال جاريًا؛ الفرص المسترجعة لن ترسل تنبيهات.' : 'An earlier batch is still being recovered; recovered opportunities are silent.') : (lang === 'ar' ? 'تعذر تحديث المصدر. راصد يطبق تهدئة قبل إعادة المحاولة؛ بياناتك المحفوظة متاحة.' : 'Could not refresh the source. RASED backs off before retrying; cached projects remain available.')}</div>}
         {def.source === 'all' && def.categoryFilter.mode === 'selected' && <div className="banner">{t.filterCategoryScope}</div>}
         <div className="list-toolbar">
           <div className="source-segment" role="group" aria-label={t.filterSource}>
-            {(['all', 'mostaql', 'khamsat', 'nafezly'] as const).map(source => (
-              <button key={source} className={def.source === source ? 'source-option active' : 'source-option'} aria-pressed={def.source === source} onClick={() => applyDefinition(source === 'khamsat' || source === 'nafezly' ? { ...fullDef, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, budgetMin: null, budgetMax: null, includeUnknownBudget: true } : { ...fullDef, source })}>
-                {source === 'all' ? (lang === 'ar' ? 'كل المصادر' : 'All sources') : source === 'mostaql' ? t.sourceMostaql : source === 'khamsat' ? t.sourceKhamsat : t.sourceNafezly}
+            {(['all', 'mostaql', 'khamsat', 'nafezly', 'kaf'] as const).map(source => (
+              <button key={source} className={def.source === source ? 'source-option active' : 'source-option'} aria-pressed={def.source === source} onClick={() => applyDefinition(source === 'khamsat' || source === 'nafezly' || source === 'kaf' ? { ...fullDef, source, categoryFilter: { ...def.categoryFilter, mode: 'all', categories: [] }, ...(source === 'kaf' ? {} : { budgetMin: null, budgetMax: null, includeUnknownBudget: true }) } : { ...fullDef, source })}>
+                {source === 'all' ? (lang === 'ar' ? 'كل المصادر' : 'All sources') : source === 'mostaql' ? t.sourceMostaql : source === 'khamsat' ? t.sourceKhamsat : source === 'kaf' ? t.sourceKaf : t.sourceNafezly}
               </button>
             ))}
           </div>
@@ -515,11 +518,13 @@ function PreviewPanel({
         <div className="meta">
           <span className="tag">{sourceName(p.source, lang)}</span>
           {p.source === 'mostaql' && <CategoryTag lang={lang} slug={p.categorySlug} confirmed={p.categoryConfirmed} />}
+          {p.source === 'kaf' && <span className="tag" title={lang === 'ar' ? 'حالة المنصة' : 'Platform status'}>{platformStatusName(p.platformStatus, lang)}</span>}
         </div>
         <div className="preview-facts">
           <div className="fact"><span className="k">{t.factsDiscovered}</span><span className="v">{timeAgo(p.firstSeenAt, lang)}</span></div>
           {p.publishedAt && <div className="fact"><span className="k">{t.factsPublished}</span><span className="v">{timeAgo(p.publishedAt, lang)}</span></div>}
-          {p.source === 'mostaql' && budget && <div className="fact"><span className="k">{t.factsBudget}</span><span className="v num" dir="ltr">{budget}</span></div>}
+          {(p.source === 'mostaql' || p.source === 'kaf') && budget && <div className="fact"><span className="k">{t.factsBudget}</span><span className="v num" dir="ltr">{budget}</span></div>}
+          {p.source === 'kaf' && p.durationRaw && <div className="fact"><span className="k">{lang === 'ar' ? 'المدة' : 'Duration'}</span><span className="v" dir="auto">{p.durationRaw}</span></div>}
         </div>
         <h3 className="preview-section-title">{t.descriptionTitle}</h3>
         {p.source !== 'khamsat' && p.descriptionExcerpt && (
