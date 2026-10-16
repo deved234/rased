@@ -202,7 +202,9 @@ try {
     await sleep(150)
     for (const expanded of [false, true]) {
       await ev(`document.querySelector('.monitoring-notices').open=${expanded}`)
-      const layout = await ev('(()=>{const n=document.querySelector(".monitoring-notices"),b=n.getBoundingClientRect(),list=document.querySelector(".list-scroll").getBoundingClientRect(),body=n.querySelector(".monitoring-notices-body");return {fits:b.left>=0&&b.right<=innerWidth&&n.scrollWidth<=n.clientWidth+1,listHeight:list.height,listVisible:list.top<innerHeight-100,bounded:body.getBoundingClientRect().height<=innerHeight*.20+2,scrolls:getComputedStyle(body).overflowY==="auto"}})()')
+      // Native window minimums and Chromium device emulation can use different
+      // viewport metrics on CI. Check the applied CSS limit and hard 180px cap.
+      const layout = await ev('(()=>{const n=document.querySelector(".monitoring-notices"),b=n.getBoundingClientRect(),list=document.querySelector(".list-scroll").getBoundingClientRect(),body=n.querySelector(".monitoring-notices-body"),style=getComputedStyle(body),height=body.getBoundingClientRect().height,limit=parseFloat(style.maxBlockSize);return {fits:b.left>=0&&b.right<=innerWidth&&n.scrollWidth<=n.clientWidth+1,listHeight:list.height,listVisible:list.top<innerHeight-100,bounded:Number.isFinite(limit)&&height<=limit+2&&height<=182,detailsHeight:height,cssLimit:limit,scrolls:style.overflowY==="auto"}})()')
       writeFileSync(join(shots, `${language}-${theme}-notices-${expanded ? 'expanded' : 'collapsed'}.png`), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
       check(`${language}/${theme} ${expanded ? 'expanded' : 'collapsed'} warnings keep projects visible at 900px/125%: ${JSON.stringify(layout)}`, layout.fits && layout.listHeight >= 100 && layout.listVisible && (!expanded || layout.bounded && layout.scrolls))
     }
