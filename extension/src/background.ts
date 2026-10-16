@@ -45,11 +45,14 @@ async function receive(v:unknown):Promise<void> {
   if(active){send({type:'result',requestId:v.requestId,phase:'failed',error:'busy'});return}
   const tab=await chrome.tabs.create({url:v.url,active:true})
   if(tab.id===undefined){send({type:'result',requestId:v.requestId,phase:'failed',error:'tab-unavailable'});return}
-  await chrome.windows.update(tab.windowId,{focused:true})
   active={job:v,tabId:tab.id,delivered:false,timer:setTimeout(()=>result('expired','form-timeout'),Math.max(1,v.expiresAt-Date.now()))}
   await chrome.storage.session.set({activeJob:{requestId:v.requestId,tabId:tab.id}})
-  // Content ready handles both cached and newly loaded pages.
-  if(tab.status==='complete')await deliver(tab.id,tab.url)
+  await chrome.windows.update(tab.windowId,{focused:true})
+  // A fast page can finish before tabs.create/focusing resolves, so neither
+  // its original status nor a missed content-ready event is sufficient.
+  const loaded=await chrome.tabs.get(tab.id).catch(()=>null)
+  if(!loaded){if(active?.tabId===tab.id)result('failed','tab-closed');return}
+  if(loaded.status==='complete')await deliver(tab.id,loaded.url)
 }
 async function deliver(tabId:number,url?:string):Promise<void> {
   if(!active||active.tabId!==tabId||active.delivered||Date.now()>=active.job.expiresAt)return

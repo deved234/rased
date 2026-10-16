@@ -1,11 +1,8 @@
 import type { Lang } from './i18n.js'
+import { SOURCES } from '@shared/sources.js'
 
 export function sourceName(source: string, lang: Lang): string {
-  if (source === 'khamsat') return lang === 'ar' ? 'خمسات' : 'Khamsat'
-  if (source === 'kaf') return lang === 'ar' ? 'كاف' : 'KAF'
-  if (source === 'nafezly') return lang === 'ar' ? 'نفذلي' : 'Nafezly'
-  if (source === 'mostaql') return lang === 'ar' ? 'مستقل' : 'Mostaql'
-  return source
+  return SOURCES.find(item => item.id === source)?.[lang] ?? source
 }
 
 export function openOnSource(source: string, lang: Lang): string {

@@ -13,11 +13,16 @@ export type Db = DatabaseSync
 export function openDatabase(filePath: string): Db {
   mkdirSync(dirname(filePath), { recursive: true })
   const db = new DatabaseSync(filePath)
-  db.exec('PRAGMA journal_mode = WAL;')
-  db.exec('PRAGMA busy_timeout = 5000;')
-  db.exec('PRAGMA foreign_keys = ON;')
-  applyMigrations(db)
-  return db
+  try {
+    db.exec('PRAGMA journal_mode = WAL;')
+    db.exec('PRAGMA busy_timeout = 5000;')
+    db.exec('PRAGMA foreign_keys = ON;')
+    applyMigrations(db)
+    return db
+  } catch (error) {
+    db.close()
+    throw error
+  }
 }
 
 export function closeDatabase(db: Db): void {

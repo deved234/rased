@@ -102,6 +102,12 @@ export function App(): React.ReactElement {
     }
   }, [settings, settingsReady])
 
+  React.useEffect(() => rased.onSettingsImported(next => {
+    memoryRef.current = {}
+    setSearchInput(next.displayQuery.search)
+    setSearch(next.displayQuery.search)
+  }), [])
+
   // search debounce
   React.useEffect(() => {
     const id = setTimeout(() => setSearch(searchInput), 300)

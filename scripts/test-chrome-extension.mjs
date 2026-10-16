@@ -26,7 +26,7 @@ try{
   const acl=spawnSync('powershell.exe',['-NoProfile','-File',resolve('scripts/inspect-pipe-acl.ps1'),broker.setup.pipe],{encoding:'utf8',windowsHide:true})
   if(acl.status!==0)throw Error(acl.stderr)
   console.log('Actual pipe DACL',acl.stdout.trim())
-  const chrome=process.env.RASED_TEST_CHROME || join(process.env.LOCALAPPDATA,'ms-playwright','chromium-1243','chrome-win64','chrome.exe')
+  const chrome=process.env.RASED_TEST_CHROME || chromium.executablePath()
   browser=await chromium.launchPersistentContext(join(root,'chrome'),{executablePath:chrome,headless:true,env:{...process.env,PATH:join(process.env.SystemRoot,'System32')},args:[`--disable-extensions-except=${broker.setup.folder}`,`--load-extension=${broker.setup.folder}`],ignoreDefaultArgs:['--disable-extensions']})
   browser.on('page',page=>page.on('pageerror',error=>console.log('PAGE ERROR',error.message)))
   await browser.route('https://mostaql.com/**',route=>{if(route.request().method()!=='GET')posts++;const url=new URL(route.request().url());return route.fulfill({contentType:'text/html',body:html('mostaql',url.pathname.includes('/2')?'User draft':'',!url.pathname.includes('/3'),url.pathname.includes('/4'))})})
@@ -60,7 +60,16 @@ try{
   check('client duration plus extra day',await p.locator('#bid__period').inputValue()==='6')
   const existing=await run(2,'mostaql','draft-exists');check('existing draft untouched',await existing.locator('#bid__details').inputValue()==='User draft')
   const partial=await run(3,'mostaql','needs-input');check('missing budget remains manual',await partial.locator('#bid__cost').inputValue()==='');check('partial template filled',await partial.locator('#bid__details').inputValue()===settings.quickApply.template)
+  // Force the public-page load to beat the focus operation. This used to lose
+  // content-ready and leave the desktop job stuck at "opening".
+  await worker.evaluate(()=>{
+    const original=chrome.windows.update.bind(chrome.windows)
+    globalThis.rasedTestWindowUpdate=original
+    chrome.windows.update=async(...args)=>{await new Promise(resolve=>setTimeout(resolve,500));return original(...args)}
+  })
   await run(4,'mostaql','needs-login')
+  check('fast page loading before focus reports login requirement',broker.status().lastJob.phase==='needs-login')
+  await worker.evaluate(()=>{chrome.windows.update=globalThis.rasedTestWindowUpdate;delete globalThis.rasedTestWindowUpdate})
   const nf=await run(5,'nafezly','ready');check('Nafezly fields filled',await nf.locator('#offer_description').inputValue()===settings.quickApply.template)
   check('no form submission or HTTP offer request',posts===0&&await p.evaluate(()=>!window.submissions)&&await nf.evaluate(()=>!window.submissions))
   check('Khamsat rejected',await broker.quick(6)===false)

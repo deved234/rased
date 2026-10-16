@@ -21,8 +21,33 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   const fetchImpl = (async (url, options) => {
     record('fetch', String(url))
     if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const factsSource = /^https:\/\/mostaql\.com\/(go|project)\//.test(String(url)) ? 'mostaql' : /^https:\/\/nafezly\.com\/project\//.test(String(url)) ? 'nafezly' : null
+    const factsPath = join(profile, 'facts-config.json')
+    const factsConfig = factsSource && existsSync(factsPath) ? (JSON.parse(readFileSync(factsPath, 'utf8')) as Record<string, { status?: number; delay?: number; retryAfter?: string }>)[factsSource] : undefined
+    if (factsConfig?.delay) await new Promise<void>((resolve, reject) => {
+      const abort = (): void => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')) }
+      const timer = setTimeout(() => { options?.signal?.removeEventListener('abort', abort); resolve() }, factsConfig.delay)
+      options?.signal?.addEventListener('abort', abort, { once: true })
+    })
+    if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (factsConfig?.status) return new Response('Synthetic metadata error', { status: factsConfig.status, headers: { 'retry-after': factsConfig.retryAfter ?? '0' } })
+    const source = String(url) === 'https://mostaql.com/rss' ? 'mostaql' : String(url) === 'https://khamsat.com/community/requests' ? 'khamsat' : String(url) === 'https://nafezly.com/feed' ? 'nafezly' : null
+    const monitoringPath = join(profile, 'monitoring-config.json')
+    const config = source && existsSync(monitoringPath) ? (JSON.parse(readFileSync(monitoringPath, 'utf8')) as Record<string, { status?: number; delay?: number; retryAfter?: string; networkError?: boolean }>)[source] : undefined
+    if (config?.delay) await new Promise<void>((resolve, reject) => {
+      const abort = (): void => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')) }
+      const timer = setTimeout(() => { options?.signal?.removeEventListener('abort', abort); resolve() }, config.delay)
+      options?.signal?.addEventListener('abort', abort, { once: true })
+    })
+    if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (config?.networkError) throw new TypeError('fetch failed')
+    if (config?.status) return new Response('Synthetic monitoring response', { status: config.status, headers: { 'retry-after': config.retryAfter ?? '0' } })
     if (String(url) === 'https://khamsat.com/community/requests') return new Response(readFileSync(join(profile, 'khamsat-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': 'text/html' } })
     if (String(url) === 'https://nafezly.com/feed') return new Response(readFileSync(join(profile, 'nafezly-fixture.xml'), 'utf8'), { status: 200, headers: { 'content-type': 'text/xml' } })
+    if (/^https:\/\/nafezly\.com\/project\//.test(String(url))) {
+      const file = join(profile, 'nafezly-detail-fixture.html')
+      return new Response(readFileSync(existsSync(file) ? file : join(profile, 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': 'text/html' } })
+    }
     if (String(url).startsWith('https://kafiil.com/')) {
       const address = new URL(String(url))
       const configPath = join(profile, 'kaf-config.json')

@@ -5,24 +5,28 @@ import type { AppSettings, SourceHealth } from '@shared/types.js'
 import { Icon } from './Icon.js'
 import { IconBtn, useDialogFocus } from './ui.js'
 import { go, type Route } from '../router.js'
-import { countdownTo, fullDate, timeAgo } from '../format.js'
+import { SourceHealthDetails } from './SourceHealthDetails.js'
 import { useNow } from '../hooks.js'
 import { overallSourceState, type OverallSourceState } from '@shared/sourceStatus.js'
 import logo from '../assets/logo.svg'
+import { SOURCES } from '@shared/sources.js'
 
 export function dotClass(h: SourceHealth | null): string {
   if (!h) return ''
-  if (h.state === 'watching') return 'ok'
+  if (h.state === 'watching') return h.coverageGap || h.recovering ? 'warn' : 'ok'
   if (h.state === 'paused' || h.state === 'backing-off') return 'warn'
-  if (h.state === 'initializing') return ''
+  if (h.state === 'initializing' || h.state === 'disabled') return ''
   return 'bad'
 }
 
-export function statusText(h: Pick<SourceHealth, 'state'> | null, lang: Lang): string {
+export function statusText(h: Pick<SourceHealth, 'state'> & Partial<Pick<SourceHealth, 'recovering' | 'coverageGap'>> | null, lang: Lang): string {
   const t = STRINGS[lang]
   if (!h) return t.statusInitializing
+  if (h.state === 'watching' && h.recovering) return lang === 'ar' ? 'جارٍ الاسترجاع' : 'Catching up'
+  if (h.state === 'watching' && h.coverageGap) return lang === 'ar' ? 'نشط · فجوة محتملة' : 'Active · possible gap'
   switch (h.state) {
     case 'watching': return t.statusWatching
+    case 'disabled': return t.statusDisabled
     case 'paused': return t.statusPaused
     case 'backing-off': return t.statusBackingOff
     case 'offline': return t.statusOffline
@@ -40,7 +44,7 @@ export function overallText(state: OverallSourceState, lang: Lang): string {
 export function overallDot(state: OverallSourceState): string {
   if (state === 'watching') return 'ok'
   if (state === 'partial' || state === 'paused' || state === 'backing-off') return 'warn'
-  if (state === 'initializing') return ''
+  if (state === 'initializing' || state === 'disabled') return ''
   return 'bad'
 }
 
@@ -131,31 +135,28 @@ export function HealthPopover({
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
   }, [onClose])
-  const state = overallSourceState([health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : []), ...(kafEnabled ? [kafHealth] : [])])
-  const refreshDisabled = [health, ...(khamsatEnabled ? [khamsatHealth] : []), ...(nafezlyEnabled ? [nafezlyHealth] : []), ...(kafEnabled ? [kafHealth] : [])].every(value => !value || value.paused || value.state === 'backing-off')
-  const sources: { id: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf'; name: string; value: SourceHealth | null }[] = [
-    { id: 'mostaql', name: t.sourceMostaql, value: health },
-    ...(khamsatEnabled ? [{ id: 'khamsat' as const, name: t.sourceKhamsat, value: khamsatHealth }] : []),
-    ...(nafezlyEnabled ? [{ id: 'nafezly' as const, name: t.sourceNafezly, value: nafezlyHealth }] : []),
-    ...(kafEnabled ? [{ id: 'kaf' as const, name: t.sourceKaf, value: kafHealth }] : [])
-  ]
+  const values = { mostaql: health, khamsat: khamsatHealth, nafezly: nafezlyHealth, kaf: kafHealth }
+  const enabled = { mostaql: health?.enabled !== false, khamsat: khamsatEnabled, nafezly: nafezlyEnabled, kaf: kafEnabled }
+  const sources = SOURCES.map(source => ({ id: source.id, name: source[lang], value: values[source.id], enabled: enabled[source.id] }))
+  const active = sources.filter(source => source.enabled).map(source => source.value)
+  const state = overallSourceState(active)
+  const refreshDisabled = active.every(value => !value || value.paused || value.checking || value.state === 'disabled' || (['backing-off', 'needs-review'].includes(value.state) && !!value.nextAttemptAt && Date.parse(value.nextAttemptAt) > Date.now()))
   return (
     <>
       <div className="scrim" onClick={onClose} />
       <div ref={panelRef} className="popover" role="dialog" aria-modal="true" aria-label={t.healthDetails}>
+        <div className="health-popover-heading"><h2>{t.healthDetails}</h2><IconBtn name="x" title={lang === 'ar' ? 'إغلاق' : 'Close'} onClick={onClose} /></div>
         <div className="meta">
           <span className={`dot ${overallDot(state)}`} />
           <strong>{overallText(state, lang)}</strong>
         </div>
-        {sources.map(({ id, name, value }) => <div className="health-source" key={id}>
-          <div className="meta"><span className={`dot ${dotClass(value)}`} /><strong>{name}</strong><span>{statusText(value, lang)}</span></div>
-          <div className="faint small">{t.lastSuccessAt}: {value?.lastSuccessAt ? timeAgo(value.lastSuccessAt, lang) : t.unknownTime}</div>
-          <div className="faint small">{t.nextCheck}: {value?.nextAttemptAt ? countdownTo(value.nextAttemptAt, lang) : '…'}</div>
-          {value?.lastError && <div className="faint small">{t.lastErrorLabel}: <span dir="auto">{value.lastError}</span></div>}
-          {value?.lastSuccessAt && <div className="faint small num">{fullDate(value.lastSuccessAt, lang)}</div>}
-          <button className="btn sm" disabled={!value} onClick={() => onTogglePause(id)}>{value?.paused ? t.resume : t.pause} {name}</button>
+        {sources.map(({ id, name, value, enabled }) => <div className="health-source" key={id}>
+          <div className="meta"><span className={`dot ${enabled ? dotClass(value) : ''}`} /><strong>{name}</strong><span>{enabled ? statusText(value, lang) : t.statusDisabled}</span></div>
+          <SourceHealthDetails source={id} health={value} lang={lang} />
+          <button className="btn sm" disabled={!enabled || !value} onClick={() => onTogglePause(id)}>{enabled && value?.paused ? t.resume : t.pause} {name}</button>
         </div>)}
         <div className="row-actions">
+          <button className="btn sm" onClick={() => { onClose(); go({ name: 'settings', section: 'watching' }) }}>{t.settingsWatching}</button>
           <button className="btn sm" disabled={refreshDisabled} onClick={onRefresh}>
             {t.refreshNow}
           </button>
@@ -224,7 +225,7 @@ export function Topbar({
       />}
       <span className="spacer" />
       <div className="source-health-strip">
-        {sourcePill('mostaql', t.sourceMostaql, health)}
+        {sourcePill('mostaql', t.sourceMostaql, health, health?.enabled !== false)}
         {sourcePill('khamsat', t.sourceKhamsat, khamsatHealth, khamsatEnabled)}
         {sourcePill('nafezly', t.sourceNafezly, nafezlyHealth, nafezlyEnabled)}
         {sourcePill('kaf', t.sourceKaf, kafHealth, kafEnabled)}

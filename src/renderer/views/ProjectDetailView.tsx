@@ -4,7 +4,8 @@ import { rased } from '../api.js'
 import { categoryDisplay } from '@shared/categories.js'
 import type { PersonalStatus, ProjectDetails, ProjectFull } from '@shared/types.js'
 import { STRINGS, type Lang } from '../i18n.js'
-import { budgetLabel, fullDate, timeAgo } from '../format.js'
+import { fullDate, timeAgo } from '../format.js'
+import { ProjectFactsPanel } from '../components/ProjectFacts.js'
 import { ConfirmDialog, EmptyState, SkeletonList } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
 import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
@@ -149,7 +150,6 @@ export function ProjectDetailView({
     )
   }
 
-  const budget = budgetLabel(project.budgetMin, project.budgetMax)
   const saveNote = async (): Promise<boolean> => {
     if (savingNote) return false
     const draft = noteRef.current.note
@@ -212,12 +212,7 @@ export function ProjectDetailView({
                 {project.source === 'mostaql' && !project.categoryConfirmed && <div className="faint small">{t.uncertainCategory}</div>}
               </div>
             </div>}
-            {(project.source === 'mostaql' || project.source === 'kaf') && <div className="fact">
-              <div className="k">{t.factsBudget}</div>
-              <div className="v num" dir="ltr">
-                {budget ?? t.budgetUnknown}
-              </div>
-            </div>}
+            <ProjectFactsPanel key={project.id} project={project} lang={lang} />
             <div className="fact">
               <div className="k">{t.factsPublished}</div>
               <div className="v" title={fullDate(project.publishedAt, lang)}>
@@ -227,7 +222,6 @@ export function ProjectDetailView({
             </div>
             {project.source === 'kaf' && <>
               <div className="fact"><div className="k">{lang === 'ar' ? 'حالة المنصة' : 'Platform status'}</div><div className="v">{platformStatusName(project.platformStatus, lang)}</div></div>
-              <div className="fact"><div className="k">{lang === 'ar' ? 'مدة المشروع' : 'Project duration'}</div><div className="v" dir="auto">{project.durationDays ? `${project.durationDays} ${lang === 'ar' ? 'أيام' : 'days'}` : project.durationRaw ?? '—'}</div></div>
             </>}
             <div className="fact">
               <div className="k">{t.factsDiscovered}</div>
@@ -244,7 +238,7 @@ export function ProjectDetailView({
             </div>
           ) : <>
           <div className="faint small">
-            {details?.provenance === 'full' ? t.descFullNote : details?.provenance === 'truncated' ? (lang === 'ar' ? 'وصف مقتطع لطوله — افتح المصدر للنص كاملًا' : 'Description truncated — open the source for the complete text') : t.descExcerptNote}
+            {project.source === 'nafezly' && details?.provenance === 'full' ? (lang === 'ar' ? 'الوصف الكامل من خلاصة RSS للمنصة' : 'Full description from the platform RSS feed') : details?.provenance === 'full' ? t.descFullNote : details?.provenance === 'truncated' ? (lang === 'ar' ? 'وصف مقتطع لطوله — افتح المصدر للنص كاملًا' : 'Description truncated — open the source for the complete text') : t.descExcerptNote}
             {details?.fetchedAt ? ` · ${t.descFetchedAt} ${timeAgo(details.fetchedAt, lang)}` : ''}
           </div>
           <div className="prose" dir="auto">

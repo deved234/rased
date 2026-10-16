@@ -3,6 +3,8 @@ import { LegalView } from './LegalView.js'
 import { UpdatesView, updatesTitle } from './UpdatesView.js'
 import { ProposalSettings } from './ProposalSettings.js'
 import { QuickApplySettings } from './QuickApplySettings.js'
+import { BackupSettings } from './BackupSettings.js'
+import { dataErrorText } from '@shared/data.js'
 import { useUnsavedChanges } from '../components/useUnsavedChanges.js'
 import { rased } from '../api.js'
 import { DEVELOPER_NAME, type AboutLink } from '@shared/about.js'
@@ -16,7 +18,8 @@ import { fullDate } from '../format.js'
 import { useNow } from '../hooks.js'
 import { ConfirmDialog, FieldError, Toggle } from '../components/ui.js'
 import { KeywordTokens } from '../components/FilterDrawer.js'
-import { statusText, togglePause } from '../components/shell.js'
+import { SourceMonitoringSettings } from './SourceMonitoringSettings.js'
+import { SOURCES } from '@shared/sources.js'
 
 type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'quick' | 'data' | 'about' | 'legal' | 'updates'
 
@@ -149,7 +152,7 @@ export function SettingsView({
       setAboutError(result.ok ? null : t.aboutLinkError)
     } catch { setAboutError(t.aboutLinkError) }
   }
-  useNow(5000)
+  useNow(1000)
 
   React.useEffect(() => {
     let alive = true
@@ -185,32 +188,8 @@ export function SettingsView({
         {saveError && <p className="field-err" role="alert">{lang === 'ar' ? 'تعذر حفظ الإعداد. حاول مرة أخرى؛ القيمة المحفوظة لم تتغير.' : 'Could not save the setting. Retry; the saved value has not changed.'}</p>}
 
         {active === 'watching' && (
-          <><div className="set-group">
-            <h2>{lang === 'ar' ? 'رصد مستقل' : 'Mostaql monitoring'}</h2>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'حالة رصد مستقل' : 'Mostaql status'}</label>
-              <span className="muted">{statusText(health, lang)}</span>
-              <button className="btn sm" disabled={!health} onClick={() => void togglePause('mostaql', health)}>{health?.paused ? t.resume : t.pause} {t.sourceMostaql}</button>
-            </div>
-            <p className="hint">{lang === 'ar' ? 'الإيقاف المؤقت يخص مستقل وحده ويُلغى عند إعادة تشغيل راصد.' : 'Pause affects only Mostaql and resets when RASED restarts.'}</p>
-            <div className="set-row">
-              <label htmlFor="settings-field-2">{t.settingsInterval}</label>
-              <select id="settings-field-2"
-                className="select"
-                value={settings.pollIntervalMs}
-                onChange={(e) => void patchSettings({ pollIntervalMs: Number(e.target.value) as 2000 | 5000 | 15000 })}
-              >
-                <option value={5000}>{t.interval5}</option>
-                <option value={15000}>{t.interval15}</option>
-                <option value={2000}>{t.interval2}</option>
-              </select>
-            </div>
-            {settings.pollIntervalMs === 2000 && (
-              <div className="set-row">
-                <span className="hint">{t.interval2Warn}</span>
-              </div>
-            )}
-          </div>
+          <>
+            <SourceMonitoringSettings lang={lang} settings={settings} health={{ mostaql: health, khamsat: khamsatHealth, nafezly: nafezlyHealth, kaf: kafHealth }} patchSettings={patchSettings} />
           <div className="set-group">
             <h2>{lang === 'ar' ? 'تشغيل راصد' : 'RASED behavior'}</h2>
             <div className="set-row">
@@ -232,46 +211,7 @@ export function SettingsView({
               <span className="hint">{t.autoSaveNote}</span>
             </div>
           </div>
-          <div className="set-group">
-            <h2>{lang === 'ar' ? 'رصد خمسات' : 'Khamsat monitoring'}</h2>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'تفعيل المصدر' : 'Enable source'}</label>
-              <Toggle checked={settings.khamsatEnabled} onChange={(v) => void patchSettings({ khamsatEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد خمسات' : 'Enable Khamsat monitoring'} />
-            </div>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'حالة رصد خمسات' : 'Khamsat status'}</label>
-              <span className="muted">{settings.khamsatEnabled ? statusText(khamsatHealth, lang) : t.statusDisabled}</span>
-              <button className="btn sm" disabled={!settings.khamsatEnabled || !khamsatHealth} onClick={() => void togglePause('khamsat', khamsatHealth)}>{settings.khamsatEnabled && khamsatHealth?.paused ? t.resume : t.pause} {t.sourceKhamsat}</button>
-            </div>
-            <p className="hint">{lang === 'ar' ? 'الإيقاف المؤقت يخص خمسات وحده ويُلغى عند إعادة تشغيل راصد. تعطيل المصدر أعلاه يُحفظ في الإعدادات.' : 'Pause affects only Khamsat and resets when RASED restarts. Disabling the source above is saved in settings.'}</p>
-            <p className="hint">{lang === 'ar' ? 'يُفحص عنوان الطلب ورابطه وتاريخ نشره كل 5 ثوانٍ؛ عند تعذر الوصول يتباطأ الفحص تلقائيًا. الوصف الكامل يُقرأ من موقع خمسات.' : 'Checks request titles, links and publication times every 5 seconds, with automatic backoff on errors. Read the full description on Khamsat.'}</p>
-          </div>
-          <div className="set-group">
-            <h2>{lang === 'ar' ? 'رصد نفذلي' : 'Nafezly monitoring'}</h2>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'تفعيل المصدر' : 'Enable source'}</label>
-              <Toggle checked={settings.nafezlyEnabled} onChange={(v) => void patchSettings({ nafezlyEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد نفذلي' : 'Enable Nafezly monitoring'} />
-            </div>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'حالة رصد نفذلي' : 'Nafezly status'}</label>
-              <span className="muted">{settings.nafezlyEnabled ? statusText(nafezlyHealth, lang) : t.statusDisabled}</span>
-              <button className="btn sm" disabled={!settings.nafezlyEnabled || !nafezlyHealth} onClick={() => void togglePause('nafezly', nafezlyHealth)}>{settings.nafezlyEnabled && nafezlyHealth?.paused ? t.resume : t.pause} {t.sourceNafezly}</button>
-            </div>
-            <p className="hint">{lang === 'ar' ? 'يفحص RSS العام كل 15–18 ثانية تقريبًا. يتباطأ تلقائيًا عند أخطاء الوصول. الإيقاف المؤقت مستقل عن باقي المصادر ويُلغى بعد إعادة التشغيل.' : 'Checks the public RSS feed roughly every 15–18 seconds. Automatically backs off on access errors. Pause is independent and resets on restart.'}</p>
-          </div>
-          <div className="set-group">
-            <h2>{lang === 'ar' ? 'رصد كاف' : 'Kaf monitoring'}</h2>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'تفعيل المصدر' : 'Enable source'}</label>
-              <Toggle checked={settings.kafEnabled} onChange={(v) => void patchSettings({ kafEnabled: v })} label={lang === 'ar' ? 'تفعيل رصد كاف' : 'Enable Kaf monitoring'} />
-            </div>
-            <div className="set-row">
-              <label>{lang === 'ar' ? 'حالة رصد كاف' : 'Kaf status'}</label>
-              <span className="muted">{settings.kafEnabled ? statusText(kafHealth, lang) : t.statusDisabled}</span>
-              <button className="btn sm" disabled={!settings.kafEnabled || !kafHealth} onClick={() => void togglePause('kaf', kafHealth)}>{settings.kafEnabled && kafHealth?.paused ? t.resume : t.pause} {t.sourceKaf}</button>
-            </div>
-            <p className="hint">{lang === 'ar' ? 'يفحص قائمة المشاريع العامة كل 5–6 ثوانٍ تقريبًا؛ أول رصد صامت. يتباطأ تلقائيًا عند أخطاء الوصول. الإيقاف المؤقت مستقل عن باقي المصادر ويُلغى بعد إعادة التشغيل.' : 'Checks the public project list roughly every 5–6 seconds; the initial baseline is silent. Automatically backs off on access errors. Pause is independent and resets on restart.'}</p>
-          </div></>
+          </>
         )}
 
         {active === 'notifications' && (
@@ -404,6 +344,10 @@ export function SettingsView({
 
             <div className="set-group">
               <h2>{t.settingsNotifyFilter}</h2>
+              <div className="set-row">
+                <span>{lang === 'ar' ? 'تنبيهات مشاريع مستقل' : 'Mostaql project alerts'}</span>
+                <Toggle checked={settings.mostaqlNotificationsEnabled} onChange={on => void patchSettings({ mostaqlNotificationsEnabled: on })} label={lang === 'ar' ? 'تفعيل تنبيهات مستقل' : 'Enable Mostaql alerts'} />
+              </div>
               <CategoryEditor lang={lang} value={settings.notifyFilter} onChange={(f) => void patchSettings({ notifyFilter: f })} />
               <div className="set-row">
                 <label>{t.notifyUncertain}</label>
@@ -520,7 +464,7 @@ export function SettingsView({
               </div>
             </div>
             <div className="set-group">
-              <h2>{t.exportSettings} / {t.importSettings}</h2><p className="hint">{lang === 'ar' ? 'يشمل الإعدادات والفلاتر وقالب التقديم. ليس نسخة احتياطية كاملة للمشروعات أو الملاحظات أو المسودات؛ المفاتيح وجلسات المتصفح غير مشمولة.' : 'Includes settings, filters, and the proposal template. This is not a full backup of projects, notes, or drafts; keys and browser sessions are excluded.'}</p>
+              <h2>{t.exportSettings} / {t.importSettings}</h2><p className="hint">{lang === 'ar' ? 'يشمل إعدادات المنصات الأربع والكلمات والفلاتر والقالب والملف المهني واختيارات موفر الذكاء الاصطناعي والموديلات. الملف غير مشفّر وقد يتضمن بيانات شخصية. لا يشمل المشاريع أو الملاحظات أو المسودات أو المفاتيح أو جلسات المتصفح أو رموز الربط أو عدم الإزعاج المؤقت أو موضع النافذة أو جدولة النسخ المحلية.' : 'Includes all four source preferences, keywords, filters, template, professional profile and AI provider/model choices. The file is unencrypted and may contain personal data. Projects, notes, drafts, keys, browser sessions, pairing tokens, temporary DND, window position and local backup scheduling are excluded.'}</p>
               <div className="set-row">
                 <button
                   className="btn sm"
@@ -530,7 +474,7 @@ export function SettingsView({
                     setDataBusy(true)
                     void rased.exportSettings().then((r) => {
                       if (r.ok) setExportMsg(r.path ?? t.exportSettings + ' ✓')
-                      else if (r.error) setExportMsg(r.error)
+                      else if (r.error) setExportMsg(dataErrorText(r.error, lang === 'ar'))
                     }).catch(() => setExportMsg(lang === 'ar' ? 'تعذر التصدير. أعد المحاولة.' : 'Export failed. Retry.')).finally(() => setDataBusy(false))
                   }}
                 >
@@ -546,7 +490,7 @@ export function SettingsView({
                     void rased.validateImport().then((s) => {
                       if (!s.ok && !s.error) return // user cancelled the dialog
                       if (!s.ok) {
-                        setImportMsg(s.error ?? '?')
+                        setImportMsg(dataErrorText(s.error, lang === 'ar'))
                         return
                       }
                       setImportSummary(s)
@@ -561,10 +505,12 @@ export function SettingsView({
               {importMsg && <FieldError message={importMsg} />}
               {importSummary?.ok && (
                 <div className="set-group">
-                  <div className="meta"><span>{t.importSummarySettings}: </span><span dir="auto">{(importSummary.settingsKeys ?? []).join(', ') || '—'}</span></div>
+                  <div className="meta"><span>{t.importSummarySettings}: </span><span>{importSummary.settingsKeys?.length ?? 0}</span></div>
+                  <p className="hint">{lang === 'ar' ? `الملف المهني: ${importSummary.profileIncluded ? 'سيُستبدل' : 'لن يتغير'} · اختيارات الموديلات: ${importSummary.aiIncluded ? 'ستُستبدل' : 'لن تتغير'}` : `Professional profile: ${importSummary.profileIncluded ? 'replace' : 'unchanged'} · Model choices: ${importSummary.aiIncluded ? 'replace' : 'unchanged'}`}</p>
+                  {importSummary.legacy && <p className="hint">{lang === 'ar' ? 'ملف قديم؛ تُنقل البيانات الموجودة فيه فقط وتبقى الإعدادات غير المشمولة كما هي.' : 'Legacy export: only included preferences will change; missing preferences stay as they are.'}</p>}
                   <div className="meta"><span>{t.importSummaryAdded}: </span><span className="num">{importSummary.filtersAdded ?? 0}</span></div>
                   <div className="meta"><span>{t.importSummaryReplaced}: </span><span className="num">{importSummary.filtersReplaced ?? 0}</span></div>
-                  {importSummary.startupRequested && (
+                  {importSummary.startupIncluded && (
                     <div className="set-row">
                       <label>{t.importApplyStartup}</label>
                       <Toggle checked={importStartup} onChange={setImportStartup} label={t.importApplyStartup} />
@@ -575,6 +521,7 @@ export function SettingsView({
                     <Toggle checked={importMode === 'replace'} onChange={(v) => setImportMode(v ? 'replace' : 'merge')} label={t.importReplace} />
                   </div>
                   <div className="set-row"><span className="hint">{t.importMerge}</span></div>
+                  <p className="hint">{lang === 'ar' ? 'اختيار الدمج أو الاستبدال يخص الفلاتر المحفوظة. تفضيلات الإعدادات الموجودة في الملف ستُستبدل في الحالتين؛ ما ليس موجودًا لن يتغير.' : 'Merge or replace applies to saved filters. Included preferences are overwritten in either mode; missing preferences stay unchanged.'}</p>
                   <div className="row-actions">
                     <button
                       className="btn primary sm"
@@ -585,16 +532,18 @@ export function SettingsView({
                           if (r.ok) {
                             setImportSummary(null)
                             setImportMsg(t.importConfirm + ' ✓')
-                          } else if (r.error) setImportMsg(r.error)
+                          } else if (r.error) setImportMsg(dataErrorText(r.error, lang === 'ar'))
                         }).catch(() => setImportMsg(lang === 'ar' ? 'تعذر الاستيراد. أعد المحاولة.' : 'Import failed. Retry.')).finally(() => setDataBusy(false))
                       }}
                     >
                       {t.importConfirm}
                     </button>
+                    <button className="btn sm" disabled={dataBusy} onClick={() => setImportSummary(null)}>{t.cancel}</button>
                   </div>
                 </div>
               )}
             </div>
+            <BackupSettings lang={lang} busy={dataBusy} setBusy={setDataBusy} />
             <div className="set-group">
               <h2>{t.purgeTitle}</h2>
               <p className="desc">{t.purgeDesc}</p>
@@ -651,15 +600,47 @@ export function SettingsView({
               </div>
             </section>
             <section className="set-group about-developer" aria-labelledby="developer-name">
-              <div className="about-monogram" aria-hidden="true">da</div>
-              <div className="about-developer-info">
-                <p className="small muted">{t.aboutDeveloperIntro}</p>
-                <h3 id="developer-name" dir="ltr">{DEVELOPER_NAME}</h3>
-                <p className="muted">{t.aboutDeveloper}</p>
-                <div className="about-links">
-                  <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('github')}>GitHub <Icon name="external" size={14} /></button>
-                  <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('linkedin')}>LinkedIn <Icon name="external" size={14} /></button>
+              <div className="about-developer-header">
+                <div className="about-monogram" aria-hidden="true">da</div>
+                <div className="about-developer-info">
+                  <p className="small muted">{t.aboutDeveloperIntro}</p>
+                  <h3 id="developer-name"><bdi dir="ltr">{DEVELOPER_NAME}</bdi></h3>
+                  <p className="about-developer-role">{t.aboutDeveloper}</p>
                 </div>
+              </div>
+              <p className="about-bio">{t.aboutDeveloperBio}</p>
+              <div className="about-links">
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('linkedin')}>LinkedIn <Icon name="external" size={14} /></button>
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('github')}>GitHub <Icon name="external" size={14} /></button>
+              </div>
+            </section>
+            <section className="set-group about-story" aria-labelledby="about-story-title">
+              <h3 id="about-story-title">{t.aboutStoryTitle}</h3>
+              <p>{t.aboutStoryStart}</p>
+              <p>{t.aboutStoryNow}</p>
+            </section>
+            <section className="set-group" aria-labelledby="about-capabilities-title">
+              <h3 id="about-capabilities-title">{t.aboutCapabilitiesTitle}</h3>
+              <dl className="about-capabilities">
+                {[
+                  { title: t.aboutPlatformsTitle, body: t.aboutPlatformsBody },
+                  { title: t.aboutLanguagesTitle, body: t.aboutLanguagesBody },
+                  { title: t.aboutAiTitle, body: t.aboutAiBody },
+                  { title: t.aboutLocalTitle, body: t.aboutLocalBody }
+                ].map(({ title, body }) => (
+                  <div className="about-capability" key={title}>
+                    <dt>{title}</dt>
+                    <dd>{body}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+            <section className="set-group" aria-labelledby="about-progress-title">
+              <h3 id="about-progress-title">{t.aboutProgressTitle}</h3>
+              <p className="muted">{t.aboutProgressBody}</p>
+              <div className="about-links">
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('releases')}>{t.aboutViewReleases} <Icon name="external" size={14} /></button>
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('issues')}>{t.aboutFeedback} <Icon name="external" size={14} /></button>
               </div>
             </section>
             <section className="set-group">
@@ -672,9 +653,7 @@ export function SettingsView({
             <details className="set-group about-diagnostics">
               <summary>{t.diagnostics}</summary>
               <div className="meta"><span dir="ltr">{appInfo ? `${appInfo.platform}-${appInfo.arch}` : '…'}</span></div>
-              <div className="meta"><span>{t.sourceMostaql}: RSS · https://mostaql.com/rss</span></div>
-              <div className="meta"><span>{t.sourceKhamsat}: HTML · https://khamsat.com/community/requests</span></div>
-              <div className="meta"><span>{t.sourceNafezly}: RSS · https://nafezly.com/feed</span></div>
+              {SOURCES.map(source => <div className="meta" key={source.id}><span>{source[lang]}: <bdi>{source.transport} · {source.endpoint}</bdi></span></div>)}
               {diag.length === 0 && <div className="faint small">—</div>}
               {diag.map((d, i) => (
                 <div className="diag" key={i}>

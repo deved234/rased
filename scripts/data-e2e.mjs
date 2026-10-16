@@ -1,0 +1,167 @@
+// Fresh TEMP profiles. Only file pickers, provider network and OS effects are fixtures.
+import assert from 'node:assert/strict'
+import { DatabaseSync } from 'node:sqlite'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+
+const args = parseArgs(process.argv.slice(2))
+const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js', port = Number(args.port ?? 9495)
+const output = resolve('.local/phase-1-data-2026-10-15/screenshots')
+mkdirSync(output, { recursive: true })
+const source = newProfile(), target = newProfile(), children = []
+let ws, passed = 0, session
+const check = (label, value) => { assert.ok(value, label); passed++; console.log('PASS ' + label) }
+const ev = expression => evaluate(ws, expression)
+const wait = expression => eventually(() => ev(expression))
+const dialog = (profile, kind, name) => writeFileSync(join(profile, 'data-dialog.json'), JSON.stringify({ [kind]: name }))
+function seed(profile, count) {
+  mkdirSync(join(profile, 'exports'))
+  const db = new DatabaseSync(join(profile, 'rased.db')), schema = readFileSync('src/storage/migrations.ts', 'utf8'), migrations = [...schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
+  for (const migration of migrations) db.exec(migration[1])
+  db.exec('PRAGMA user_version=' + migrations.length)
+  const now = new Date().toISOString(), sources = ['mostaql', 'nafezly', 'khamsat', 'kaf']
+  for (let id = 1; id <= count; id++) {
+    const source = sources[id - 1], url = source === 'mostaql' ? 'https://mostaql.com/go/900001' : source === 'nafezly' ? 'https://nafezly.com/project/900002' : source === 'kaf' ? 'https://kafiil.com/project/900004-test' : 'https://khamsat.com/community/requests/900003'
+    db.prepare("INSERT INTO projects(id,source,external_id,url,title,description_excerpt,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'initial',?,?)").run(id, source, String(900000 + id), url, 'Synthetic opportunity ' + id, 'Data transfer fixture', now, now, now, now)
+    db.prepare("INSERT INTO project_details VALUES(?,?,'full',?,'ready',NULL)").run(id, 'Full synthetic description ' + id, now)
+  }
+  db.prepare("INSERT INTO project_user_state VALUES(1,?,NULL,'submitted',?,?)").run(now, count === 4 ? 'Source private note' : 'Target private note', now)
+  db.prepare("INSERT INTO proposal_drafts(project_id,proposal,updated_at,provider,model) VALUES(1,?,?,'openai','example-model')").run(count === 4 ? 'Source proposal draft' : 'Target proposal draft', now)
+  db.prepare("INSERT INTO settings VALUES('private-fixture-token','PRIVATE_PAIRING_EXCLUDED_7654321')").run()
+  db.prepare("INSERT INTO extension_jobs(ticket,request_id,project_id,expires_at,updated_at) VALUES('TEMP_TICKET_MUST_NOT_EXPORT','request',1,9999999999999,1)").run()
+  db.prepare("INSERT INTO notification_events(project_id,status,created_at,updated_at) VALUES(1,'pending',?,?)").run(now, now)
+  db.close()
+}
+seed(source, 4); seed(target, 1)
+async function launch(profile) {
+  const child = startApp({ exe, app, profile, port }); children.push(child)
+  ws = await pageWs(port); await wait('!!window.rased'); await wait('!!document.querySelector(".sidebar")')
+  return child
+}
+const invoke = (method, ...values) => ev('window.rased.' + method + '(' + values.map(v => JSON.stringify(v)).join(',') + ')')
+async function click(text) {
+  await ev('(()=>{const b=[...document.querySelectorAll("button")].find(b=>b.textContent.trim()===' + JSON.stringify(text) + ');if(!b)throw Error("Missing button");b.click()})()')
+  await sleep(150)
+}
+const navData = async () => { await ev('location.hash="#/settings/data"'); await wait('!!document.querySelector(".backup-settings")') }
+const shot = async name => writeFileSync(join(output, name + '.png'), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
+try {
+  const a = await launch(source)
+  await invoke('updateSettings', { language: 'en', runAtStartup: true, khamsatEnabled: false, khamsatNotificationsEnabled: false, khamsatKeywordsAny: ['logo'], khamsatExcludeKeywords: ['spam'], nafezlyEnabled: false, nafezlyNotificationsEnabled: false, nafezlyKeywordsAny: ['React'], nafezlyExcludeKeywords: ['PHP'], kafEnabled: false, kafNotificationsEnabled: false, kafKeywordsAny: ['design'], kafExcludeKeywords: ['old'] })
+  const profile = { skills: 'React and TypeScript', experience: 'Synthetic experience', portfolio: 'https://example.com/portfolio', tone: 'concise', language: 'en' }
+  const ai = { schemaVersion: 1, activeProvider: 'anthropic', modelByProvider: { gemini: 'gemini-2.5-flash', openai: 'example-openai-model', anthropic: 'example-claude-model' } }
+  check('source professional profile saved through preload', (await invoke('saveProposalProfile', profile)).ok)
+  await invoke('saveAiSettings', ai); await invoke('saveAiKey', 'gemini', 'SYNTHETIC_GEMINI_KEY_NOT_FOR_EXPORT')
+  const definition = (await invoke('getSettings')).displayQuery
+  await navData()
+  await invoke('updateSettings', { displayQuery: { ...definition, search: 'Synthetic' } })
+  await invoke('createSavedFilter', 'Source filter', definition)
+  dialog(source, 'save-settings', 'exports/settings.json')
+  check('settings export uses real main/preload and a scoped picker fixture', (await invoke('exportSettings')).ok)
+  const exported = JSON.parse(readFileSync(join(source, 'exports/settings.json'), 'utf8'))
+  check('export includes every source, profile and provider model choices', exported.version === 2 && exported.settings.nafezlyKeywordsAny[0] === 'React' && exported.settings.khamsatEnabled === false && exported.settings.kafExcludeKeywords[0] === 'old' && exported.proposalProfile.skills === profile.skills && exported.aiSettings.activeProvider === 'anthropic')
+  check('settings export excludes credentials and device/session state', !JSON.stringify(exported).includes('SYNTHETIC_GEMINI_KEY') && !JSON.stringify(exported).includes('PRIVATE_PAIRING') && !('doNotDisturbUntil' in exported.settings) && !('compactBounds' in exported.settings))
+  dialog(source, 'save-backup', 'exports/full.rased-backup')
+  check('Electron SQLite backup API produces a complete portable archive', (await invoke('createBackup')).ok)
+  const archive = readFileSync(join(source, 'exports/full.rased-backup'))
+  check('backup bytes exclude pairing tokens, tickets and API keys', !['PRIVATE_PAIRING_EXCLUDED_7654321', 'TEMP_TICKET_MUST_NOT_EXPORT', 'SYNTHETIC_GEMINI_KEY_NOT_FOR_EXPORT'].some(secret => archive.includes(Buffer.from(secret))))
+  await stopApp(a)
+  copyFileSync(join(source, 'exports/settings.json'), join(target, 'exports/settings.json'))
+  copyFileSync(join(source, 'exports/full.rased-backup'), join(target, 'exports/full.rased-backup'))
+  let b = await launch(target)
+  await invoke('saveAiKey', 'openai', 'SYNTHETIC_TARGET_KEY_RETAINED')
+  await invoke('setBackupPreferences', { schedule: 'off', keep: 3 })
+  const localDnd = new Date(Date.now() + 3600000).toISOString()
+  await invoke('setDnd', localDnd)
+  await invoke('createSavedFilter', 'Target filter', definition)
+  dialog(target, 'open-settings', 'exports/settings.json')
+  const summary = await invoke('validateImport')
+  check('import preview applies nothing and identifies profile/model changes', summary.ok && summary.profileIncluded && summary.aiIncluded && summary.startupIncluded && (await invoke('getSettings')).language === 'ar')
+  check('settings merge succeeds', (await invoke('applyImport', 'merge', false)).ok)
+  await wait('document.querySelector(".search-top")?.value==="Synthetic"')
+  check('imported search applies to the actual interface without restarting', (await invoke('getSettings')).displayQuery.search === 'Synthetic')
+  const preferences = await invoke('getSettings'), setup = await invoke('getProposalSetup'), aiSetup = await invoke('getAiSetup')
+  check('all source preferences round trip', preferences.nafezlyKeywordsAny[0] === 'React' && preferences.khamsatKeywordsAny[0] === 'logo' && preferences.kafKeywordsAny[0] === 'design')
+  check('startup is opt-in and settings import preserves the archive', !preferences.runAtStartup && (await invoke('queryProjectsPage', definition, 50, 0)).total === 1)
+  check('settings import preserves device-local temporary DND', preferences.doNotDisturbUntil === localDnd)
+  check('professional profile and provider/model defaults round trip', setup.profile.portfolio === profile.portfolio && JSON.stringify(aiSetup.settings) === JSON.stringify(ai))
+  check('keys remain on their original device/profile', aiSetup.providers.openai.hasKey && !aiSetup.providers.gemini.hasKey)
+  check('merge preserves destination filters', (await invoke('getSavedFilters')).length === 2)
+  await invoke('validateImport'); await invoke('applyImport', 'replace', false)
+  check('replace affects filters without removing destination keys', (await invoke('getSavedFilters')).length === 1 && (await invoke('getAiSetup')).providers.openai.hasKey)
+  writeFileSync(join(target, 'exports/legacy.json'), JSON.stringify({ format: 'rased-settings', version: 1, settings: { language: 'ar' }, savedFilters: [] }))
+  dialog(target, 'open-settings', 'exports/legacy.json')
+  check('version-one files get a legacy preview', (await invoke('validateImport')).legacy)
+  await invoke('applyImport', 'merge', false)
+  check('legacy import preserves missing profile/model preferences', (await invoke('getProposalSetup')).profile.skills === profile.skills && (await invoke('getAiSetup')).settings.activeProvider === 'anthropic')
+  writeFileSync(join(target, 'exports/invalid.json'), '{broken')
+  dialog(target, 'open-settings', 'exports/invalid.json')
+  check('invalid settings preserve live preferences', (await invoke('validateImport')).error === 'invalid-json' && (await invoke('getSettings')).language === 'ar')
+  dialog(target, 'open-backup', 'exports/invalid.json')
+  check('invalid backup preserves old notes', !(await invoke('validateRestore')).ok && (await invoke('getProject', 1)).note === 'Target private note')
+  await invoke('openCompact')
+  const compact = await pageWs(port, item => item.url.includes('compact'))
+  check('compact renderer cannot start privileged backup or restore actions', !(await evaluate(compact, 'window.rased.createBackup()')).ok && !(await evaluate(compact, 'window.rased.applyRestore("fake", false)')).ok)
+  await invoke('closeCompact')
+  dialog(target, 'open-backup', 'exports/full.rased-backup')
+  await navData(); await click('اختيار نسخة للاستعادة'); await wait('!!document.querySelector(".backup-preview")')
+  check('restore preview shows current/incoming counts for four data groups', await ev('document.querySelectorAll(".backup-counts tbody tr").length===4 && document.querySelector(".backup-counts tbody tr td:last-child").textContent==="4"'))
+  await click('إلغاء الاستعادة')
+  check('cancelling preview preserves the database', !(await invoke('getDataStatus')).lastRestore && (await invoke('queryProjectsPage', definition, 50, 0)).total === 1)
+  await click('اختيار نسخة للاستعادة'); await wait('!!document.querySelector(".backup-preview")')
+  session = await persistentSession(ws)
+  await session.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 720, deviceScaleFactor: 1.25, mobile: false })
+  await invoke('updateSettings', { ui: { ...(await invoke('getSettings')).ui, textScale: 125 } })
+  await ev('document.querySelector(".backup-preview").scrollIntoView({block:"center"})'); await sleep(150)
+  check('Arabic preview fits 900px at 125% text', await ev('document.documentElement.dir==="rtl" && document.body.scrollWidth<=innerWidth+1'))
+  await shot('ar-dark-125-restore-preview')
+  await click('متابعة الاستعادة…'); await wait('!!document.querySelector(".dialog")')
+  check('restore has a separate confirmation dialog', await ev('document.querySelector(".dialog").getAttribute("role")==="alertdialog"'))
+  await call(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await wait('!document.querySelector(".dialog")')
+  check('Escape cancels without restart or data changes', b.exitCode === null && (await invoke('getProject', 1)).note === 'Target private note')
+  await invoke('updateSettings', { language: 'en', ui: { ...(await invoke('getSettings')).ui, theme: 'light', textScale: 100 } })
+  await wait('document.documentElement.dir==="ltr"')
+  await session.call('Emulation.setDeviceMetricsOverride', { width: 1220, height: 820, deviceScaleFactor: 1, mobile: false })
+  // Preview and confirmation remain readable after switching language/theme.
+  await click('Choose backup to restore'); await wait('!!document.querySelector(".backup-preview")')
+  await shot('en-light-restore-preview')
+  await click('Continue restore…'); await wait('!!document.querySelector(".dialog")')
+  await shot('en-light-restore-confirmation')
+  await call(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
+  check('confirmation keeps keyboard focus in the dialog', await ev('document.querySelector(".dialog").contains(document.activeElement)'))
+  await invoke('updateProjectUserState', 1, { note: 'Latest edit after preview' })
+  await click('Restore and restart')
+  session.close(); session = null
+  await eventually(() => b.exitCode !== null, Boolean, 15000)
+  check('confirmed restore shuts down the real process', true)
+  b = await launch(target)
+  const restored = await invoke('queryProjectsPage', definition, 50, 0), result = (await invoke('getDataStatus')).lastRestore
+  check('restart restores all four platforms', restored.total === 4 && new Set(restored.rows.map(row => row.source)).size === 4)
+  check('notes, details and proposal metadata survive restore', (await invoke('getProject', 1)).note === 'Source private note' && (await invoke('getProjectDetails', 1)).text === 'Full synthetic description 1' && (await invoke('getProposalDraft', 1)).model === 'example-model')
+  check('restore reports success and records a real rollback backup', result.ok && existsSync(result.rollbackPath) && (await invoke('getDataStatus')).lastBackupPath === result.rollbackPath)
+  const rollback = new DatabaseSync(result.rollbackPath, { readOnly: true })
+  check('rollback captures edits made after preview', rollback.prepare('SELECT note FROM project_user_state WHERE project_id=1').get().note === 'Latest edit after preview')
+  rollback.close()
+  check('restore preserves keys, local retention, DND and startup opt-out', (await invoke('getAiSetup')).providers.openai.hasKey && !(await invoke('getAiSetup')).providers.gemini.hasKey && (await invoke('getDataStatus')).preferences.keep === 3 && !(await invoke('getSettings')).runAtStartup && (await invoke('getSettings')).doNotDisturbUntil === localDnd)
+  const db = new DatabaseSync(join(target, 'rased.db'), { readOnly: true })
+  check('old queued actions and pending notifications cannot replay', db.prepare('SELECT COUNT(*) AS n FROM extension_jobs').get().n === 0 && db.prepare("SELECT status FROM notification_events WHERE project_id=1").get().status === 'suppressed')
+  db.close()
+  await navData(); await wait('document.querySelector(".backup-result")?.textContent.includes("Last restore completed")')
+  await shot('en-dark-restored-data')
+  await stopApp(b)
+  const corrupt = newProfile()
+  mkdirSync(join(corrupt, 'exports'))
+  writeFileSync(join(corrupt, 'rased.db'), 'CORRUPT_DATABASE_FIXTURE_PRESERVE_BYTES')
+  copyFileSync(join(source, 'exports/full.rased-backup'), join(corrupt, 'exports/recovery.rased-backup'))
+  dialog(corrupt, 'open-backup', 'exports/recovery.rased-backup')
+  await launch(corrupt)
+  const recovery = (await invoke('getDataStatus')).lastRestore
+  check('startup with a corrupt database can recover through the scoped backup picker', recovery.ok && (await invoke('queryProjectsPage', definition, 50, 0)).total === 4)
+  check('corrupt startup recovery preserves original bytes outside the active database', readFileSync(join(recovery.originalFilesPath, 'rased.db'), 'utf8') === 'CORRUPT_DATABASE_FIXTURE_PRESERVE_BYTES')
+  console.log('DATA E2E PASSED (' + passed + ' assertions). Profiles: ' + source + ' | ' + target)
+} finally {
+  session?.close()
+  for (const child of children) await stopApp(child)
+}

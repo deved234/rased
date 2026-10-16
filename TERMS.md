@@ -1,6 +1,6 @@
 # شروط الاستخدام
 
-2026-10-14 · RASED · david atef
+2026-10-15 · RASED · david atef
 
 ## رصد كاف (كفيل سابقًا)
 
@@ -12,7 +12,7 @@
 
 ## وظيفة البرنامج
 
-راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل، وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وخلاصة RSS العامة لمشاريع نفذلي، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات؛ الرصد العام يقرأ وصف نفذلي من RSS دون صفحات تفاصيله أو حساب. التواصل والتعاقد والدفع يتم بواسطتك على المنصة؛ البرنامج لا يرسل عروضًا أو ردودًا آلية.
+راصد أداة محلية لمتابعة خلاصة RSS العامة لمستقل، وصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وخلاصة RSS العامة لمشاريع نفذلي، وتنظيم النتائج وإظهار التنبيهات. قد يطلب صفحات تفاصيل مستقل العامة لإكمال المعلومات. وصف نفذلي يُقرأ من RSS، وعند فتح مشروع أو معاينته قد تُجلب صفحته العامة لإكمال الميزانية والمدة، دون حساب أو قراءة عروض المتقدمين. التواصل والتعاقد والدفع يتم بواسطتك على المنصة؛ البرنامج لا يرسل عروضًا أو ردودًا آلية.
 
 ## علاقة المنصة وحقوق المحتوى
 
@@ -42,7 +42,7 @@
 
 # Terms of use
 
-2026-10-14 · RASED · david atef
+2026-10-15 · RASED · david atef
 
 ## KAF monitoring (formerly Kafiil)
 
@@ -54,7 +54,7 @@ You can save a proposal template, budget position and extra days locally. Option
 
 ## Purpose
 
-RASED follows public Mostaql and Nafezly RSS feeds and Khamsat unavailable-service requests, organizing results and showing alerts. Public monitoring needs no platform account; Mostaql details may be fetched while Nafezly descriptions come from RSS. You reply, submit, contract and pay yourself; RASED does not send automated proposals or replies.
+RASED follows public Mostaql and Nafezly RSS feeds and Khamsat unavailable-service requests, organizing results and showing alerts. Public monitoring needs no platform account. Mostaql details may be fetched; Nafezly descriptions come from RSS, while opening or previewing a project may fetch its public page to complete its budget and duration without reading applicants’ offers. You reply, submit, contract and pay yourself; RASED does not send automated proposals or replies.
 
 ## Platform and content rights
 

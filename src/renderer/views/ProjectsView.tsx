@@ -1,3 +1,4 @@
+import { MonitoringNotices } from '../components/SourceHealthDetails.js'
 import React from 'react'
 import { QuickApplyButton } from '../components/QuickApplyButton.js'
 import { rased } from '../api.js'
@@ -17,7 +18,8 @@ import { FilterDrawer } from '../components/FilterDrawer.js'
 import { EmptyState, IconBtn, SkeletonList, useDialogFocus } from '../components/ui.js'
 import { Icon } from '../components/Icon.js'
 import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
-import { budgetLabel, timeAgo } from '../format.js'
+import { timeAgo } from '../format.js'
+import { ProjectFactsPanel } from '../components/ProjectFacts.js'
 
 const PAGE = 50
 
@@ -248,11 +250,7 @@ export function ProjectsView({
     (def.budgetMin !== null || def.budgetMax !== null ? 1 : 0) +
     (def.scope !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0) + (def.unreadOnly ? 1 : 0) + (!def.includeUnknownBudget ? 1 : 0)
 
-  const showBanner = health && (health.state === 'paused' || health.state === 'error' || health.state === 'needs-review' || health.state === 'backing-off' || health.state === 'offline')
-  const bannerText =
-    health?.state === 'paused' ? t.pausedBanner : health?.state === 'needs-review' ? t.reviewBanner : health?.state === 'backing-off' ? t.backoffBanner : health?.state === 'offline' ? t.offlineCached : t.errorBanner
-  const bannerClass = health?.state === 'paused' || health?.state === 'backing-off' ? 'banner' : 'banner bad'
-
+  const sourceHealth = { mostaql: health, khamsat: khamsatHealth, nafezly: nafezlyHealth, kaf: kafHealth }
   const selected = rows.find((r) => r.id === selectedId) ?? null
   const showPreview = settings.ui.previewOpen && selected && !narrow
   const showOverlay = !!(settings.ui.previewOpen && selected && narrow)
@@ -336,14 +334,7 @@ export function ProjectsView({
     <div className="split" ref={splitRef}>
       <div className="list-pane">
         {actionError && <div className="banner bad" role="alert">{actionError}</div>}
-        {showBanner && (def.source === 'mostaql' || def.source === 'all') && <div className={bannerClass}>{t.sourceMostaql}: {bannerText}</div>}
-        {settings.khamsatEnabled && (def.source === 'all' || def.source === 'khamsat') && khamsatHealth && ['error', 'backing-off'].includes(khamsatHealth.state) && (
-          <div className="banner warn">{lang === 'ar' ? 'رصد خمسات متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Khamsat monitoring is temporarily unavailable; it will retry automatically.'}</div>
-        )}
-        {settings.nafezlyEnabled && (def.source === 'all' || def.source === 'nafezly') && nafezlyHealth && ['error', 'backing-off'].includes(nafezlyHealth.state) && (
-          <div className="banner warn">{lang === 'ar' ? 'رصد نفذلي متعطل مؤقتًا؛ سيُعاد الفحص تلقائيًا.' : 'Nafezly monitoring is temporarily unavailable; it will retry automatically.'}</div>
-        )}
-        {settings.kafEnabled && (def.source === 'all' || def.source === 'kaf') && kafHealth?.lastError && <div className="banner warn" role="status">{t.sourceKaf}: {kafHealth.lastError === 'catch-up-incomplete' ? (lang === 'ar' ? 'استرجاع دفعة سابقة ما زال جاريًا؛ الفرص المسترجعة لن ترسل تنبيهات.' : 'An earlier batch is still being recovered; recovered opportunities are silent.') : (lang === 'ar' ? 'تعذر تحديث المصدر. راصد يطبق تهدئة قبل إعادة المحاولة؛ بياناتك المحفوظة متاحة.' : 'Could not refresh the source. RASED backs off before retrying; cached projects remain available.')}</div>}
+        <MonitoringNotices source={def.source} health={sourceHealth} settings={settings} lang={lang} />
         {def.source === 'all' && def.categoryFilter.mode === 'selected' && <div className="banner">{t.filterCategoryScope}</div>}
         <div className="list-toolbar">
           <div className="source-segment" role="group" aria-label={t.filterSource}>
@@ -503,7 +494,6 @@ function PreviewPanel({
   ratio: number
 }): React.ReactElement {
   const t = STRINGS[lang]
-  const budget = budgetLabel(p.budgetMin, p.budgetMax)
   return (
     <>
       <div className="list-head">
@@ -523,8 +513,7 @@ function PreviewPanel({
         <div className="preview-facts">
           <div className="fact"><span className="k">{t.factsDiscovered}</span><span className="v">{timeAgo(p.firstSeenAt, lang)}</span></div>
           {p.publishedAt && <div className="fact"><span className="k">{t.factsPublished}</span><span className="v">{timeAgo(p.publishedAt, lang)}</span></div>}
-          {(p.source === 'mostaql' || p.source === 'kaf') && budget && <div className="fact"><span className="k">{t.factsBudget}</span><span className="v num" dir="ltr">{budget}</span></div>}
-          {p.source === 'kaf' && p.durationRaw && <div className="fact"><span className="k">{lang === 'ar' ? 'المدة' : 'Duration'}</span><span className="v" dir="auto">{p.durationRaw}</span></div>}
+          <ProjectFactsPanel key={p.id} project={p} lang={lang} />
         </div>
         <h3 className="preview-section-title">{t.descriptionTitle}</h3>
         {p.source !== 'khamsat' && p.descriptionExcerpt && (

@@ -6,6 +6,9 @@ import { fetchKafHtml, fetchKafPage, KafFetchError, type KafItem } from '../coll
 import { parseKafDetails } from '../collector/kafDetails.js'
 import { applyKafCycle, type KafCheckpoint } from '../collector/kafCycle.js'
 import { initialSchedulerState, noteFailure } from '../collector/scheduler.js'
+import { monitoringState } from '../shared/monitoring.js'
+import { monitoringFields } from '../storage/monitoring.js'
+import { markFacts, saveFetchedFacts } from '../storage/projectFacts.js'
 
 interface Deps {
   db: () => Db | null
@@ -43,8 +46,8 @@ export class KafController {
   private cooldown(): number { const db = this.deps.db(); return Math.max(this.memoryBackoff, db ? Date.parse(getSourceState(db, 'kaf').backoffUntil ?? '') || 0 : 0) }
   health(): SourceHealth {
     const db = this.deps.db(), s = db ? getSourceState(db, 'kaf') : null, backoff = this.cooldown()
-    const paused = this.paused || !this.deps.settings().kafEnabled
-    return { state: paused ? 'paused' : backoff > this.now() ? /forbidden/.test(s?.lastError ?? '') ? 'needs-review' : 'backing-off' : s?.lastError ? 'error' : s?.lastSuccessAt ? 'watching' : 'initializing',
+    const enabled = this.deps.settings().kafEnabled, paused = this.paused && enabled
+    return { state: monitoringState({ enabled, paused, backoffUntil: backoff, lastError: s?.lastError ?? null, lastSuccessAt: s?.lastSuccessAt ?? null, failures: s?.consecutiveFailures ?? 0 }, this.now()), enabled, checking: !!this.work && this.available(), ...monitoringFields(db, 'kaf'),
       paused, lastAttemptAt: s?.lastAttemptAt ?? null, lastSuccessAt: s?.lastSuccessAt ?? null, lastError: s?.lastError ?? null,
       consecutiveFailures: s?.consecutiveFailures ?? 0, nextAttemptAt: this.next ? new Date(this.next).toISOString() : null, lastDurationMs: this.duration, lastItemCount: this.count, effectiveIntervalMs: backoff > this.now() ? backoff - this.now() : 5500 }
   }
@@ -91,6 +94,7 @@ export class KafController {
   private async run(signal: AbortSignal): Promise<void> {
     const db = this.deps.db()!
     const previous = getSourceState(db, 'kaf')
+    saveSourceState(db, { ...previous, lastAttemptAt: new Date(this.started).toISOString() })
     const json = (key: string): unknown => { try { return JSON.parse(getSettingRaw(db, key) ?? 'null') } catch { return null } }
     const oldIds = json('kaf:last-list-ids'), stored = json('kaf:checkpoint') as KafCheckpoint | null
     const anchorIds = stored && Array.isArray(stored.anchorIds) ? stored.anchorIds : Array.isArray(oldIds) ? oldIds.filter((x): x is string => typeof x === 'string') : []
@@ -106,7 +110,7 @@ export class KafController {
     }
     if (signal.aborted || !this.available() || this.cooldown() > this.now() || this.deps.db() !== db) return
     const checkpoint = previous.baselineComplete && !found && hasNext ? { anchorIds, cursor: nextPage } : null
-    const out = applyKafCycle(db, items, { nowMs: this.now(), durationMs: this.now() - this.started, runId: this.deps.runId, settings: this.deps.settings(), firstPageIds: ids, checkpoint })
+    const out = applyKafCycle(db, items, { nowMs: this.now(), durationMs: this.now() - this.started, runId: this.deps.runId, settings: this.deps.settings(), firstPageIds: ids, checkpoint, coverageComplete: found || !hasNext })
     this.duration = this.now() - this.started; this.count = items.length
     this.deps.projects(out.insertedIds, out.updatedIds)
     if (out.notifyIds.length) await this.deps.flush()
@@ -122,6 +126,7 @@ export class KafController {
     void this.pumpDetails()
     return row.text ? row : { ...row, status: 'loading' }
   }
+  isDetailsPending(id: number): boolean { return this.detailId === id || this.queue.includes(id) }
   private pumpDetails(): Promise<void> {
     if (!this.available() || this.work || this.detailWork || !this.queue.length || this.cooldown() > this.now() || this.now() - this.detailFinished < 5000) return this.detailWork ?? Promise.resolve()
     const id = this.queue.shift()!, db = this.deps.db()!, p = getProjectById(db, id)
@@ -130,26 +135,30 @@ export class KafController {
     const existing = getProjectDetailsRow(db, id)
     try { upsertProjectDetails(db, id, { ...existing, status: existing.text ? existing.status : 'loading' }) } catch (error) { this.fail(error); return Promise.resolve() }
     this.detailId = id
-    this.detailWork = (async () => {
+    this.detailWork = Promise.resolve().then(async () => {
       try {
+        if (signal.aborted || !this.available()) return
+        markFacts(db, id, 'loading')
         const html = await fetchKafHtml(p.url, signal, false, this.deps.fetchImpl), data = parseKafDetails(html)
         if (signal.aborted || !this.available() || this.deps.db() !== db) return
         runInTransaction(db, () => {
           updateKafDetailsMetadata(db, id, data)
           upsertProjectDetails(db, id, { text: data.text, provenance: data.truncated ? 'truncated' : 'full', fetchedAt: new Date(this.now()).toISOString(), status: 'ready', errorCode: null })
         })
+        const current = getProjectById(db, id)!
+        saveFetchedFacts(db, id, { budgetMin: data.budgetRaw ? data.budgetMin : current.budgetMin, budgetMax: data.budgetRaw ? data.budgetMax : current.budgetMax, budgetRaw: data.budgetRaw ?? current.budgetRaw, currency: data.budgetRaw ? data.budgetMin !== null ? 'USD' : null : current.currency, durationDays: data.durationDays, durationRaw: data.durationRaw })
         this.deps.projects([], [id])
       } catch (error) {
         if (signal.aborted || !this.available() || this.deps.db() !== db) return
         if (error instanceof KafFetchError && ['forbidden', 'rate_limited'].includes(error.kind)) { this.abort?.abort(); this.fail(error); this.schedule() }
-        try { upsertProjectDetails(db, id, { ...existing, status: existing.text ? 'ready' : 'failed', errorCode: 'kaf-detail-failed' }) } catch (failure) { this.fail(failure) }
+        try { markFacts(db, id, 'failed', error instanceof KafFetchError ? error.kind : 'metadata-unavailable'); upsertProjectDetails(db, id, { ...existing, status: existing.text ? 'ready' : 'failed', errorCode: 'kaf-detail-failed' }) } catch (failure) { this.fail(failure) }
       } finally {
         if (signal.aborted && this.deps.db() === db && db.isOpen) {
-          try { upsertProjectDetails(db, id, { ...existing, status: existing.text ? 'ready' : 'not_requested', errorCode: 'interrupted' }) } catch { /* DB shutdown or failed persistence. */ }
+          try { markFacts(db, id, 'not_requested'); upsertProjectDetails(db, id, { ...existing, status: existing.text ? 'ready' : 'not_requested', errorCode: 'interrupted' }) } catch { /* DB shutdown or failed persistence. */ }
         }
         this.detailFinished = this.now(); this.detailWork = null; this.detailAbort = null; this.detailId = null; this.deps.details(id)
       }
-    })()
+    })
     return this.detailWork
   }
 }

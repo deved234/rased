@@ -1,6 +1,6 @@
 # الخصوصية
 
-2026-10-14 · RASED · david atef
+2026-10-15 · RASED · david atef
 
 ## اتصالات كاف
 
@@ -16,7 +16,7 @@
 
 ## الاتصالات الخارجية
 
-يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا.
+يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده وصفحات مشاريعه العامة عند طلب الميزانية والمدة من المعاينة أو التفاصيل. تُحفظ بيانات البطاقة مؤقتًا محليًا لتقليل الطلبات وتحترم الإيقاف والتهدئة. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا.
 
 ## مساعد العروض وGemini وOpenAI وClaude
 
@@ -44,17 +44,17 @@
 
 ## الحذف والنسخ الاحتياطية
 
-من الإعدادات → البيانات تستطيع حذف السجل غير المحمي؛ يحافظ الحذف على المحفوظات والملاحظات ومسودات العروض وحالات الاهتمام/التقديم وينشئ نسخة احتياطية قبل الحذف. إزالة البرنامج لا تعني حذف بياناته تلقائيًا. للحذف الكامل أغلق راصد من Tray، وافتح مجلد البيانات واحذف ملفاته والنسخ الاحتياطية بنفسك إذا لم تعد تحتاجها؛ قد يبقى سجل إشعارات Windows أو نسخ النظام الاحتياطية خارج تحكم التطبيق.
+من الإعدادات → البيانات تستطيع إنشاء نسخة محلية كاملة للمشاريع والتفاصيل والملاحظات ومسودات العروض والإعدادات والملف المهني واختيارات الموديلات، واستعادتها بعد معاينة وتأكيد وإعادة تشغيل. يمكن تفعيل نسخ يومية أو أسبوعية أثناء تشغيل راصد مع عدد نسخ محفوظة محدود. الملفات غير مشفرة، ولا تتضمن مفاتيح API أو جلسات المتصفح أو رموز ربط الإضافة؛ تظل هذه الأسرار على جهازها الأصلي. الاستعادة تستبدل البيانات وتُنشئ نسخة رجوع قبل التغيير، ولا تعيد إرسال التنبيهات القديمة أو العروض. حذف السجل يحافظ على المحفوظات والملاحظات ومسودات العروض وحالات الاهتمام/التقديم وينشئ نسخة قبل الحذف. إزالة البرنامج لا تحذف بياناته ونسخه تلقائيًا؛ أغلقه من Tray واحذف الملفات بنفسك إذا لم تعد تحتاجها. النسخ التي تحفظها خارج مجلد البيانات وسجل Windows خارج تحكم التطبيق.
 
 ## المشاركة الاختيارية
 
-تصدير الإعدادات أو إرسال لقطة شاشة أو سجل للدعم يتم باختيارك، وقد يكشف فلاترك أو عناوين المشاريع أو مسارات ملفات محلية. راجع الملف وأخفِ المعلومات الخاصة قبل مشاركته. بلاغات GitHub عامة؛ لا ترسل معلومات حساسة فيها.
+تصدير الإعدادات والنسخ الاحتياطي أو إرسال لقطة شاشة أو سجل للدعم يتم باختيارك. ملف الإعدادات يتضمن الملف المهني ونص القالب والفلاتر واختيارات الموديلات؛ النسخة الكاملة تتضمن أيضًا مشاريعك وملاحظاتك ومسوداتك. هذه الملفات غير مشفرة وقد تكشف بيانات شخصية ومسارات محلية؛ راجعها قبل المشاركة ولا ترسل نسخة كاملة في بلاغ GitHub عام.
 
 ---
 
 # Privacy
 
-2026-10-14 · RASED · david atef
+2026-10-15 · RASED · david atef
 
 ## KAF connections
 
@@ -70,7 +70,7 @@ Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters
 
 ## External connections
 
-Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally.
+Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Previewing or opening a Nafezly project may also request its public page for budget and duration. Project-card data is cached locally to reduce requests and honors source pause and cooldowns. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally.
 
 ## Proposal Assistant: Gemini, OpenAI and Claude
 
@@ -98,8 +98,8 @@ The database and backups have no application-level encryption. Someone with acce
 
 ## Deletion and backups
 
-Settings → Data can purge unprotected history; bookmarked/noted projects, proposal drafts and interested/submitted statuses are retained, and a backup is created before deletion. Uninstalling does not automatically delete application data. For full removal, quit RASED from the tray, open its data folder and delete its files and backups yourself if no longer needed. Windows notification history and system backups are outside the application’s control.
+Settings → Data can create a complete local backup of opportunities, details, notes, proposal drafts, settings, your professional profile and model choices, and restore it after preview, confirmation and restart. Optional daily or weekly copies run while RASED is running with limited retention. Files are unencrypted and exclude API keys, browser sessions and extension pairing tokens; those secrets remain on their original device. Restore replaces data after creating a rollback copy and does not replay old notifications or submissions. History deletion protects bookmarks, notes, drafts and interested/submitted statuses and creates a backup first. Uninstalling does not delete data or backups automatically; quit from the tray and remove files yourself when no longer needed. Copies saved outside the data folder and Windows notification history are outside the application’s control.
 
 ## Optional sharing
 
-Exporting settings or sending screenshots or diagnostics is your choice and may disclose filters, project titles or local file paths. Review and redact files before sharing. GitHub reports are public; do not include sensitive information.
+Settings export, backup, screenshots and diagnostic sharing are optional. Settings files include your professional profile, template, filters and model choices; complete backups also contain projects, notes and drafts. These files are unencrypted and can disclose personal data and local paths. Review them before sharing and never attach a complete private backup to a public GitHub report.

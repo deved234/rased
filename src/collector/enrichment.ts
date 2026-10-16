@@ -4,8 +4,11 @@
 // budget range — and validated. Never invents a category from keywords.
 import { parseRetryAfterMs } from './rss.js'
 import { DetailBudget } from './detailBudget.js'
+import { parseProjectFacts } from './projectFacts.js'
+import type { ProjectFactValues } from '../shared/projectFacts.js'
 
 export interface EnrichmentData {
+  facts?: ProjectFactValues | null
   categorySlug: string | null
   categoryName: string | null
   categoryConfirmed: boolean
@@ -116,7 +119,8 @@ export function parseDetail(html: string): EnrichmentData {
     }
   }
 
-  return { categorySlug, categoryName, categoryConfirmed: confirmed, skills, budgetMin, budgetMax, currency, budgetRaw }
+  const facts = parseProjectFacts(html, 'mostaql')
+  return { categorySlug, categoryName, categoryConfirmed: confirmed, skills, budgetMin: facts?.budgetMin ?? budgetMin, budgetMax: facts?.budgetMax ?? budgetMax, currency: facts?.currency ?? currency, budgetRaw: facts?.budgetRaw ?? budgetRaw, facts }
 }
 
 export type DetailFetchKind = 'timeout' | 'cancelled' | 'http' | 'network' | 'too_large' | 'invalid_content'
@@ -131,7 +135,7 @@ export interface DetailFetchResult {
 
 export async function fetchDetail(
   url: string,
-  opts: { timeoutMs?: number; maxBytes?: number; fetchImpl?: typeof fetch; signal?: AbortSignal } = {}
+  opts: { timeoutMs?: number; maxBytes?: number; fetchImpl?: typeof fetch; signal?: AbortSignal; source?: 'mostaql' | 'nafezly' } = {}
 ): Promise<DetailFetchResult> {
   const timeoutMs = opts.timeoutMs ?? DETAIL_TIMEOUT_MS
   const maxBytes = opts.maxBytes ?? DETAIL_MAX_BYTES
@@ -142,7 +146,8 @@ export async function fetchDetail(
   } catch {
     return { ok: false, kind: 'invalid_content' }
   }
-  if (u.protocol !== 'https:' || u.hostname.toLowerCase() !== 'mostaql.com') {
+  const origin = opts.source === 'nafezly' ? 'https://nafezly.com' : 'https://mostaql.com'
+  if (u.origin !== origin || u.username || u.password || (opts.source === 'nafezly' && !/^\/project\/[1-9]\d*(?:-[^/]*)?\/?$/.test(u.pathname))) {
     return { ok: false, kind: 'invalid_content' }
   }
   const ctrl = new AbortController()
@@ -159,6 +164,7 @@ export async function fetchDetail(
       const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'), Date.now())
       return { ok: false, kind: 'http', status: res.status, retryAfterMs }
     }
+    if (res.url && new URL(res.url).origin !== origin) return { ok: false, kind: 'invalid_content' }
     const reader = res.body?.getReader()
     if (!reader) return { ok: false, kind: 'invalid_content' }
     const chunks: Uint8Array[] = []

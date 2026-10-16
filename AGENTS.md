@@ -27,6 +27,9 @@ Use Windows and Node.js 24 with npm.
 - `npm run test:quick-apply`: verify extension setup UI and embedded-browser retirement.
 - `npm run test:extension`: exercise Chrome, the standalone native host, pairing, and safe form filling.
 - `npm run test:kaf`: test KAF monitoring, cancellation, details, cooldown persistence and UI through isolated Electron fixtures; build first.
+- `npm run test:data`: verify settings transfer, complete backup/restore, rollback, key isolation and damaged-database recovery in fresh profiles; build first.
+- `npm run test:monitoring`: verify independent source controls, persistent disabling, coverage warnings and cooldown guards in isolated Electron fixtures; build first.
+- `npm run test:project-facts`: verify cached/on-demand budget and duration in preview and full details, source cooldowns, and honest missing-data states; build first.
 - `npm run dist`: build a Windows NSIS installer in `release/`, without publishing.
 
 ## Coding Style & Naming Conventions

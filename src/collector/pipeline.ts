@@ -19,6 +19,7 @@ import { SOURCE } from './normalize.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import type { AppSettings } from '../shared/types.js'
 import { RECOVER_GAP_MS } from './scheduler.js'
+import { recordMonitoringSuccess } from '../storage/monitoring.js'
 
 export interface CycleContext {
   nowIso: string
@@ -65,6 +66,7 @@ export function applySuccessfulCycle(
     return runInTransaction(db, () => {
       const live = filterOutTombstoned(db, items)
       const { insertedIds } = upsertProjectsBatch(db, live, { now: ctx.nowIso, discoveryKind: 'initial' })
+      recordMonitoringSuccess(db, SOURCE, items.map(item => item.externalId), insertedIds.length, ctx.nowIso)
       saveSourceState(db, {
         ...state,
         baselineComplete: true,
@@ -106,7 +108,7 @@ export function applySuccessfulCycle(
     const enrichIds: number[] = []
     const s = ctx.settings
 
-    if (s.notificationsEnabled) {
+    if (s.mostaqlEnabled && s.mostaqlNotificationsEnabled && s.notificationsEnabled) {
       for (const pid of insertedIds) {
         const p = getProjectById(db, pid)
         if (!p) continue
@@ -126,6 +128,7 @@ export function applySuccessfulCycle(
       for (const pid of insertedIds.slice(0, 10)) enrichIds.push(pid)
     }
 
+    recordMonitoringSuccess(db, SOURCE, items.map(item => item.externalId), insertedIds.length, ctx.nowIso)
     saveSourceState(db, {
       ...state,
       lastSuccessAt: ctx.nowIso,
@@ -183,7 +186,7 @@ export function evaluateLateProject(
   nowIso: string
 ): 'notify' | 'silent' {
   const p = getProjectById(db, projectId)
-  if (!p || !settings.notificationsEnabled) return 'silent'
+  if (!p || !settings.mostaqlEnabled || !settings.mostaqlNotificationsEnabled || !settings.notificationsEnabled) return 'silent'
   // Hidden projects never notify at re-evaluation; the pending event (if any)
   // is suppressed at dispatch instead of deleted.
   if (getUserState(db, projectId).hiddenAt !== null) return 'silent'

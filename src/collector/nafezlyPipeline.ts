@@ -2,6 +2,7 @@ import type { Db } from '../storage/db.js'
 import { createPendingEvents, filterOutTombstoned, getProjectById, getSettingRaw, getSourceState, recordDiagnostic, runInTransaction, saveSourceState, setSettingRaw, upsertProjectDetails, upsertProjectsBatch } from '../storage/repositories.js'
 import type { AppSettings } from '../shared/types.js'
 import { matchesNafezlyKeywords, NAFEZLY_SOURCE, type NafezlyItem } from './nafezly.js'
+import { recordMonitoringSuccess } from '../storage/monitoring.js'
 
 const FEED_IDS_KEY = 'nafezly:last-feed-ids'
 
@@ -32,10 +33,11 @@ export function applyNafezlyCycle(db: Db, items: NafezlyItem[], context: { nowMs
         if (!first) db.prepare("UPDATE projects SET discovery_kind = 'recovered' WHERE id = ?").run(projectId)
         continue
       }
-      if (context.settings.notificationsEnabled && context.settings.nafezlyNotificationsEnabled && matchesNafezlyKeywords(item.title, item.fullDescription, context.settings.nafezlyKeywordsAny, context.settings.nafezlyExcludeKeywords)) notifyIds.push(projectId)
+      if (context.settings.nafezlyEnabled && context.settings.notificationsEnabled && context.settings.nafezlyNotificationsEnabled && matchesNafezlyKeywords(item.title, item.fullDescription, context.settings.nafezlyKeywordsAny, context.settings.nafezlyExcludeKeywords)) notifyIds.push(projectId)
     }
     if (notifyIds.length) createPendingEvents(db, notifyIds, 'new_project', nowIso)
     setSettingRaw(db, FEED_IDS_KEY, currentIds.join(','))
+    recordMonitoringSuccess(db, NAFEZLY_SOURCE, currentIds, batch.insertedIds.length, nowIso, { previousIds })
     saveSourceState(db, { ...previous, baselineComplete: true, lastSuccessAt: nowIso, lastAttemptAt: nowIso, lastError: null, consecutiveFailures: 0, backoffUntil: null, transportKind: 'rss', runId: context.runId })
     recordDiagnostic(db, { at: nowIso, endpointKind: 'nafezly-feed', status: first ? 'ok-baseline' : gapPossible ? 'ok-gap-possible' : 'ok', durationMs: context.durationMs, itemCount: items.length, errorCategory: null, detail: `inserted=${batch.insertedIds.length}; alerts=${notifyIds.length}; overlap=${!gapPossible}` })
     return { ...batch, notifyIds, gapPossible }

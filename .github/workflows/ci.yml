@@ -26,3 +26,8 @@ jobs:
       - run: npm run test:quick-apply
       - run: npm run test:ui
       - run: npm run test:kaf
+      - run: npm run test:data
+      - run: npm run test:monitoring
+      - run: npm run test:project-facts
+      - run: npx playwright-core install chromium
+      - run: npm run test:extension

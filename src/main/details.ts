@@ -7,6 +7,7 @@ import type { ProjectDetails } from '../shared/types.js'
 import { fetchDetail, parseDetail, type EnrichmentData, type DetailFetchKind } from '../collector/enrichment.js'
 import { DetailBudget } from '../collector/detailBudget.js'
 import { parseProjectBody } from '../collector/projectBody.js'
+import { markFacts, saveFetchedFacts } from '../storage/projectFacts.js'
 
 export const DETAILS_TTL_MS = 24 * 60 * 60 * 1000
 
@@ -108,6 +109,8 @@ export class DetailsFetcher {
     return this.queue.length + this.inflight.size
   }
 
+  isPending(id: number): boolean { return this.queue.includes(id) || this.inflight.has(id) }
+
   async pump(): Promise<boolean> {
     if (this.queue.length === 0) return false
     if (!this.deps.gateOpen()) return false
@@ -129,17 +132,13 @@ export class DetailsFetcher {
     this.inflight.set(projectId, ctrl)
     const current = getProjectDetailsRow(db, projectId)
     const prevStatus = current.status
-    upsertProjectDetails(db, projectId, {
-      text: current.text,
-      provenance: current.provenance,
-      fetchedAt: current.fetchedAt,
-      status: 'loading',
-      errorCode: null
-    })
     try {
+      markFacts(db, projectId, 'loading', null, new Date(this.deps.nowMs()).toISOString())
+      upsertProjectDetails(db, projectId, { text: current.text, provenance: current.provenance, fetchedAt: current.fetchedAt, status: 'loading', errorCode: null })
       const res = await fetchDetail(url, { fetchImpl: this.deps.fetchImpl, signal: ctrl.signal })
       if (!db.isOpen || !getProjectById(db, projectId)) return true
       if (ctrl.signal.aborted) {
+        markFacts(db, projectId, 'not_requested')
         // Caller-cancelled (pause/quit/navigate): restore, never failed, no backoff.
         upsertProjectDetails(db, projectId, {
           text: current.text,
@@ -152,7 +151,10 @@ export class DetailsFetcher {
       }
       const nowIso = new Date(this.deps.nowMs()).toISOString()
       if (res.ok && res.html) {
-        this.deps.onMetadata?.(projectId, parseDetail(res.html))
+        const metadata = parseDetail(res.html)
+        this.deps.onMetadata?.(projectId, metadata)
+        if (metadata.facts) saveFetchedFacts(db, projectId, metadata.facts, nowIso)
+        else markFacts(db, projectId, 'failed', 'metadata-unavailable', nowIso)
         const parsed = parseProjectBody(res.html)
         if (parsed.ok) {
           upsertProjectDetails(db, projectId, { text: parsed.text, provenance: parsed.truncated ? 'truncated' : 'full', fetchedAt: nowIso, status: 'ready', errorCode: null })
@@ -166,6 +168,7 @@ export class DetailsFetcher {
           })
         }
       } else {
+        markFacts(db, projectId, 'failed', transportErrorCode(res.kind ?? 'invalid_content', res.status), nowIso)
         if (res.kind === 'http' && typeof res.status === 'number') {
           if (res.status === 429) this.deps.onTransportFailure?.('rate_limited', res.retryAfterMs ?? null)
           else if (res.status >= 500) this.deps.onTransportFailure?.('http5xx', res.retryAfterMs ?? null)

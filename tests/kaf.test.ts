@@ -181,6 +181,9 @@ describe('KAF scheduler and on-demand detail wiring', () => {
       init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
     }))
     const c = controller(f); c.requestDetails(1, false)
+    // The detail task starts in a microtask so synchronous DB failures cannot
+    // leave a resolved promise stuck in the active-work slot. Test an active read.
+    await Promise.resolve()
     if (action === 'sleep') c.sleep()
     await c.close()
     expect(f).toHaveBeenCalledTimes(1)

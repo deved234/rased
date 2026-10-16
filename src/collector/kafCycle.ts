@@ -3,9 +3,10 @@ import { createPendingEvents, filterOutTombstoned, getProjectById, getSettingRaw
 import { updateKafListMetadata } from '../storage/kaf.js'
 import type { AppSettings } from '../shared/types.js'
 import { matchesKafKeywords, type KafItem } from './kaf.js'
+import { recordMonitoringSuccess } from '../storage/monitoring.js'
 
 export interface KafCheckpoint { anchorIds: string[]; cursor: number }
-export function applyKafCycle(db: Db, items: KafItem[], opts: { firstPageIds: string[]; checkpoint: KafCheckpoint | null; nowMs: number; durationMs: number; runId: string; settings: AppSettings }): { insertedIds: number[]; updatedIds: number[]; notifyIds: number[] } {
+export function applyKafCycle(db: Db, items: KafItem[], opts: { firstPageIds: string[]; checkpoint: KafCheckpoint | null; coverageComplete?: boolean; nowMs: number; durationMs: number; runId: string; settings: AppSettings }): { insertedIds: number[]; updatedIds: number[]; notifyIds: number[] } {
   const previous = getSourceState(db, 'kaf'), now = new Date(opts.nowMs).toISOString()
   const first = !previous.baselineComplete
   const storedCheckpoint = getSettingRaw(db, 'kaf:checkpoint')
@@ -30,6 +31,7 @@ export function applyKafCycle(db: Db, items: KafItem[], opts: { firstPageIds: st
     if (notifyIds.length) createPendingEvents(db, notifyIds, 'new_project', now)
     setSettingRaw(db, 'kaf:last-list-ids', JSON.stringify(opts.firstPageIds))
     setSettingRaw(db, 'kaf:checkpoint', JSON.stringify(opts.checkpoint))
+    recordMonitoringSuccess(db, 'kaf', opts.firstPageIds, batch.insertedIds.length, now, { recoveredAll: opts.coverageComplete })
     saveSourceState(db, { ...previous, baselineComplete: true, lastSuccessAt: now, lastAttemptAt: now, lastError: opts.checkpoint ? 'catch-up-incomplete' : null,
       consecutiveFailures: 0, backoffUntil: null, transportKind: 'html-fragment', runId: opts.runId })
     recordDiagnostic(db, { at: now, endpointKind: 'kaf-list', status: first ? 'ok-baseline' : opts.checkpoint ? 'catch-up-incomplete' : 'ok', durationMs: opts.durationMs, itemCount: unique.length, errorCategory: null,

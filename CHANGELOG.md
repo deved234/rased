@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0 — 2026-10-16
+
+- Individual project/request notifications now start with the platform name in the interface language, before the project title, across all four sources.
+- Added complete local backup/restore with preview, rollback copies, optional daily/weekly backups and damaged-database recovery. Settings transfer now includes all supported platform preferences, professional profile and model choices, while excluding API keys and browser pairing.
+- Unified independent platform enable/pause/notification controls, health states, last discovery/check timestamps and local support reports. Fixed manual Khamsat refresh respecting stored cooldowns.
+- Added persistent possible-gap warnings and KAF catch-up status. Project-list notices share one compact, keyboard-accessible disclosure with individual acknowledgement and bounded details.
+- Fixed on-demand budget/duration metadata and shared preview/detail rendering for Mostaql, Nafezly and KAF. Cached descriptions no longer block missing metadata; failed refreshes preserve values and Khamsat limitations are explicit.
+- Fixed Windows taskbar identity collisions between installed and development builds, added complete relaunch metadata and repaired conflicting legacy development shortcuts.
+- Fixed a Chrome Quick Apply startup race where a fast-loading project page could leave preparation stuck at opening. Added a real-browser regression; login and existing-draft safeguards remain in place.
+- Expanded the founder/About page, maintained privacy and user guides, and added isolated backup, monitoring and metadata regression checks.
+
 ## 0.7.0 — 2026-10-14
 
 - Added KAF (formerly Kafiil) as a fourth independent source using its public project list, with a silent initial baseline, 5–6 second healthy polling, open-project alerts and persisted source backoff.

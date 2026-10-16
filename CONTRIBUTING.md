@@ -20,13 +20,19 @@ npm run test:e2e
 
 Vitest tests belong in `tests/*.test.ts`; deterministic samples belong in `tests/fixtures/`. Add regression coverage for behavior changes. There is no numeric coverage target.
 
-After building, run `npm run test:ai` for AI settings, consent, encryption and provider integration; `npm run test:quick-apply` for Chrome setup and broker UI. `npm run test:extension` exercises a real Chromium/native-host/form-filling chain using intercepted HTTPS fixtures. It requires Chrome for Testing; set `RASED_TEST_CHROME` to its executable path. These tests never submit real proposals. Integration profiles and generated screenshots are temporary/ignored; never pass a real user profile.
+After building, run `npm run test:ai` for AI settings, consent, encryption and provider integration; `npm run test:quick-apply` for Chrome setup and broker UI. `npm run test:extension` exercises a real Chromium/native-host/form-filling chain using intercepted HTTPS fixtures. Install its isolated test browser with `npx playwright-core install chromium`, or set `RASED_TEST_CHROME` to a compatible Chrome for Testing executable. The default path follows the locked Playwright version. Windows CI installs this browser and runs the extension checks too. These tests never submit real proposals. Integration profiles and generated screenshots are temporary/ignored; never pass a real user profile.
 
 `npm run test:ui` verifies UI navigation, saved-filter editing, actual SQLite save failures, field names, legal-tab keyboard behavior and responsive layouts in isolated Electron. Its screenshots/results go to ignored `.local/`. Build first.
 
 `npm run test:kaf` verifies the real KAF main/preload/SQLite/UI chain, independent pause, detail caching, cancellation, source backoff across restart and exclusion from AI/Quick Apply. The public content and OS boundaries are synthetic; no account or live project is contacted. Build first.
 
+`npm run test:data` verifies settings transfer, complete backups, restore across process restart, rollback freshness, key isolation, corrupt-database recovery and Arabic/English confirmation layouts. It uses fresh TEMP profiles and scoped file-picker fixtures. See [Backup and restore](docs/BACKUP_AND_RESTORE.md); build first.
+
 Check Arabic RTL, English LTR, keyboard focus, both themes and unsaved edits for interface changes. Include representative screenshots in the PR. OS notification payload tests do not prove a real Windows toast click; document any manual checks separately.
+
+`npm run test:monitoring` verifies independent source controls, persistent Mostaql disable/mute, cancellation, possible coverage gaps, private-data-free support reports and cooldown guards across all four actual controllers. It uses synthetic transport/clipboard boundaries and fresh TEMP profiles. See [Monitoring health](docs/MONITORING_HEALTH.md); build first.
+
+`npm run test:project-facts` verifies Mostaql/Nafezly/KAF on-demand metadata, old description caches, shared preview/detail rendering, honest Khamsat limitations, retained values after failure and source cooldowns. See [Project details](docs/PROJECT_DETAILS.md); build first.
 
 ## Pull requests
 

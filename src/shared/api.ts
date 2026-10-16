@@ -4,6 +4,9 @@ export type ExtensionAction = { action:'prepare'|'folder'|'copy-path'|'chrome-ex
 import type { UpdateState } from './updates.js'
 import type { ProposalDraft, ProposalPreview, ProposalProfile, ProposalResult } from './proposals.js'
 import type { AiOperationResult, AiProviderId, AiSelection, AiSettings, AiSetup } from './ai.js'
+import type { BackupPreferences, DataStatus, RestorePreview } from './data.js'
+import type { SourceId } from './sources.js'
+import type { ProjectFacts } from './projectFacts.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
@@ -35,6 +38,10 @@ export interface ImportSummary {
   filtersAdded?: number
   filtersReplaced?: number
   startupRequested?: boolean
+  startupIncluded?: boolean
+  profileIncluded?: boolean
+  aiIncluded?: boolean
+  legacy?: boolean
 }
 
 export interface PurgePreview {
@@ -86,6 +93,8 @@ export interface RasedApi {
   getKhamsatHealth(): Promise<SourceHealth>
   getNafezlyHealth(): Promise<SourceHealth>
   getKafHealth(): Promise<SourceHealth>
+  acknowledgeSourceGap(source: SourceId): Promise<MutationResult>
+  copyMonitoringReport(): Promise<MutationResult>
   pause(): Promise<SourceHealth>
   resume(): Promise<SourceHealth>
   pauseKhamsat(): Promise<SourceHealth>
@@ -101,6 +110,8 @@ export interface RasedApi {
   // v2
   getProject(id: number): Promise<ProjectFull | null>
   getProjectDetails(id: number): Promise<ProjectDetails | null>
+  getProjectFacts(id: number): Promise<ProjectFacts | null>
+  requestProjectFacts(id: number, force?: boolean): Promise<ProjectFacts | null>
   requestProjectDetails(id: number, force?: boolean): Promise<ProjectDetails | null>
   updateProjectUserState(id: number, patch: Partial<Pick<ProjectUserState, 'status'>> & { saved?: boolean; hidden?: boolean; note?: string }): Promise<MutationResult>
   getSavedFilters(): Promise<SavedFilter[]>
@@ -114,6 +125,13 @@ export interface RasedApi {
   testSound(): Promise<void>
   setDnd(untilIso: string | null): Promise<AppSettings>
   openDataFolder(): Promise<MutationResult>
+  getDataStatus(): Promise<DataStatus>
+  setBackupPreferences(preferences: BackupPreferences): Promise<MutationResult>
+  createBackup(): Promise<MutationResult & { path?: string }>
+  validateRestore(): Promise<RestorePreview>
+  cancelRestore(): Promise<void>
+  applyRestore(token: string, applyStartup: boolean): Promise<MutationResult>
+  openBackupFolder(): Promise<MutationResult>
   exportSettings(): Promise<MutationResult & { path?: string }>
   validateImport(): Promise<ImportSummary>
   applyImport(mode: 'merge' | 'replace', applyStartup: boolean): Promise<ImportSummary>
@@ -136,6 +154,7 @@ export interface RasedApi {
   onNafezlyHealthChanged(cb: (h: SourceHealth) => void): () => void
   onKafHealthChanged(cb: (h: SourceHealth) => void): () => void
   onSettingsChanged(cb: (s: AppSettings) => void): () => void
+  onSettingsImported(cb: (s: AppSettings) => void): () => void
   onDetailsChanged(cb: (e: DetailsChangedEvent) => void): () => void
   onNavigate(cb: (e: NavigateEvent) => void): () => void
   onPlayBeep(cb: () => void): () => void

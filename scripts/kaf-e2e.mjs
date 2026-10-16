@@ -38,6 +38,7 @@ try {
   writeList(noPaging(fixture).replace('project/300-', 'project/298-').replace('تطوير واجهة React', 'مشروع جديد React'))
   await eventually(() => rowCount() === 3, Boolean, 15000)
   await eventually(() => traces().some(t => t.kind === 'toast'), Boolean, 8000)
+  check('single Arabic KAF toast identifies its platform before the project title', traces().find(t => t.kind === 'toast')?.data?.title.startsWith('كاف — مشروع جديد React'))
   const events = storage.prepare("SELECT e.status,p.external_id FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='kaf'").all()
   check('only newly visible open lower-ID project has one notification event', events.length === 1 && events[0].external_id === '298')
   const p = (await query()).rows.find(r => r.externalId === '298')

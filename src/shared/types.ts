@@ -9,6 +9,7 @@ export type HealthState =
   | 'initializing'
   | 'watching'
   | 'paused'
+  | 'disabled'
   | 'offline'
   | 'backing-off'
   | 'needs-review'
@@ -59,6 +60,8 @@ export interface AppSettings {
   /** polling interval chosen by the user; backoff/Retry-After override it */
   pollIntervalMs: 2000 | 5000 | 15000
   notificationsEnabled: boolean
+  mostaqlEnabled: boolean
+  mostaqlNotificationsEnabled: boolean
   khamsatEnabled: boolean
   khamsatNotificationsEnabled: boolean
   /** Khamsat has no verified categories or description in the public list. */
@@ -93,6 +96,11 @@ export interface AppSettings {
 }
 
 export interface SourceHealth {
+  enabled?: boolean
+  checking?: boolean
+  lastDiscoveryAt?: string | null
+  recovering?: boolean
+  coverageGap?: { since: string; detectedAt: string; reason: 'no-overlap' | 'interrupted' } | null
   state: HealthState
   lastAttemptAt: string | null
   lastSuccessAt: string | null
@@ -267,6 +275,8 @@ export function defaultSettings(): AppSettings {
     language: 'ar',
     pollIntervalMs: 5000,
     notificationsEnabled: true,
+    mostaqlEnabled: true,
+    mostaqlNotificationsEnabled: true,
     khamsatEnabled: true,
     khamsatNotificationsEnabled: true,
     khamsatKeywordsAny: [],
@@ -338,6 +348,8 @@ export function sanitizeSettings(input: unknown): AppSettings {
     language: lang,
     pollIntervalMs: poll,
     notificationsEnabled: typeof o['notificationsEnabled'] === 'boolean' ? o['notificationsEnabled'] : true,
+    mostaqlEnabled: o['mostaqlEnabled'] !== false,
+    mostaqlNotificationsEnabled: o['mostaqlNotificationsEnabled'] !== false,
     khamsatEnabled: o['khamsatEnabled'] !== false,
     khamsatNotificationsEnabled: o['khamsatNotificationsEnabled'] !== false,
     khamsatKeywordsAny: stringList(o['khamsatKeywordsAny']),

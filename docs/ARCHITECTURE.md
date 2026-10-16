@@ -18,9 +18,11 @@ RASED is a Windows Electron/React/TypeScript app with SQLite (`node:sqlite`). It
 
 ## Monitoring
 
-Mostaql uses public RSS with optional detail enrichment; Khamsat uses its public requests listing; Nafezly uses its public RSS description without detail-page fetching. Healthy polling is approximately five seconds for Mostaql/Khamsat and 15–18 seconds for Nafezly. Each source has its own baseline, scheduler, pause and notification settings. Errors and `Retry-After` trigger backoff. Publication/feed delays remain outside the app's control.
+Mostaql uses public RSS with optional detail enrichment; Khamsat uses its public requests listing; Nafezly uses its public RSS description and fetches public project-card budget/duration on demand when a project is previewed or opened. Healthy polling is approximately five seconds for Mostaql/Khamsat and 15–18 seconds for Nafezly. Each source has its own baseline, scheduler, pause and notification settings. Errors and `Retry-After` trigger backoff. Publication/feed delays remain outside the app's control.
 
 The first successful fetch creates a silent baseline. Later discoveries are deduplicated and saved before filtered notification dispatch. The UI reads local data; it does not scrape account pages to monitor opportunities.
+
+`src/shared/sources.ts` defines public source names, endpoints, control keys and capabilities for monitoring settings, tray controls and diagnostics. All four sources have persistent enable and alert flags plus a separate session-only pause. `src/shared/monitoring.ts` classifies status/errors and builds an explicit safe support report; `src/storage/monitoring.ts` records last discovery and possible coverage gaps within each discovery transaction. Later successful checks do not silently clear unresolved gaps. KAF can resolve its warning after verified pagination catch-up. [Monitoring health](MONITORING_HEALTH.md) describes user-facing behavior and `npm run test:monitoring`.
 
 KAF is a fourth independent source from RASED 0.7.0. Its controller polls the public HTML fragment every 5–6 seconds, bounds catch-up to three pages per cycle and persists the cursor/backoff. Only newly visible open projects notify; baseline and recovery are silent. Details use a separate on-demand queue and 24-hour cache. Raw publication times retain their unverified timezone rather than populating `publishedAt`. Migration 8 adds nullable status/duration fields. KAF is excluded from AI and Quick Apply. [User guide](KAF.md); `npm run test:kaf` exercises actual Electron wiring with isolated fixtures.
 
@@ -35,3 +37,5 @@ Quick Apply sends a snapshot to one paired Chrome profile through an authenticat
 `prebuild` generates legal notices, extension files and the native helper. `out/` contains compiled code; `release/` contains NSIS/update artifacts. Neither is committed. `resources/chrome-extension/` and `resources/chrome-bridge/` are generated and packaged outside ASAR.
 
 User data lives under `%APPDATA%\RASED`. Never use a real profile in tests. Database schema upgrades preserve existing records. Settings exports exclude AI keys and browser credentials. Internal plans, research and generated QA screenshots stay in ignored `.local/` rather than public documentation.
+
+Settings transfer and portable backups are described in [Backup and restore](BACKUP_AND_RESTORE.md). Snapshot sanitation runs in `src/main/backupWorker.ts`; confirmed restoration runs at boot in one storage transaction before collectors/services start. API keys and extension pairing remain device-local.

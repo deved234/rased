@@ -9,8 +9,8 @@ import { NsisUpdater } from 'electron-updater'
 import { UpdateController } from './updates.js'
 import { testUpdater } from './testHarness.js'
 import { version as APP_VERSION } from '../../package.json'
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -26,12 +26,19 @@ import {
   type Session
 } from 'electron'
 import { IPC } from '../shared/channels.js'
+import { repairLegacyDevShortcut, RASED_APP_ID, RASED_DEV_APP_ID, taskbarDetails } from './taskbar.js'
+import { backupError, DataBackupManager, isCorruptDatabaseError, recoverCorruptDatabase, recoverPendingRestore } from './dataBackup.js'
+import { finalizeBackupInWorker } from './backupWorkerClient.js'
+import { inspectBackup } from '../storage/backups.js'
+import { importSettings, parseSettingsTransfer, settingsPayload, type SettingsTransfer } from '../storage/settingsTransfer.js'
 import { overallSourceState } from '../shared/sourceStatus.js'
+import { SOURCES, isSourceId } from '../shared/sources.js'
+import { monitoringState, monitoringReport, transportIssueCode } from '../shared/monitoring.js'
+import { acknowledgeMonitoringGap, monitoringFields } from '../storage/monitoring.js'
 import { ABOUT_LINKS, type AboutLink } from '../shared/about.js'
 import {
   defaultSettings,
   sanitizeFilterDefinition,
-  sanitizeSavedFilter,
   sanitizeSettings,
   sanitizeUserStatePatch,
   type AppSettings,
@@ -93,6 +100,9 @@ import {
 import { applyFailedCycle, applySuccessfulCycle, evaluateLateProject } from '../collector/pipeline.js'
 import { EnrichmentQueue, type DetailFetchKind } from '../collector/enrichment.js'
 import { DetailsFetcher, resetStaleLoadingDetails } from './details.js'
+import { ProjectFactsFetcher } from './projectFactsFetcher.js'
+import { factsNeedFetch, projectFacts, saveFetchedFacts, markFacts } from '../storage/projectFacts.js'
+import type { ProjectFacts } from '../shared/projectFacts.js'
 import { DetailBudget } from '../collector/detailBudget.js'
 import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './policies.js'
 import { isolatedTestHarness } from './testHarness.js'
@@ -138,14 +148,15 @@ async function activateExtensionUrl(raw:string):Promise<void> {
 // Renaming the dev executable changes app.isPackaged on Windows; defaultApp
 // still identifies a source launch and prevents installer paths/updates in dev.
 const IS_PACKAGED=app.isPackaged && !process.defaultApp
-const RASED_APP_ID=IS_PACKAGED?'com.rased.app':'com.rased.app.development'
-// Keep the installer-registered notification identity; window/taskbar identity
-// is set separately below to avoid grouping dev with a stale Electron pin.
-app.setAppUserModelId('com.rased.app')
+// Notification shortcuts must use the same identity as their own windows.
+// Sharing the installed ID registers Electron shortcuts that Windows can select
+// instead of the installer's RASED shortcut after an update.
+app.setAppUserModelId(IS_PACKAGED ? RASED_APP_ID : RASED_DEV_APP_ID)
 
 const sessionId = randomUUID()
 const runId = randomUUID()
 let db: Db | null = null
+let dataBackup: DataBackupManager | null = null
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 /** compact follower window (Phase 6); null until opened */
@@ -245,12 +256,29 @@ function saveSettings(s: AppSettings): void {
   if(s.quickApply.enabled&&!extension?.available())s={...s,quickApply:{...s.quickApply,enabled:false}}
   // Persist first: a failed write must not change live settings or cancel work.
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
+  const previous = settings
   settings = s
+  applyMonitoringSettings(previous, s)
   kaf?.settingsChanged()
   if(!s.quickApply.enabled)extension?.cancel()
   applyAutoStart()
   broadcast(IPC.settingsChanged, s)
   updateTray()
+}
+
+function applyMonitoringSettings(previous: AppSettings, next: AppSettings): void {
+  if (previous.mostaqlEnabled !== next.mostaqlEnabled || previous.pollIntervalMs !== next.pollIntervalMs) {
+    if (!next.mostaqlEnabled) { activeRss?.abort(); enrichQueue.abortActive(); detailsFetcher.abortActive() }
+    scheduleNext()
+  }
+  if (previous.khamsatEnabled !== next.khamsatEnabled) {
+    if (!next.khamsatEnabled) khamsatAbort?.abort()
+    scheduleKhamsat(0)
+  }
+  if (previous.nafezlyEnabled !== next.nafezlyEnabled) {
+    if (!next.nafezlyEnabled) { nafezlyAbort?.abort(); nafezlyFacts.abortActive() }
+    scheduleNafezly(0)
+  }
 }
 
 function applyAutoStart(): void {
@@ -266,15 +294,12 @@ function applyAutoStart(): void {
 
 function snapshotHealth(): SourceHealth {
   const st = db ? getSourceState(db, SOURCE) : null
-  let state: SourceHealth['state'] = 'initializing'
-  if (paused) state = 'paused'
-  else if (sched.needsReview) state = 'needs-review'
-  else if (isBackingOff(sched, Date.now())) state = 'backing-off'
-  else if (st && st.consecutiveFailures >= 2 && (st.lastError === 'network' || st.lastError === 'timeout')) state = 'offline'
-  else if (st && st.consecutiveFailures > 0) state = 'error'
-  else if (st && st.lastSuccessAt) state = 'watching'
+  const state = monitoringState({ enabled: settings.mostaqlEnabled, paused, backoffUntil: sched.backoffUntilMs ?? 0, lastError: sched.needsReview ? 'forbidden' : st?.lastError ?? null, lastSuccessAt: st?.lastSuccessAt ?? null, failures: sched.consecutiveFailures }, Date.now())
   return {
     state,
+    enabled: settings.mostaqlEnabled,
+    checking: inFlight && settings.mostaqlEnabled && !paused,
+    ...monitoringFields(db, 'mostaql'),
     lastAttemptAt: st?.lastAttemptAt ?? null,
     lastSuccessAt: st?.lastSuccessAt ?? null,
     nextAttemptAt: nextAttemptAtMs ? new Date(nextAttemptAtMs).toISOString() : null,
@@ -286,7 +311,7 @@ function snapshotHealth(): SourceHealth {
       sched.backoffUntilMs && sched.backoffUntilMs > Date.now()
         ? Math.max(0, sched.backoffUntilMs - Date.now())
         : settings.pollIntervalMs,
-    paused
+    paused: paused && settings.mostaqlEnabled
   }
 }
 
@@ -364,7 +389,9 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
   const tags: string[] = []
   if (p.project.discoveryKind === 'recovered') tags.push(lang === 'ar' ? 'فائت' : 'catch-up')
   if (p.uncertain && p.project.source === 'mostaql') tags.push(lang === 'ar' ? 'تصنيف غير مؤكد' : 'uncertain category')
-  const title = tags.length > 0 ? `${projectLine(p.project)} (${tags.join('، ')})` : projectLine(p.project)
+  const platform = SOURCES.find(source => source.id === p.project.source)?.[lang] ?? 'RASED'
+  const projectTitle = tags.length > 0 ? `${projectLine(p.project)} (${tags.join('، ')})` : projectLine(p.project)
+  const title = `${platform} — ${projectTitle}`
   const body = p.project.source === 'kaf' ? (lang === 'ar' ? 'فرصة ظهرت على كاف — اضغط لفتح المشروع' : 'Opportunity appeared on KAF — click to open') : p.project.source === KHAMSAT_SOURCE ? (lang === 'ar' ? 'طلب خدمة جديد على خمسات — اضغط لفتح الطلب' : 'New Khamsat request — click to open') : p.project.descriptionExcerpt.slice(0, 180)
   const { id, url } = p.project
   return showToast(title, body, () => {
@@ -377,8 +404,8 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
 function snapshotKhamsatHealth(): SourceHealth {
   const source = db ? getSourceState(db, KHAMSAT_SOURCE) : null
   const backoff = source?.backoffUntil ? Date.parse(source.backoffUntil) : NaN
-  const state: SourceHealth['state'] = !settings.khamsatEnabled || khamsatPaused ? 'paused' : Number.isFinite(backoff) && backoff > Date.now() ? 'backing-off' : source?.lastError ? 'error' : source?.lastSuccessAt ? 'watching' : 'initializing'
-  return { state, lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: khamsatNextAttemptMs ? new Date(khamsatNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: khamsatLastDurationMs, lastItemCount: khamsatLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : 5000, paused: state === 'paused' }
+  const state = monitoringState({ enabled: settings.khamsatEnabled, paused: khamsatPaused, backoffUntil: backoff, lastError: source?.lastError ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, failures: source?.consecutiveFailures ?? 0 }, Date.now())
+  return { state, enabled: settings.khamsatEnabled, checking: khamsatInFlight && settings.khamsatEnabled && !khamsatPaused, ...monitoringFields(db, 'khamsat'), lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: khamsatNextAttemptMs ? new Date(khamsatNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: khamsatLastDurationMs, lastItemCount: khamsatLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : 5000, paused: state === 'paused' }
 }
 
 function emitKhamsatHealth(): void {
@@ -389,8 +416,8 @@ function emitKhamsatHealth(): void {
 function snapshotNafezlyHealth(): SourceHealth {
   const source = db ? getSourceState(db, NAFEZLY_SOURCE) : null
   const backoff = source?.backoffUntil ? Date.parse(source.backoffUntil) : NaN
-  const state: SourceHealth['state'] = !settings.nafezlyEnabled || nafezlyPaused ? 'paused' : Number.isFinite(backoff) && backoff > Date.now() ? 'backing-off' : source?.lastError ? 'error' : source?.lastSuccessAt ? 'watching' : 'initializing'
-  return { state, lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: nafezlyNextAttemptMs ? new Date(nafezlyNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: nafezlyLastDurationMs, lastItemCount: nafezlyLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : nafezlyBaseIntervalMs, paused: state === 'paused' }
+  const state = monitoringState({ enabled: settings.nafezlyEnabled, paused: nafezlyPaused, backoffUntil: backoff, lastError: source?.lastError ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, failures: source?.consecutiveFailures ?? 0 }, Date.now())
+  return { state, enabled: settings.nafezlyEnabled, checking: nafezlyInFlight && settings.nafezlyEnabled && !nafezlyPaused, ...monitoringFields(db, 'nafezly'), lastAttemptAt: source?.lastAttemptAt ?? null, lastSuccessAt: source?.lastSuccessAt ?? null, nextAttemptAt: nafezlyNextAttemptMs ? new Date(nafezlyNextAttemptMs).toISOString() : null, consecutiveFailures: source?.consecutiveFailures ?? 0, lastError: source?.lastError ?? null, lastDurationMs: nafezlyLastDurationMs, lastItemCount: nafezlyLastItemCount, effectiveIntervalMs: Number.isFinite(backoff) && backoff > Date.now() ? backoff - Date.now() : nafezlyBaseIntervalMs, paused: state === 'paused' }
 }
 
 function emitNafezlyHealth(): void {
@@ -492,11 +519,12 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
         if (!notificationAllowed()) return false
         if (getUserState(d, p.id).hiddenAt !== null) return false
         if (p.source === 'kaf') return settings.kafEnabled && settings.kafNotificationsEnabled && !snapshotKafHealth().paused && p.platformStatus === 'open' && matchesKafKeywords(p.title, p.descriptionExcerpt, settings.kafKeywordsAny, settings.kafExcludeKeywords)
-        if (p.source === KHAMSAT_SOURCE) return settings.khamsatEnabled && settings.khamsatNotificationsEnabled && matchesKhamsatKeywords(p.title, settings.khamsatKeywordsAny, settings.khamsatExcludeKeywords)
+        if (p.source === KHAMSAT_SOURCE) return settings.khamsatEnabled && !khamsatPaused && settings.khamsatNotificationsEnabled && matchesKhamsatKeywords(p.title, settings.khamsatKeywordsAny, settings.khamsatExcludeKeywords)
         if (p.source === NAFEZLY_SOURCE) {
           const description = getProjectDetailsRow(d, p.id).text ?? p.descriptionExcerpt
-          return settings.nafezlyEnabled && settings.nafezlyNotificationsEnabled && matchesNafezlyKeywords(p.title, description, settings.nafezlyKeywordsAny, settings.nafezlyExcludeKeywords)
+          return settings.nafezlyEnabled && !nafezlyPaused && settings.nafezlyNotificationsEnabled && matchesNafezlyKeywords(p.title, description, settings.nafezlyKeywordsAny, settings.nafezlyExcludeKeywords)
         }
+        if (!settings.mostaqlEnabled || !settings.mostaqlNotificationsEnabled || paused) return false
         const v = evaluateFilter(toFilterable(p), settings.notifyFilter)
         return v === 'match' || (!p.categoryConfirmed && settings.notifyUncertainCategory && v === 'uncertain')
       },
@@ -523,11 +551,14 @@ function scheduleKhamsat(delayMs?: number): void {
 
 async function runKhamsatCycle(): Promise<void> {
   if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) return
+  const stored = getSourceState(db, KHAMSAT_SOURCE)
+  if (stored.backoffUntil && Date.parse(stored.backoffUntil) > Date.now()) { scheduleKhamsat(); return }
   khamsatInFlight = true
   khamsatAbort = new AbortController()
   khamsatNextAttemptMs = null
   emitKhamsatHealth()
   try {
+    saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
     const result = await fetchKhamsatRequests(khamsatAbort.signal, testHarness?.fetchImpl)
     if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
     const nowMs = Date.now()
@@ -543,10 +574,11 @@ async function runKhamsatCycle(): Promise<void> {
       khamsatLastDurationMs = result.durationMs
       khamsatLastItemCount = null
       const failures = previous.consecutiveFailures + 1
-      const blocked = result.status === 202 || result.status === 403 || result.status === 429
+      const blocked = result.status === 202 || result.status === 401 || result.status === 403 || result.status === 429
+      const errorCode = transportIssueCode(result)
       const backoffMs = Math.max(result.retryAfterMs ?? 0, blocked ? 15 * 60_000 : Math.min(5 * 60_000, 5000 * 2 ** Math.min(failures, 6)))
       runInTransaction(db, () => {
-        saveSourceState(db!, { ...previous, lastAttemptAt: nowIso, lastError: failure, consecutiveFailures: failures, backoffUntil: new Date(nowMs + backoffMs).toISOString(), transportKind: 'html', runId })
+        saveSourceState(db!, { ...previous, lastAttemptAt: nowIso, lastError: errorCode, consecutiveFailures: failures, backoffUntil: new Date(nowMs + backoffMs).toISOString(), transportKind: 'html', runId })
         recordDiagnostic(db!, { at: nowIso, endpointKind: 'khamsat-list', status: 'failed', durationMs: result.durationMs, itemCount: null, errorCategory: failure, detail: `HTTP ${result.status ?? 'network'}; retry in ${backoffMs}ms` })
       })
       return
@@ -586,6 +618,7 @@ async function runNafezlyCycle(): Promise<void> {
   nafezlyNextAttemptMs = null
   emitNafezlyHealth()
   try {
+    saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
     const result = await fetchNafezlyFeed(nafezlyAbort.signal, testHarness?.fetchImpl)
     if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyAbort.signal.aborted) return
     const nowMs = Date.now()
@@ -602,11 +635,12 @@ async function runNafezlyCycle(): Promise<void> {
       nafezlyLastItemCount = null
       nafezlyRecoverySuccesses = 0
       const failures = previous.consecutiveFailures + 1
-      const blocked = result.status === 403 || result.status === 429 || result.status === 202 || failure === 'unexpected content type'
+      const blocked = result.status === 401 || result.status === 403 || result.status === 429 || result.status === 202 || failure === 'unexpected content type'
+      const errorCode = transportIssueCode(result)
       if (blocked) nafezlyBaseIntervalMs = 60_000
       const backoffMs = Math.max(result.retryAfterMs ?? 0, blocked ? Math.min(2 * 60 * 60_000, 15 * 60_000 * 2 ** Math.min(failures - 1, 3)) : Math.min(5 * 60_000, 15_000 * 2 ** Math.min(failures, 5)))
       runInTransaction(db, () => {
-        saveSourceState(db!, { ...previous, lastAttemptAt: nowIso, lastError: failure, consecutiveFailures: failures, backoffUntil: new Date(nowMs + backoffMs).toISOString(), transportKind: 'rss', runId })
+        saveSourceState(db!, { ...previous, lastAttemptAt: nowIso, lastError: errorCode, consecutiveFailures: failures, backoffUntil: new Date(nowMs + backoffMs).toISOString(), transportKind: 'rss', runId })
         recordDiagnostic(db!, { at: nowIso, endpointKind: 'nafezly-feed', status: 'failed', durationMs: result.durationMs, itemCount: null, errorCategory: failure, detail: `HTTP ${result.status ?? 'network'}; retry in ${backoffMs}ms` })
       })
       return
@@ -624,6 +658,7 @@ async function runNafezlyCycle(): Promise<void> {
     nafezlyInFlight = false
     nafezlyAbort = null
     scheduleNafezly()
+    void trackWork(nafezlyFacts.pump())
   }
 }
 
@@ -650,7 +685,7 @@ function sweepUncertain(nowMs: number): number[] {
     }
   }
   const toNotify: number[] = []
-  if (settings.notifyUncertainCategory && settings.notificationsEnabled) {
+  if (settings.mostaqlEnabled && settings.mostaqlNotificationsEnabled && settings.notifyUncertainCategory && settings.notificationsEnabled) {
     for (const pid of expired) {
       const p = getProjectById(db, pid)
       if (p && !p.categoryConfirmed && !getUserState(db, pid).hiddenAt && evaluateFilter(toFilterable(p), settings.notifyFilter) === 'uncertain') toNotify.push(pid)
@@ -663,6 +698,7 @@ function sweepUncertain(nowMs: number): number[] {
 async function runCycle(): Promise<RefreshResult> {
   if (quitRequested) return { ok: false, started: false, reason: 'paused' }
   if (!db) return { ok: false, started: false, reason: 'no-db' }
+  if (!settings.mostaqlEnabled) return { ok: false, started: false, reason: 'disabled' }
   if (paused) return { ok: false, started: false, reason: 'paused' }
   if (inFlight) return { ok: false, started: false, reason: 'busy' }
   if (isBackingOff(sched, Date.now())) return { ok: false, started: false, reason: 'backoff' }
@@ -671,8 +707,10 @@ async function runCycle(): Promise<RefreshResult> {
   activeRss = new AbortController()
   emitHealth()
   try {
+    saveSourceState(db, { ...getSourceState(db, SOURCE), lastAttemptAt: new Date(lastStartMs).toISOString() })
     const res = await fetchRss(RSS_URL, { signal: activeRss.signal, fetchImpl: testHarness?.fetchImpl })
-    if (paused || quitRequested || (!res.ok && res.kind === 'cancelled')) return { ok: false, started: true, reason: 'paused' }
+    lastDurationMs = res.durationMs
+    if (!settings.mostaqlEnabled || activeRss.signal.aborted || paused || quitRequested || (!res.ok && res.kind === 'cancelled')) return { ok: false, started: true, reason: 'paused' }
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
     if (!res.ok) {
@@ -752,6 +790,7 @@ async function runCycle(): Promise<RefreshResult> {
     lastFinishMs = Date.now()
     emitHealth()
     scheduleNext()
+    void trackWork(detailsFetcher.pump())
   }
 }
 
@@ -760,7 +799,7 @@ function scheduleNext(): void {
     clearTimeout(timer)
     timer = null
   }
-  if (paused || quitRequested || !db) {
+  if (!settings.mostaqlEnabled || paused || quitRequested || !db || inFlight) {
     nextAttemptAtMs = null
     emitHealth()
     return
@@ -798,7 +837,7 @@ function persistScheduler(): void {
 const enrichQueue = new EnrichmentQueue({
   fetchImpl: testHarness?.fetchImpl,
   budget: detailBudget,
-  gateOpen: () => !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
+  gateOpen: () => settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
   onTransportFailure: (kind: DetailFetchKind | 'http5xx' | 'forbidden' | 'rate_limited', retryAfterMs: number | null) => {
     const mapped: FailureKind =
       kind === 'forbidden' ? 'forbidden' : kind === 'rate_limited' ? 'rate_limited' : kind === 'http5xx' ? 'http5xx' : kind === 'timeout' ? 'timeout' : 'network'
@@ -852,6 +891,8 @@ const enrichQueue = new EnrichmentQueue({
         nowIso
       )
     }
+    if (data?.facts) saveFetchedFacts(db, projectId, data.facts, nowIso)
+    else if (data) markFacts(db, projectId, 'failed', 'metadata-unavailable', nowIso)
     const deadline = uncertainWaits.get(projectId)
     if (deadline !== undefined) {
       if (nowMs <= deadline) {
@@ -887,7 +928,7 @@ function detailTransportFailure(kind: DetailFetchKind | 'http5xx' | 'forbidden' 
 const detailsFetcher = new DetailsFetcher(() => db, {
   fetchImpl: testHarness?.fetchImpl,
   budget: detailBudget,
-  gateOpen: () => !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
+  gateOpen: () => settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
   onMetadata: (projectId, data) => {
     if (!db || !getProjectById(db, projectId)) return
     const p = getProjectById(db, projectId)!
@@ -904,6 +945,47 @@ const detailsFetcher = new DetailsFetcher(() => db, {
   onTransportFailure: detailTransportFailure,
   onSettled: (projectId: number) => emitDetails([projectId])
 })
+
+const nafezlyFacts = new ProjectFactsFetcher({
+  db: () => db, fetchImpl: testHarness?.fetchImpl,
+  gateOpen: () => !!db && !quitRequested && settings.nafezlyEnabled && !nafezlyPaused && !nafezlyInFlight && !(getSourceState(db, NAFEZLY_SOURCE).backoffUntil && Date.parse(getSourceState(db, NAFEZLY_SOURCE).backoffUntil!) > Date.now()),
+  settled: id => { emitProjects([], [id]); emitDetails([id]) },
+  failure: result => {
+    if (!db || quitRequested) return
+    const previous = getSourceState(db, NAFEZLY_SOURCE), failures = previous.consecutiveFailures + 1
+    const blocked = result.status === 401 || result.status === 403 || result.status === 429
+    const wait = Math.max(result.retryAfterMs ?? 0, blocked ? Math.min(2 * 60 * 60_000, 15 * 60_000 * 2 ** Math.min(failures - 1, 3)) : Math.min(5 * 60_000, 15_000 * 2 ** Math.min(failures, 5)))
+    if (blocked) { nafezlyBaseIntervalMs = 60_000; nafezlyRecoverySuccesses = 0; nafezlyAbort?.abort() }
+    saveSourceState(db, { ...previous, lastError: result.kind === 'http' ? `http-${result.status}` : result.kind ?? 'invalid_content', consecutiveFailures: failures, backoffUntil: new Date(Math.max(Date.parse(previous.backoffUntil ?? '') || 0, Date.now() + wait)).toISOString() })
+    scheduleNafezly()
+  }
+})
+
+function snapshotProjectFacts(id: number): ProjectFacts | null {
+  if (!db) return null
+  const p = getProjectById(db, id), facts = projectFacts(db, id)
+  if (!p || !facts || facts.status === 'unsupported') return facts
+  const health = p.source === 'kaf' ? snapshotKafHealth() : p.source === NAFEZLY_SOURCE ? snapshotNafezlyHealth() : snapshotHealth()
+  const pending = p.source === 'kaf' ? kaf?.isDetailsPending(id) : p.source === NAFEZLY_SOURCE ? nafezlyFacts.isPending(id) : detailsFetcher.isPending(id)
+  if (facts.status !== 'ready' || factsNeedFetch(db, id) || pending) {
+    const reason = health.enabled === false ? 'disabled' : health.paused ? 'paused' : Date.parse(getSourceState(db, p.source).backoffUntil ?? '') > Date.now() ? 'cooldown' : null
+    if (reason) return { ...facts, status: 'deferred', deferredReason: reason }
+  }
+  return pending ? { ...facts, status: 'loading' } : facts
+}
+
+function requestFacts(id: number, force: boolean): ProjectFacts | null {
+  if (!db) return null
+  const p = getProjectById(db, id), facts = snapshotProjectFacts(id)
+  if (!p || !facts || facts.status === 'unsupported' || facts.status === 'deferred' || !factsNeedFetch(db, id, Date.now(), force)) return facts
+  const health = p.source === 'kaf' ? snapshotKafHealth() : p.source === NAFEZLY_SOURCE ? snapshotNafezlyHealth() : snapshotHealth()
+  const deferredReason = health.enabled === false ? 'disabled' : health.paused ? 'paused' : Date.parse(getSourceState(db, p.source).backoffUntil ?? '') > Date.now() ? 'cooldown' : null
+  if (deferredReason) return { ...facts, status: 'deferred', deferredReason }
+  if (p.source === 'kaf') kaf?.requestDetails(id, true)
+  else if (p.source === NAFEZLY_SOURCE) { nafezlyFacts.request(id, force); void trackWork(nafezlyFacts.pump()) }
+  else { detailsFetcher.request(id, p.url, true); void trackWork(detailsFetcher.pump()) }
+  return snapshotProjectFacts(id)
+}
 
 // ---------------------------------------------------------------- open project
 
@@ -960,7 +1042,7 @@ function applyCspPolicy(session: Session): void {
 
 function attachWindowChrome(window: BrowserWindow): void {
   window.setIcon(iconPath('icon.ico'))
-  window.setAppDetails({ appId: RASED_APP_ID, appIconPath: iconPath('icon.ico'), appIconIndex: 0, relaunchDisplayName: 'RASED' })
+  if (process.platform === 'win32') window.setAppDetails(taskbarDetails(IS_PACKAGED, process.execPath, join(__dirname, 'index.js'), iconPath('icon.ico')))
   const emit = (): void => { if (!window.isDestroyed()) window.webContents.send(IPC.windowState, { maximized: window.isMaximized() }) }
   window.on('maximize', emit)
   window.on('unmaximize', emit)
@@ -1030,14 +1112,14 @@ function createWindow(): void {
 function trayLabel(): string {
   const ar = settings.language === 'ar'
   const stateValue = overallSourceState([
-    snapshotHealth(),
+    ...(settings.mostaqlEnabled ? [snapshotHealth()] : []),
     ...(settings.khamsatEnabled ? [snapshotKhamsatHealth()] : []),
     ...(settings.nafezlyEnabled ? [snapshotNafezlyHealth()] : []),
     ...(settings.kafEnabled ? [snapshotKafHealth()] : [])
   ])
   const state = ar
-    ? { watching: 'الرصد نشط', partial: 'رصد جزئي', paused: 'متوقف', 'backing-off': 'تهدئة وإعادة', error: 'خطأ', offline: 'غير متصل', 'needs-review': 'يحتاج مراجعة', initializing: 'يبدأ…' }[stateValue]
-    : { watching: 'Watching', partial: 'Partial monitoring', paused: 'Paused', 'backing-off': 'Backing off', error: 'Error', offline: 'Offline', 'needs-review': 'Needs review', initializing: 'Starting…' }[stateValue]
+    ? { watching: 'الرصد نشط', partial: 'رصد جزئي', disabled: 'كل المنصات معطّلة', paused: 'متوقف', 'backing-off': 'تهدئة وإعادة', error: 'خطأ', offline: 'غير متصل', 'needs-review': 'يحتاج مراجعة', initializing: 'يبدأ…' }[stateValue]
+    : { watching: 'Watching', partial: 'Partial monitoring', disabled: 'All platforms disabled', paused: 'Paused', 'backing-off': 'Backing off', error: 'Error', offline: 'Offline', 'needs-review': 'Needs review', initializing: 'Starting…' }[stateValue]
   return `RASED — ${state}`
 }
 
@@ -1045,28 +1127,26 @@ function updateTray(): void {
   if (!tray) return
   tray.setToolTip(trayLabel())
   const ar = settings.language === 'ar'
+  const sourceHealth = { mostaql: snapshotHealth(), khamsat: snapshotKhamsatHealth(), nafezly: snapshotNafezlyHealth(), kaf: snapshotKafHealth() }
+  const toggleSourcePause = {
+    mostaql: () => { void (paused ? doResume() : doPause()) },
+    khamsat: () => { void (khamsatPaused ? doResumeKhamsat() : doPauseKhamsat()) },
+    nafezly: () => { void (nafezlyPaused ? doResumeNafezly() : doPauseNafezly()) },
+    kaf: () => { kaf?.setPaused(!kaf.health().paused) }
+  }
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: ar ? 'فتح راصد' : 'Open RASED', click: () => win?.show() },
       { type: 'separator' },
-      paused
-        ? { label: ar ? 'استئناف مستقل' : 'Resume Mostaql', click: () => void doResume() }
-        : { label: ar ? 'إيقاف مستقل مؤقتًا' : 'Pause Mostaql', click: () => void doPause() },
-      ...(settings.khamsatEnabled ? [khamsatPaused
-        ? { label: ar ? 'استئناف خمسات' : 'Resume Khamsat', click: () => void doResumeKhamsat() }
-        : { label: ar ? 'إيقاف خمسات مؤقتًا' : 'Pause Khamsat', click: () => void doPauseKhamsat() }] : []),
-      ...(settings.nafezlyEnabled ? [nafezlyPaused
-        ? { label: ar ? 'استئناف نفذلي' : 'Resume Nafezly', click: () => void doResumeNafezly() }
-        : { label: ar ? 'إيقاف نفذلي مؤقتًا' : 'Pause Nafezly', click: () => void doPauseNafezly() }] : []),
-      ...(settings.kafEnabled ? [
-        { label: ar ? (kaf?.health().paused ? 'استئناف كاف' : 'إيقاف كاف مؤقتًا') : (kaf?.health().paused ? 'Resume KAF' : 'Pause KAF'), click: () => kaf?.setPaused(!kaf.health().paused) },
-        { label: ar ? 'كتم تنبيهات كاف' : 'Mute KAF alerts', type: 'checkbox' as const, checked: !settings.kafNotificationsEnabled, click: () => saveSettings({ ...settings, kafNotificationsEnabled: !settings.kafNotificationsEnabled }) }
-      ] : []),
+      ...SOURCES.filter(source => settings[source.enabledKey]).flatMap(source => [
+        { label: ar ? `${sourceHealth[source.id].paused ? 'استئناف' : 'إيقاف مؤقت:'} ${source.ar}` : `${sourceHealth[source.id].paused ? 'Resume' : 'Pause'} ${source.en}`, click: toggleSourcePause[source.id] },
+        { label: ar ? `كتم تنبيهات ${source.ar}` : `Mute ${source.en} alerts`, type: 'checkbox' as const, checked: !settings[source.alertsKey], click: () => saveSettings({ ...settings, [source.alertsKey]: !settings[source.alertsKey] }) }
+      ]),
       {
         label: settings.soundEnabled ? (ar ? 'كتم الصوت' : 'Mute sound') : ar ? 'تفعيل الصوت' : 'Enable sound',
         click: () => saveSettings({ ...settings, soundEnabled: !settings.soundEnabled })
       },
-      { label: ar ? 'الإعدادات' : 'Settings', click: () => { win?.show(); win?.webContents.send('rased:open-settings') } },
+      { label: ar ? 'الإعدادات' : 'Settings', click: () => { win?.show(); win?.webContents.send(IPC.openSettings) } },
       { type: 'separator' },
       { label: ar ? 'خروج' : 'Quit', click: () => { if (win && !win.isDestroyed()) { win.show(); win.webContents.send(IPC.requestClose, { quit: true }) } else doQuit() } }
     ])
@@ -1210,6 +1290,7 @@ async function doResumeKhamsat(): Promise<SourceHealth> {
 
 async function doPauseNafezly(): Promise<SourceHealth> {
   nafezlyPaused = true
+  nafezlyFacts.abortActive()
   nafezlyAbort?.abort()
   if (nafezlyTimer) clearTimeout(nafezlyTimer)
   nafezlyTimer = null
@@ -1240,7 +1321,9 @@ async function shutdown(): Promise<void> {
   khamsatAbort?.abort()
   nafezlyAbort?.abort()
   const closingKaf = kaf?.close()
+  const closingFacts = nafezlyFacts.close()
   const closingAi = aiService?.close()
+  const closingBackup = dataBackup?.close()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
@@ -1256,7 +1339,9 @@ async function shutdown(): Promise<void> {
     while (work.size) await Promise.allSettled([...work])
     if (flushing) await Promise.allSettled([flushing])
     await closingKaf
+    await closingFacts
     await closingAi
+    await closingBackup
     if (db) {
       const st = getSourceState(db, SOURCE)
       saveSourceState(db, { ...st, runId });
@@ -1423,22 +1508,8 @@ function registerIpc(): void {
     if(patch?.quickApply?.enabled&&!extension?.available())throw Error('extension-not-paired')
     const p = (patch ?? {}) as Partial<AppSettings>
     const next = mergeSettings(settings, p)
-    const intervalChanged = next.pollIntervalMs !== settings.pollIntervalMs
-    const khamsatChanged = next.khamsatEnabled !== settings.khamsatEnabled
-    const nafezlyChanged = next.nafezlyEnabled !== settings.nafezlyEnabled
     saveSettings(next)
     compactWin?.setAlwaysOnTop(next.ui.compactAlwaysOnTop)
-    if (intervalChanged) scheduleNext()
-    if (khamsatChanged) {
-      if (!next.khamsatEnabled) khamsatAbort?.abort()
-      khamsatPaused = false
-      scheduleKhamsat(0)
-    }
-    if (nafezlyChanged) {
-      if (!next.nafezlyEnabled) nafezlyAbort?.abort()
-      nafezlyPaused = false
-      scheduleNafezly(0)
-    }
     emitHealth()
     return next
   })
@@ -1446,6 +1517,21 @@ function registerIpc(): void {
   ipcMain.handle(IPC.getKhamsatHealth, () => snapshotKhamsatHealth())
   ipcMain.handle(IPC.getNafezlyHealth, () => snapshotNafezlyHealth())
   ipcMain.handle(IPC.getKafHealth, () => snapshotKafHealth())
+  ipcMain.handle(IPC.acknowledgeSourceGap, (e, source: unknown) => {
+    if (!localSender(e) || !isSourceId(source) || !db) return { ok: false, error: 'bad-source' }
+    acknowledgeMonitoringGap(db, source)
+    emitHealth(); emitKhamsatHealth(); emitNafezlyHealth()
+    broadcast(IPC.kafHealthChanged, snapshotKafHealth())
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.copyMonitoringReport, e => {
+    if (!localSender(e)) return { ok: false, error: 'untrusted-sender' }
+    const health = { mostaql: snapshotHealth(), khamsat: snapshotKhamsatHealth(), nafezly: snapshotNafezlyHealth(), kaf: snapshotKafHealth() }
+    const report = monitoringReport(APP_VERSION, SOURCES.map(source => ({ id: source.id, health: health[source.id] })))
+    if (testHarness) testHarness.record('monitoring-report', report)
+    else clipboard.writeText(report)
+    return { ok: true }
+  })
   ipcMain.handle(IPC.pauseKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); return kaf?.setPaused(true) })
   ipcMain.handle(IPC.resumeKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); return kaf?.setPaused(false) })
   ipcMain.handle(IPC.pause, () => doPause())
@@ -1495,6 +1581,8 @@ function registerIpc(): void {
     if (!getProjectById(db, v.id)) return null
     return getProjectDetailsRow(db, v.id)
   })
+  ipcMain.handle(IPC.getProjectFacts, (event, v: { id?: unknown }) => localSender(event) && Number.isSafeInteger(v?.id) ? snapshotProjectFacts(v.id as number) : null)
+  ipcMain.handle(IPC.requestProjectFacts, (event, v: { id?: unknown; force?: unknown }) => localSender(event) && Number.isSafeInteger(v?.id) ? requestFacts(v.id as number, v.force === true) : null)
   ipcMain.handle(IPC.requestProjectDetails, (_e, v: { id: number; force?: boolean }) => {
     if (!db || !Number.isInteger(v.id)) return null
     const p = getProjectById(db, v.id)
@@ -1618,23 +1706,63 @@ function registerIpc(): void {
     })
     return { ok: true } satisfies MutationResult
   })
-  ipcMain.handle(IPC.exportSettings, () => {
-    if (!win) return { ok: false, error: 'no-window' }
-    const chosen = dialog.showSaveDialogSync(win, {
-      defaultPath: 'rased-settings.json',
-      filters: [{ name: 'JSON', extensions: ['json'] }]
-    })
+  ipcMain.handle(IPC.getDataStatus, event => mainSender(event) ? dataBackup?.status() : null)
+  ipcMain.handle(IPC.setBackupPreferences, (event, value) => ({ ok: !!(mainSender(event) && dataBackup?.preferences(value?.preferences)) }))
+  ipcMain.handle(IPC.createBackup, async event => {
+    if (!mainSender(event) || !dataBackup || quitRequested) return { ok: false, error: 'busy' }
+    let chosen: string | null
+    try { chosen = await chooseDataFile('save-backup') } catch (error) { return { ok: false, error: backupError(error, 'write-failed') } }
+    if (!chosen) return { ok: false }
+    try { await dataBackup.create(chosen); auditUi('backup-created'); return { ok: true, path: chosen } }
+    catch (error) { return { ok: false, error: backupError(error, 'write-failed') } }
+  })
+  ipcMain.handle(IPC.validateRestore, async event => {
+    if (!mainSender(event) || !dataBackup || quitRequested) return { ok: false, error: 'busy' }
+    let chosen: string | null
+    try { chosen = await chooseDataFile('open-backup') } catch (error) { return { ok: false, error: backupError(error, 'read-failed') } }
+    if (!chosen) return { ok: false }
+    try { return await dataBackup.validate(chosen) } catch (error) { return { ok: false, error: backupError(error) } }
+  })
+  ipcMain.handle(IPC.cancelRestore, event => { if (mainSender(event)) dataBackup?.discard() })
+  ipcMain.handle(IPC.applyRestore, async (event, value) => {
+    if (!mainSender(event) || !dataBackup || quitRequested || typeof value?.token !== 'string' || typeof value?.applyStartup !== 'boolean') return { ok: false, error: 'bad-request' }
+    try {
+      await dataBackup.stage(value.token, value.applyStartup)
+      setTimeout(() => {
+        if (testHarness) testHarness.record('restore-restart', true)
+        else app.relaunch({ args: process.argv.slice(1).filter(arg => arg !== '--updated' && !arg.startsWith('rased:')) })
+        doQuit()
+      }, 150)
+      return { ok: true }
+    } catch (error) { return { ok: false, error: backupError(error) } }
+  })
+  ipcMain.handle(IPC.openBackupFolder, async event => {
+    if (!mainSender(event)) return { ok: false }
+    const folder = join(app.getPath('userData'), 'backups')
+    mkdirSync(folder, { recursive: true })
+    if (testHarness) { testHarness.record('open-backup-folder', folder); return { ok: true } }
+    return { ok: !(await shell.openPath(folder)) }
+  })
+  ipcMain.handle(IPC.exportSettings, async event => {
+    if (!mainSender(event) || !db || quitRequested) return { ok: false, error: 'no-window' }
+    let chosen: string | null
+    try { chosen = await chooseDataFile('save-settings') } catch (error) { return { ok: false, error: backupError(error, 'write-failed') } }
     if (!chosen) return { ok: false }
     try {
-      writeFileSync(chosen, JSON.stringify(settingsExportPayload(), null, 2), 'utf-8')
+      if (quitRequested || !db) return { ok: false, error: 'busy' }
+      const text = JSON.stringify(settingsPayload(db, settings), null, 2)
+      if (Buffer.byteLength(text, 'utf8') > MAX_IMPORT_BYTES) return { ok: false, error: 'too-large' }
+      const temporary = chosen + '.' + randomUUID() + '.tmp'
+      try { writeFileSync(temporary, text, 'utf-8'); renameSync(temporary, chosen) }
+      finally { rmSync(temporary, { force: true }) }
     } catch {
       return { ok: false, error: 'write-failed' }
     }
     auditUi('settings-export')
     return { ok: true, path: chosen }
   })
-  ipcMain.handle(IPC.validateImport, () => validateSettingsImport())
-  ipcMain.handle(IPC.applyImport, (_e, v: { mode: unknown; applyStartup: unknown }) => applySettingsImport(v.mode, v.applyStartup === true))
+  ipcMain.handle(IPC.validateImport, event => mainSender(event) ? validateSettingsImport() : { ok: false, error: 'bad-request' })
+  ipcMain.handle(IPC.applyImport, (event, v: { mode: unknown; applyStartup: unknown }) => mainSender(event) ? applySettingsImport(v?.mode, v?.applyStartup === true) : { ok: false, error: 'bad-request' })
   ipcMain.handle(IPC.purgeHistoryPreview, (_e, v: { cutoffIso: unknown }) => {
     if (!db) return { ok: false, error: 'no-db' } satisfies PurgePreview
     if (typeof v.cutoffIso !== 'string' || Number.isNaN(Date.parse(v.cutoffIso))) {
@@ -1642,21 +1770,20 @@ function registerIpc(): void {
     }
     return { ok: true, affected: countPurgeable(db, new Date(v.cutoffIso).toISOString(), PURGE_KINDS) } satisfies PurgePreview
   })
-  ipcMain.handle(IPC.purgeHistoryApply, (_e, v: { cutoffIso: unknown }) => {
-    if (!db) return { ok: false, error: 'no-db' } satisfies PurgePreview
+  ipcMain.handle(IPC.purgeHistoryApply, async (_e, v: { cutoffIso: unknown }) => {
+    if (!db || !dataBackup || quitRequested) return { ok: false, error: 'no-db' } satisfies PurgePreview
     if (typeof v.cutoffIso !== 'string' || Number.isNaN(Date.parse(v.cutoffIso))) {
       return { ok: false, error: 'bad-cutoff' } satisfies PurgePreview
     }
     const d: Db = db
     const backupDir = join(app.getPath('userData'), 'backups')
-    const backupPath = join(backupDir, `rased-backup-${Date.now()}.db`)
+    const backupPath = join(backupDir, `rased-before-purge-${Date.now()}.rased-backup`)
     try {
-      mkdirSync(backupDir, { recursive: true })
-      // VACUUM INTO is an online, consistent backup — never copy a live WAL file.
-      d.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`)
+      await dataBackup.create(backupPath)
     } catch {
       return { ok: false, error: 'backup-failed' } satisfies PurgePreview
     }
+    if (quitRequested || !db) return { ok: false, error: 'busy' }
     const iso = new Date(v.cutoffIso).toISOString()
     const victims = d.prepare(`SELECT p.id FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id WHERE p.first_seen_at < ? AND u.saved_at IS NULL AND COALESCE(u.note,'')='' AND COALESCE(u.personal_status,'none') NOT IN ('interested','submitted')`).all(iso) as unknown as { id: number }[]
     for (const { id } of victims) { detailsFetcher.drop(id); enrichQueue.drop(id); uncertainWaits.delete(id) }
@@ -1728,7 +1855,46 @@ async function boot(): Promise<void> {
   }
   await app.whenReady()
 
-  db = openDatabase(join(app.getPath('userData'), 'rased.db'))
+  if (process.platform === 'win32' && !testHarness) {
+    const windowsShortcuts = join(app.getPath('appData'), 'Microsoft', 'Windows')
+    for (const folder of [join(windowsShortcuts, 'Start Menu', 'Programs'), join(windowsShortcuts, 'Start Menu', 'Programs', 'RASED'), join(app.getPath('appData'), 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar')]) {
+      try {
+        for (const entry of readdirSync(folder)) {
+          if (entry.toLowerCase().endsWith('.lnk')) repairLegacyDevShortcut(join(folder, entry), shell)
+        }
+      } catch { /* A missing shortcut folder is normal on a fresh installation. */ }
+    }
+  }
+
+  try { db = openDatabase(join(app.getPath('userData'), 'rased.db')) }
+  catch (error) {
+    if (!isCorruptDatabaseError(error)) throw error
+    let archive: string | null = null
+    if (testHarness) archive = await chooseDataFile('open-backup')
+    else {
+      const answer = await dialog.showMessageBox({ type: 'error', title: 'RASED — استعادة البيانات / Data recovery', message: 'تعذر قراءة قاعدة البيانات. يمكنك اختيار نسخة راصد احتياطية لاستعادتها. ستُحفظ الملفات القديمة دون حذف.\nThe database cannot be read. Choose a RASED backup to recover. Original files will be preserved.', buttons: ['اختيار نسخة / Choose backup', 'إغلاق / Close'], defaultId: 1, cancelId: 1, noLink: true })
+      if (answer.response === 0) {
+        const chosen = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'RASED backup', extensions: ['rased-backup'] }] })
+        archive = chosen.canceled ? null : chosen.filePaths[0] ?? null
+      }
+    }
+    if (!archive) { app.quit(); return }
+    try {
+      const info = inspectBackup(archive)
+      if (!testHarness) {
+        const answer = await dialog.showMessageBox({ type: 'warning', title: 'RASED — تأكيد الاستعادة / Confirm recovery', message: `المشاريع: ${info.counts.projects} · الملاحظات: ${info.counts.notes} · المسودات: ${info.counts.drafts}\n${info.manifest.createdAt}\nسيُستعاد الأرشيف والإعدادات مع حفظ الملفات التالفة دون حذف.\nRestore this archive and settings? Original damaged files will be preserved.`, buttons: ['استعادة / Restore', 'إلغاء / Cancel'], defaultId: 1, cancelId: 1, noLink: true })
+        if (answer.response !== 0) { app.quit(); return }
+      }
+      db = await recoverCorruptDatabase(app.getPath('userData'), archive)
+    }
+    catch {
+      if (!testHarness) await dialog.showMessageBox({ type: 'error', title: 'RASED', message: 'تعذرت الاستعادة. الملفات القديمة لم تُحذف. اختر نسخة سليمة وأعد المحاولة.\nRecovery failed. Original files were kept. Choose a valid backup and retry.' })
+      app.quit(); return
+    }
+  }
+  await recoverPendingRestore(db, app.getPath('userData'), APP_VERSION, finalizeBackupInWorker)
+  dataBackup = new DataBackupManager(db, app.getPath('userData'), APP_VERSION, Date.now, finalizeBackupInWorker)
+  dataBackup.start()
   aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi)
   settings = loadSettings()
   // Retire only the old embedded-browser profiles, leaving all other app data intact.
@@ -1810,6 +1976,7 @@ async function boot(): Promise<void> {
     else win?.show()
   })
   powerMonitor.on('suspend', () => {
+    nafezlyFacts.abortActive()
     kaf?.sleep()
     activeRss?.abort()
     khamsatAbort?.abort()
@@ -1827,7 +1994,7 @@ async function boot(): Promise<void> {
   })
   powerMonitor.on('resume', () => {
     kaf?.wake()
-    if (!paused) {
+    if (settings.mostaqlEnabled && !paused) {
       lastRecovering = true
       setTimeout(() => void trackWork(runCycle()), 2000)
       scheduleNext()
@@ -1837,7 +2004,8 @@ async function boot(): Promise<void> {
   })
 
   enrichTimer = setInterval(() => {
-    if (paused) return
+    void trackWork(nafezlyFacts.pump())
+    if (!settings.mostaqlEnabled || paused) return
     const swept = sweepUncertain(Date.now())
     if (swept.length > 0) {
       // Expired uncertain waits that just became notifiable: new to attention.
@@ -1878,54 +2046,46 @@ function auditUi(detail: string): void {
 
 // ---- settings export/import (validated, versioned, no secrets) -----------
 
-const SETTINGS_EXPORT_VERSION = 1
 const MAX_IMPORT_BYTES = 1024 * 1024
 const PURGE_KINDS = ['initial', 'live', 'recovered']
 
-/** Whitelisted settings keys that may cross the export boundary. */
-function settingsExportPayload(): {
-  format: string
-  version: number
-  settings: Record<string, unknown>
-  savedFilters: SavedFilter[]
-} {
-  return {
-    format: 'rased-settings',
-    version: SETTINGS_EXPORT_VERSION,
-    settings: {
-      kafEnabled: settings.kafEnabled,
-      kafNotificationsEnabled: settings.kafNotificationsEnabled,
-      kafKeywordsAny: settings.kafKeywordsAny,
-      kafExcludeKeywords: settings.kafExcludeKeywords,
-      language: settings.language,
-      pollIntervalMs: settings.pollIntervalMs,
-      notificationsEnabled: settings.notificationsEnabled,
-      soundEnabled: settings.soundEnabled,
-      runAtStartup: settings.runAtStartup,
-      notifyFilter: settings.notifyFilter,
-      displayFilter: settings.displayFilter,
-      displayQuery: settings.displayQuery,
-      linkDisplayAndNotifyFilters: settings.linkDisplayAndNotifyFilters,
-      notifyUncertainCategory: settings.notifyUncertainCategory,
-      showUnreadOnly: settings.showUnreadOnly,
-      quickApply: settings.quickApply,
-      ui: settings.ui
-    },
-    savedFilters: db ? listSavedFilters(db) : []
+async function chooseDataFile(kind: 'save-settings' | 'open-settings' | 'save-backup' | 'open-backup'): Promise<string | null> {
+  if (quitRequested) return null
+  if (testHarness) {
+    // Only an explicitly marked TEMP profile can substitute the OS file picker.
+    const fixture = JSON.parse(readFileSync(join(app.getPath('userData'), 'data-dialog.json'), 'utf8')) as Record<string, unknown>
+    const selected = fixture[kind]
+    if (selected === null || selected === undefined) return null
+    if (typeof selected !== 'string') throw Error('bad-schema')
+    const path = resolve(app.getPath('userData'), selected), rel = relative(app.getPath('userData'), path)
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw Error('protected-location')
+    testHarness.record('data-dialog', kind)
+    return path
   }
+  if (!win) return null
+  const settingsFile = kind.endsWith('settings')
+  const filters = [{ name: settingsFile ? 'RASED settings' : 'RASED backup', extensions: [settingsFile ? 'json' : 'rased-backup'] }]
+  if (kind.startsWith('save')) {
+    const result = await dialog.showSaveDialog(win, { defaultPath: settingsFile ? 'rased-settings.json' : `rased-${new Date().toISOString().slice(0, 10)}.rased-backup`, filters })
+    const path = result.filePath
+    if (!path || result.canceled) return null
+    const rel = relative(app.getPath('userData'), resolve(path))
+    if (!rel || !rel.startsWith('..') && !isAbsolute(rel)) throw Error('protected-location')
+    return path
+  }
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile'], filters })
+  return result.canceled ? null : result.filePaths[0] ?? null
 }
 
-let pendingImport: { settings: Partial<AppSettings>; filters: SavedFilter[] } | null = null
+let pendingImport: SettingsTransfer | null = null
 
-function validateSettingsImport(): ImportSummary {
+async function validateSettingsImport(): Promise<ImportSummary> {
   pendingImport = null
   if (!win || !db) return { ok: false, error: 'no-window' }
-  const chosen = dialog.showOpenDialogSync(win, {
-    properties: ['openFile'],
-    filters: [{ name: 'JSON', extensions: ['json'] }]
-  })
-  if (!chosen || chosen.length === 0) return { ok: false }
-  const path = chosen[0] as string
+  let path: string | null
+  try { path = await chooseDataFile('open-settings') } catch (error) { return { ok: false, error: backupError(error, 'read-failed') } }
+  if (!path) return { ok: false }
+  if (quitRequested || !db) return { ok: false, error: 'busy' }
   let raw: Buffer
   try {
     if (statSync(path).size > MAX_IMPORT_BYTES) return { ok: false, error: 'too-large' }
@@ -1939,84 +2099,50 @@ function validateSettingsImport(): ImportSummary {
   } catch {
     return { ok: false, error: 'invalid-json' }
   }
-  if (typeof doc !== 'object' || doc === null) return { ok: false, error: 'bad-schema' }
-  const o = doc as Record<string, unknown>
-  if (o['format'] !== 'rased-settings' || o['version'] !== SETTINGS_EXPORT_VERSION) return { ok: false, error: 'bad-schema' }
-  if (o['settings'] !== undefined && (typeof o['settings'] !== 'object' || o['settings'] === null)) {
-    return { ok: false, error: 'bad-schema' }
-  }
-  if (!Array.isArray(o['savedFilters'])) return { ok: false, error: 'bad-schema' }
-  const full = sanitizeSettings(o['settings'] ?? {})
-  const importedSettings = o['settings'] as Record<string, unknown> | undefined
-  if (importedSettings?.['quickApply'] !== undefined && !validQuickApply(importedSettings['quickApply'])) return { ok: false, error: 'invalid-quick-apply-settings' }
-  const present = typeof o['settings'] === 'object' && o['settings'] !== null ? Object.keys(o['settings'] as object) : []
-  const allowed: (keyof AppSettings)[] = [
-    'kafEnabled', 'kafNotificationsEnabled', 'kafKeywordsAny', 'kafExcludeKeywords',
-    'language',
-    'pollIntervalMs',
-    'notificationsEnabled',
-    'soundEnabled',
-    'runAtStartup',
-    'notifyFilter',
-    'displayFilter',
-    'displayQuery',
-    'linkDisplayAndNotifyFilters',
-    'notifyUncertainCategory',
-    'showUnreadOnly',
-    'quickApply',
-    'ui'
-  ]
-  const partial: Partial<AppSettings> = {}
-  const settingsKeys: string[] = []
-  for (const k of allowed) {
-    if (present.includes(k)) {
-      ;(partial as Record<string, unknown>)[k] = full[k]
-      settingsKeys.push(k)
-    }
-  }
-  const filters: SavedFilter[] = []
-  for (const entry of o['savedFilters'] as unknown[]) {
-    const f = sanitizeSavedFilter(entry)
-    if (!f) return { ok: false, error: 'bad-filter' }
-    filters.push(f)
-  }
+  let payload: SettingsTransfer
+  try { payload = parseSettingsTransfer(doc) } catch { return { ok: false, error: 'bad-schema' } }
   const currentIds = new Set(listSavedFilters(db as Db).map((f) => f.id))
-  pendingImport = { settings: partial, filters }
+  pendingImport = payload
   return {
     ok: true,
-    settingsKeys,
-    filtersAdded: filters.filter((f) => !currentIds.has(f.id)).length,
-    filtersReplaced: filters.filter((f) => currentIds.has(f.id)).length,
-    startupRequested: (partial as { runAtStartup?: boolean }).runAtStartup === true
+    settingsKeys: Object.keys(payload.settings),
+    filtersAdded: payload.savedFilters.filter((f) => !currentIds.has(f.id)).length,
+    filtersReplaced: payload.savedFilters.filter((f) => currentIds.has(f.id)).length,
+    startupRequested: payload.settings.runAtStartup === true,
+    startupIncluded: payload.settings.runAtStartup !== undefined,
+    profileIncluded: !!payload.proposalProfile, aiIncluded: !!payload.aiSettings, legacy: payload.version === 1
   }
 }
 
 function applySettingsImport(mode: unknown, applyStartup: boolean): ImportSummary {
   const cached = pendingImport
-  pendingImport = null
   if (!cached || !db) return { ok: false, error: 'no-validated-import' }
   if (mode !== 'merge' && mode !== 'replace') return { ok: false, error: 'bad-mode' }
   const d: Db = db
-  const partial = { ...cached.settings }
-  // runAtStartup needs an explicit opt-in at import time; never implied.
-  if (!applyStartup) delete partial.runAtStartup
-  const next = sanitizeSettings({ ...settings, ...partial, doNotDisturbUntil: null })
-  if (next.linkDisplayAndNotifyFilters && next.displayQuery.source === 'mostaql') next.notifyFilter = next.displayQuery.categoryFilter
-  next.displayFilter = next.displayQuery.categoryFilter
   const currentIds = new Set(listSavedFilters(d).map((f) => f.id))
-  runInTransaction(d, () => {
-    saveSettings(next)
-    if (mode === 'replace') {
-      d.exec('DELETE FROM saved_filters;')
-    }
-    for (const f of cached.filters) saveSavedFilterRow(d, f)
-  })
-  auditUi(`settings-import mode=${mode} filters=${cached.filters.length}`)
+  const transfer = { ...cached, settings: { ...cached.settings } }
+  if (transfer.settings.quickApply?.enabled && !extension?.available()) transfer.settings.quickApply = { ...transfer.settings.quickApply, enabled: false }
+  let next: AppSettings
+  try { next = importSettings(d, settings, transfer, mode, applyStartup) } catch { return { ok: false, error: 'write-failed' } }
+  pendingImport = null
+  // Publish side effects only after the entire import committed successfully.
+  const previous = settings
+  settings = next
+  applyMonitoringSettings(previous, next)
+  kaf?.settingsChanged()
+  if (!next.quickApply.enabled) extension?.cancel()
+  applyAutoStart()
+  broadcast(IPC.settingsChanged, next)
+  broadcast(IPC.settingsImported, next)
+  updateTray()
+  compactWin?.setAlwaysOnTop(next.ui.compactAlwaysOnTop)
+  emitHealth()
+  auditUi(`settings-import mode=${mode} filters=${cached.savedFilters.length}`)
   return {
     ok: true,
-    settingsKeys: Object.keys(partial),
-    filtersAdded: cached.filters.filter((f) => !currentIds.has(f.id)).length,
-    filtersReplaced: mode === 'merge' ? cached.filters.filter((f) => currentIds.has(f.id)).length : 0
+    settingsKeys: Object.keys(cached.settings).filter(key => applyStartup || key !== 'runAtStartup'),
+    filtersAdded: cached.savedFilters.filter((f) => !currentIds.has(f.id)).length,
+    filtersReplaced: mode === 'merge' ? cached.savedFilters.filter((f) => currentIds.has(f.id)).length : 0
   }
 }
 
