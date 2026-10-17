@@ -33,7 +33,7 @@ describe('UI fixes: storage and policies', () => {
     db.exec('ALTER TABLE projects DROP COLUMN platform_status; ALTER TABLE projects DROP COLUMN duration_days; ALTER TABLE projects DROP COLUMN duration_raw; DROP TABLE extension_jobs; DROP TABLE quick_apply_tickets; DROP TABLE proposal_drafts; DROP TABLE project_user_state; DROP TABLE project_details; DROP TABLE saved_filters; DROP TABLE tombstones; PRAGMA user_version=2;')
     closeDatabase(db)
     db = openDatabase(file); databases.push(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 })
     expect(queryProjectsPage(db, defaultFilterDefinition(), { limit: 20, offset: 0 }).unread).toBe(2)
     expect(listEventsByStatus(db, 'pending')).toHaveLength(1)
     expect(listClassificationWaits(db).get(3)).toBe(2_000_000_000_000)

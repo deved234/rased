@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(args.profile)
@@ -268,7 +269,7 @@ try {
   await ev('window.__events=[];window.rased.onProjectsChanged(e=>window.__events.push(e))'); writeRss([{title:'New matching project',external:'91000001'}]); await ev('window.rased.resume()')
   await wait('!!document.querySelector(".pill")').catch(async e=>{console.error('Arrival debug',await ev('JSON.stringify({events:window.__events,scroll:document.querySelector(".list-scroll").scrollTop,rows:Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row),text:document.body.innerText,settings:await window.rased.getSettings()})'));throw e}); await sleep(2700)
   check('new arrival/enrichment preserves loaded ids until reveal', JSON.stringify(visible)===JSON.stringify(await ev('Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row)')))
-  check('single toast requests high priority and native browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="protocol" launch="https://mostaql.com/go/91000001"') && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
+  check('single toast requests high priority and persistent browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="foreground"') && notificationDestination(db,traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml)==='https://mostaql.com/go/91000001' && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
   check('single Mostaql toast identifies its platform before the project title', traces().filter(t=>t.kind==='toast').at(-1)?.data.title.startsWith('Mostaql — New matching project'))
   await click('.', '.pill'); await wait('document.querySelector("[data-row] article").textContent.includes("New matching project")')
   check('arrival reveal fetches new row', true)
@@ -279,7 +280,7 @@ try {
   const items = Array.from({length:7},(_,i)=>({title:'Summary project '+i,external:String(92000001+i)}))
   writeRss(items); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===458)'); await ev('window.rased.pause()')
   const newToasts = traces().filter(t=>t.kind==='toast').slice(toastCount)
-  check('summary native activation targets newest persisted project once', newToasts.length===1 && newToasts[0].data.toastXml.includes('activationType="protocol" launch="https://mostaql.com/go/92000007"') && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
+  check('summary native activation targets newest persisted project once', newToasts.length===1 && notificationDestination(db,newToasts[0].data.toastXml)==='https://mostaql.com/go/92000007' && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
   const mutedToasts = traces().filter(t=>t.kind==='toast').length
   await ev('window.rased.setDnd(new Date(Date.now()+60000).toISOString())'); writeRss([{title:'Muted project',external:'93000001'}]); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===459)'); await ev('window.rased.pause()')
   check('DND suppresses actual main dispatch while discovery continues', traces().filter(t=>t.kind==='toast').length===mutedToasts && db.prepare("SELECT COUNT(*) n FROM notification_events WHERE status='suppressed'").get().n>=1)
@@ -312,7 +313,7 @@ try {
   await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 3)
   await ev('window.rased.pauseKhamsat()')
   const khamsatToasts = traces().filter(t => t.kind === 'toast').slice(khamsatToastStart)
-  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && khamsatToasts[0].data.toastXml.includes('https://khamsat.com/community/requests/790002-fresh') && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
+  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && notificationDestination(db,khamsatToasts[0].data.toastXml)==='https://khamsat.com/community/requests/790002-fresh' && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
   check('single Khamsat toast identifies its platform before the request title', khamsatToasts[0].data.title === 'Khamsat — New Khamsat request')
   check('old Khamsat discussion is marked recovered', db.prepare("SELECT discovery_kind FROM projects WHERE source='khamsat' AND external_id='790003'").get()?.discovery_kind === 'recovered')
   const khamsatOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"khamsat"},50,0)})()')
@@ -372,7 +373,7 @@ try {
   await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='nafezly'").get().n===2)
   await ev('window.rased.pauseNafezly()')
   const nafezlyToasts = traces().filter(t=>t.kind==='toast').slice(nafezlyToastStart)
-  check('Nafezly fresh project stores full RSS description and browser toast URL', nafezlyToasts.length===1 && nafezlyToasts[0].data.toastXml.includes('https://nafezly.com/project/50002-fresh') && db.prepare("SELECT d.description_text FROM project_details d JOIN projects p ON p.id=d.project_id WHERE p.source='nafezly' AND p.external_id='50002'").get()?.description_text==='Full RSS description for integration')
+  check('Nafezly fresh project stores full RSS description and browser toast destination', nafezlyToasts.length===1 && notificationDestination(db,nafezlyToasts[0].data.toastXml)==='https://nafezly.com/project/50002-fresh' && db.prepare("SELECT d.description_text FROM project_details d JOIN projects p ON p.id=d.project_id WHERE p.source='nafezly' AND p.external_id='50002'").get()?.description_text==='Full RSS description for integration')
   check('single Nafezly toast identifies its platform before the project title', nafezlyToasts[0].data.title === 'Nafezly — New Nafezly project')
   const nafezlyOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"nafezly",categoryFilter:{mode:"all",categories:[],keywordsAny:[],keywordsAll:[],excludeKeywords:[]}},50,0)})()')
   check('Nafezly source filter returns only its projects', nafezlyOnly.total===2 && nafezlyOnly.rows.every(p=>p.source==='nafezly'))

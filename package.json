@@ -70,11 +70,15 @@
           "rased"
         ]
       }
+    ],
+    "asarUnpack": [
+      "node_modules/@koromix/koffi-win32-x64/**"
     ]
   },
   "dependencies": {
     "@fontsource/noto-sans-arabic": "^5.3.0",
     "electron-updater": "6.8.9",
+    "koffi": "3.3.3",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -130,7 +134,8 @@
     "test:kaf": "node scripts/kaf-e2e.mjs",
     "test:data": "node scripts/data-e2e.mjs",
     "test:monitoring": "node scripts/monitoring-e2e.mjs",
-    "test:project-facts": "node scripts/project-facts-e2e.mjs"
+    "test:project-facts": "node scripts/project-facts-e2e.mjs",
+    "test:notification-activation": "node scripts/notification-activation-e2e.mjs"
   },
-  "version": "0.8.0"
+  "version": "0.8.1"
 }

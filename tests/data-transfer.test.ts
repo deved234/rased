@@ -8,6 +8,7 @@ import { importSettings, parseSettingsTransfer, settingsPayload, TRANSFER_SETTIN
 import { getSettingRaw, setSettingRaw, upsertProjectsBatch, updateUserState, upsertProjectDetails, saveSavedFilterRow } from '../src/storage/repositories.js'
 import { createPortableBackup, inspectBackup, restoreDatabase } from '../src/storage/backups.js'
 import { saveProposalDraft, getProposalDraft } from '../src/storage/proposalDrafts.js'
+import { issueNotificationActivation, claimNotificationActivation } from '../src/storage/notificationActivations.js'
 
 const folders: string[] = [], databases: Db[] = []
 const profile = (): string => { const path = mkdtempSync(join(tmpdir(), 'rased-test-data-')); folders.push(path); return path }
@@ -72,6 +73,34 @@ describe('Portable settings', () => {
 })
 
 describe('Complete portable backups', () => {
+  it('removes notification activation capabilities from portable bytes and clears destination leases on restore', async () => {
+    const folder = profile(), source = database(folder); seed(source)
+    const ticket = issueNotificationActivation(source, { url: 'https://mostaql.com/go/44', projectId: 1 })
+    const hash = String(source.prepare('SELECT token_hash FROM notification_activations').get()!.token_hash)
+    const file = join(folder, 'notifications.rased-backup')
+    await createPortableBackup(source, file, '0.8.0')
+    expect(readFileSync(file).includes(Buffer.from(hash))).toBe(false)
+    const target = database(); seed(target)
+    const local = issueNotificationActivation(target, { url: 'https://mostaql.com/go/44', projectId: 1 })
+    restoreDatabase(target, file, false, 'restore', 'rollback')
+    expect(claimNotificationActivation(target, local)).toBeNull()
+    expect(claimNotificationActivation(target, ticket)).toBeNull()
+  })
+  it('continues to inspect and restore original schema-eight archives', async () => {
+    const folder = profile(), source = database(folder); seed(source)
+    const file = join(folder, 'old.rased-backup')
+    await createPortableBackup(source, file, '0.8.0')
+    const old = openDatabase(file); databases.push(old)
+    const manifest = JSON.parse(String(old.prepare('SELECT json FROM rased_backup_manifest').get()!.json))
+    manifest.schemaVersion = 8
+    old.exec('DROP TABLE notification_activations; PRAGMA user_version=8')
+    old.prepare('UPDATE rased_backup_manifest SET json=?').run(JSON.stringify(manifest))
+    old.close()
+    expect(inspectBackup(file).counts.projects).toBe(1)
+    const target = database()
+    restoreDatabase(target, file, false, 'old-restore', 'rollback')
+    expect(getProposalDraft(target, 1)?.proposal).toBe('عرض محفوظ')
+  })
   it('includes WAL writes, notes, details and drafts while removing secrets and queued actions from file bytes', async () => {
     const folder = profile(), db = database(folder); seed(db)
     setSettingRaw(db, 'secret-fixture', 'PRIVATE_PAIRING_TOKEN_123456789')

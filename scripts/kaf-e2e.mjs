@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(), port = Number(args.port ?? 9394), output = resolve('.local/kaf-research-2026-10-14/implementation')
@@ -52,7 +53,7 @@ try {
   check('AI main service refuses KAF even through direct IPC', preview === null)
   check('Quick Apply main service rejects KAF', !(await ev(`window.rased.quickApplyProject(${p.id})`)).ok)
   const toast = traces().find(t => t.kind === 'toast')?.data?.toastXml
-  check('KAF toast uses the project HTTPS destination with no Quick Apply action', typeof toast === 'string' && toast.includes(p.url) && !toast.includes('quick-apply') && !toast.includes('<actions>'))
+  check('KAF toast uses a persistent HTTPS destination with no Quick Apply action', notificationDestination(storage,toast) === p.url && !toast.includes('quick-apply') && !toast.includes('<actions>'))
   await ev('window.rased.pauseKaf()'); const count = sourceFetches().length
   await ev('window.rased.refresh()'); await sleep(1500)
   check('pause cancels KAF while global refresh cannot restart it', sourceFetches().length === count)

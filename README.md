@@ -12,10 +12,10 @@
 
 ## التحميل والتشغيل
 
-حمّل **RASED-Setup-0.8.0.exe** من قسم **Assets** في صفحة الإصدار، ثم شغّل المثبت على **Windows x64**. لا تحتاج Node.js أو SQLite؛ ملفات Source code للمبرمجين فقط. المثبت غير موقّع حاليًا، وقد يعرض Windows تحذيرًا. تأكد من مصدر التحميل وقارن البصمة بملف `SHA256SUMS.txt`:
+حمّل **RASED-Setup-0.8.1.exe** من قسم **Assets** في صفحة الإصدار، ثم شغّل المثبت على **Windows x64**. لا تحتاج Node.js أو SQLite؛ ملفات Source code للمبرمجين فقط. المثبت غير موقّع حاليًا، وقد يعرض Windows تحذيرًا. تأكد من مصدر التحميل وقارن البصمة بملف `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.8.0.exe'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.8.1.exe'
 ```
 
 أول فحص ناجح لكل منصة يحفظ الموجود دون تنبيهات قديمة. بعدها ينبهك بالجديد بحسب فلاترك. إغلاق النافذة يبقي الرصد في الخلفية؛ للخروج الكامل استخدم قائمة أيقونة راصد بجوار الساعة. النقر على إشعار المشروع يفتح رابطه في المتصفح الافتراضي.
@@ -62,7 +62,7 @@ npm run dist
 
 `dist` ينشئ المثبت داخل `release/` دون نشر. اختبارات التكامل تستخدم ملفات مؤقتة وبيانات وهمية؛ لا تستخدم حساباتك أو مفاتيحك. [دليل المساهمة](CONTRIBUTING.md) يشرح الاختبارات الإضافية و[المعمارية](docs/ARCHITECTURE.md) تشرح تنظيم الكود. خطط العمل والمراجعات الداخلية وأدلة QA المولّدة ليست جزءًا من المستودع العام.
 
-إصدار **0.8.0** يضيف النسخ والاستعادة وإدارة الرصد وتحسين بيانات المشاريع والإشعارات. [تفاصيل الإصدار](docs/RELEASE_0.8.0.md) · [سجل التغييرات](CHANGELOG.md).
+إصدار **0.8.1** يصلح فتح المشاريع من إشعارات Windows ويحسن طلب إظهار المتصفح، بما يشمل التشغيل بعد إغلاق راصد وإصلاح تسجيل نسخة التطوير. [تفاصيل الإصدار](docs/RELEASE_0.8.1.md) · [دليل الإشعارات](docs/NOTIFICATIONS.md) · [سجل التغييرات](CHANGELOG.md).
 
 تفاصيل نقل الإعدادات والنسخ الاحتياطي والاستعادة موجودة في [دليل حماية البيانات](docs/BACKUP_AND_RESTORE.md).
 
@@ -82,7 +82,7 @@ npm run dist
 
 RASED is a local Windows desktop app monitoring freelance opportunities on Mostaql, Nafezly, Khamsat and KAF. It offers Arabic/English UI, independent source controls, desktop alerts, filters, previews and local notes.
 
-Download **RASED-Setup-0.8.0.exe** from [Releases](https://github.com/deved234/rased/releases/latest). End users need neither Node.js nor SQLite. The installer is unsigned; verify its source and SHA-256 checksum. Existing users on 0.2.5+ can update inside Settings → RASED updates. See [0.8.0 release notes](docs/RELEASE_0.8.0.md) for backups, monitoring health and clearer project notifications.
+Download **RASED-Setup-0.8.1.exe** from [Releases](https://github.com/deved234/rased/releases/latest). End users need neither Node.js nor SQLite. The installer is unsigned; verify its source and SHA-256 checksum. Existing users on 0.2.5+ can update inside Settings → RASED updates. See [0.8.1 release notes](docs/RELEASE_0.8.1.md) for notification activation and browser-opening fixes.
 
 The optional [Proposal Assistant](docs/AI_ASSISTANT.md) supports Gemini, OpenAI and Claude with your own API keys and model selection, currently for Mostaql projects. [Quick Apply](docs/QUICK_APPLY.md) uses a manually installed Chrome extension for Mostaql/Nafezly only. It fills a draft using your normal browser session and **never submits it**. Monitoring needs no platform login; browser form filling does.
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 — 2026-10-17
+
+- Fixed source-development notification activation launching Electron's welcome screen: an explicit COM relay preserves the app entry and profile, handles activation separately from the singleton lock, and forwards body/View project tickets through the existing validated dispatcher. Owned legacy development shortcut classes now redirect to the active class as well.
+- Added persistent Windows foreground notification activation and a default-browser focus request on project clicks, with separate delivery/focus diagnostics and no automatic duplicate opening when focus is denied.
+- Added hashed seven-day notification destinations, duplicate handoff protection, hidden startup for notification activation, and backup/restore isolation while retaining schema-8 backup support. Development protocol/shortcut registration is separated from the installed app.
+- Added notification lifecycle and browser-focus regressions. Windows may still deny activation; see [notification behavior](docs/NOTIFICATIONS.md).
+
 ## 0.8.0 — 2026-10-16
 
 - Individual project/request notifications now start with the platform name in the interface language, before the project title, across all four sources.

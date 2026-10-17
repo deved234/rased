@@ -17,7 +17,7 @@ const devCspRelax: Plugin = {
 
 export default defineConfig({
   main: {
-    build: { rollupOptions: { input: { index: resolve('src/main/index.ts'), backupWorker: resolve('src/main/backupWorker.ts') } } },
+    build: { rollupOptions: { input: { index: resolve('src/main/index.ts'), backupWorker: resolve('src/main/backupWorker.ts'), developmentRelay: resolve('src/main/notifications/developmentRelay.ts') } } },
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: { '@shared': resolve('src/shared') } }
   },

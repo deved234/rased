@@ -22,6 +22,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run test:e2e
+      - run: npm run test:notification-activation
       - run: npm run test:ai
       - run: npm run test:quick-apply
       - run: npm run test:ui

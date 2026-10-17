@@ -110,6 +110,11 @@ import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 import { browserToastXml, supportsUrgentToasts } from './toast.js'
+import { NotificationActivationController } from './notifications/activation.js'
+import { BrowserLauncher } from './notifications/browserLauncher.js'
+import { ensureDevelopmentComRegistration, windowsRegistrationPort } from './notifications/developmentRegistration.js'
+import { notificationActivationArguments, notificationScheme, parseNotificationActivation } from '../shared/notificationActivation.js'
+import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation } from '../storage/notificationActivations.js'
 import { getProposalProfile, saveProposalProfile } from './proposals.js'
 import { AiService } from './ai/service.js'
 import { saveAiSettings } from './ai/settings.js'
@@ -137,6 +142,7 @@ async function launchChrome(url='about:blank'):Promise<void> {
   void execChrome(executable,[url],{windowsHide:true}).catch(()=>undefined)
 }
 async function activateExtensionUrl(raw:string):Promise<void> {
+  if (!IS_PACKAGED) raw = raw.replace(/^rased-dev:/, 'rased:')
   const ticket=parseExtensionTicket(raw);if(!ticket)return
   if(!extensionReady){if(pendingExtensionUrls.size<10)pendingExtensionUrls.add(raw);return}
   if(!extension||!await extension.activate(ticket)){
@@ -209,7 +215,43 @@ let updates: UpdateController | null = null
 let updateInstallRequested = false
 let updateStartupTimer: NodeJS.Timeout | null = null
 let updateTimer: NodeJS.Timeout | null = null
+let notificationCleanupTimer: NodeJS.Timeout | null = null
 const testHarness = isolatedTestHarness(app.getPath('userData'), process.argv)
+const activationScheme = notificationScheme(IS_PACKAGED)
+let notificationBoot = process.argv.some(arg => /^-+embedding$/i.test(arg) || !!parseNotificationActivation(arg, activationScheme))
+let nativeActivationReady = false
+const browserLauncher = new BrowserLauncher(url => shell.openExternal(url, { logUsage: true }))
+const notificationActivation = new NotificationActivationController(activationScheme, {
+  claim: token => db?.isOpen ? claimNotificationActivation(db, token) : null,
+  open: async destination => {
+    if (quitRequested) return { launch: 'failed', foreground: 'not-attempted', reason: 'quitting', durationMs: 0 }
+    if (testHarness) {
+      testHarness.record('open-external', destination.url)
+      return { launch: 'accepted', foreground: 'not-attempted', durationMs: 0 }
+    }
+    return browserLauncher.launch(destination.url)
+  },
+  completed: (destination, result) => {
+    auditUi(`notification-open launch=${result.launch} foreground=${result.foreground} durationMs=${result.durationMs}`)
+    testHarness?.record('notification-open-result', result)
+    if (result.launch === 'accepted' && db?.isOpen && destination.projectId !== null && getProjectById(db, destination.projectId)) {
+      setReadState(db, destination.projectId, true)
+      emitProjects([], [destination.projectId])
+    }
+    if (result.launch !== 'accepted' && !quitRequested && !testHarness) void dialog.showMessageBox({ type: 'error', message: settings.language === 'ar' ? 'تعذّر فتح المشروع في المتصفح. يمكنك إعادة المحاولة من راصد.' : 'Could not open the project in your browser. Retry from RASED.' })
+  },
+  invalid: () => {
+    auditUi('notification-activation-unavailable')
+    if (!testHarness && !quitRequested) void dialog.showMessageBox({ type: 'info', message: settings.language === 'ar' ? 'انتهت صلاحية هذا الإشعار أو لم يعد متاحًا. افتح المشروع من راصد.' : 'This notification expired or is no longer available. Open the project from RASED.' })
+  }
+})
+
+function dispatchNotificationActivation(raw: string): void {
+  notificationBoot = true
+  const notification = activeNotificationActivations.get(raw)
+  if (notification) { activeNotifications.delete(notification); activeNotificationActivations.delete(raw) }
+  void trackWork(notificationActivation.activate(raw))
+}
 
 function trackWork<T>(p: Promise<T>): Promise<T> {
   work.add(p)
@@ -233,10 +275,16 @@ function notificationAllowed(): boolean {
 const singleInstance = app.requestSingleInstanceLock()
 if(singleInstance){
   app.on('second-instance',(_event,argv)=>{
-    for(const arg of argv)if(parseExtensionTicket(arg))void activateExtensionUrl(arg)
+    let external = argv.some(arg => /^-+embedding$/i.test(arg))
+    for (const arg of argv) {
+      if (parseNotificationActivation(arg, activationScheme)) { external = true; dispatchNotificationActivation(arg) }
+      else if (parseExtensionTicket(IS_PACKAGED ? arg : arg.replace(/^rased-dev:/, 'rased:'))) { external = true; void activateExtensionUrl(arg) }
+      else if (arg.startsWith(`${activationScheme}:`)) external = true
+    }
+    if (external) return
     if(win){if(win.isMinimized())win.restore();win.show();win.focus()}
   })
-  app.on('open-url',(event,url)=>{event.preventDefault();void activateExtensionUrl(url)})
+  app.on('open-url',(event,url)=>{event.preventDefault();if(parseNotificationActivation(url,activationScheme))dispatchNotificationActivation(url);else void activateExtensionUrl(url)})
 }
 
 // ---------------------------------------------------------------- settings
@@ -340,14 +388,22 @@ function projectLine(p: { title: string }): string {
 
 // Keep native notification objects alive until Windows closes or activates them.
 const activeNotifications = new Set<Notification>()
+const activeNotificationActivations = new Map<string, Notification>()
 
-function showToast(title: string, body: string, onClick: () => void, url: string, quickLink?:string): Promise<boolean> {
+function showToast(title: string, body: string, onClick: () => void, url: string, quickLink?:string, projectId: number | null = null): Promise<boolean> {
+  let activation: string | undefined
+  if (process.platform === 'win32' && nativeActivationReady && db?.isOpen) {
+    try { activation = notificationActivationArguments(issueNotificationActivation(db, { url, projectId })) }
+    catch { auditUi('notification-ticket-unavailable') }
+  }
+  if (!IS_PACKAGED) quickLink = quickLink?.replace(/^rased:/, 'rased-dev:')
   const toastXml = process.platform === 'win32'
-    ? browserToastXml(title, body, url, IS_PACKAGED ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'), supportsUrgentToasts(process.platform, osRelease()),quickLink?{link:quickLink,language:settings.language}:undefined)
+    ? browserToastXml(title, body, url, IS_PACKAGED ? join(process.resourcesPath, 'branding', 'icon.png') : iconPath('icon.png'), supportsUrgentToasts(process.platform, osRelease()),quickLink?{link:quickLink,language:settings.language}:undefined, activation)
     : undefined
   if (testHarness) {
     testHarness.record('toast', { title, body, toastXml, urgency: 'critical' })
     // Simulate the OS protocol destination, not a native Windows mouse click.
+    if (activation) return notificationActivation.activate(activation).then(() => true)
     if (toastXml) testHarness.record('open-external', url)
     else onClick()
     return Promise.resolve(true)
@@ -363,17 +419,19 @@ function showToast(title: string, body: string, onClick: () => void, url: string
     try {
       const n = new Notification({ title, body, silent: true, icon: iconPath('icon.png'), toastXml, urgency: 'critical' })
       activeNotifications.add(n)
+      if (activation) activeNotificationActivations.set(activation, n)
+      const release = (): void => { activeNotifications.delete(n); if (activation) activeNotificationActivations.delete(activation) }
       n.on('show', () => finish(true))
       n.on('failed', (_event, error: string) => {
         auditUi(`notification-failed ${String(error)}`)
-        activeNotifications.delete(n)
+        release()
         finish(false)
       })
-      n.on('close', () => activeNotifications.delete(n))
+      n.on('close', release)
       n.once('click', () => {
-        activeNotifications.delete(n)
-        // Protocol activation opens the browser in Windows. Calling shell here
-        // as well would open a second tab; no instance callback is required.
+        release()
+        // The persistent activator owns foreground XML. HTTPS fallback is owned
+        // by Windows. Neither may also open a URL through an instance callback.
         if (!toastXml) onClick()
       })
       n.show()
@@ -398,7 +456,7 @@ async function sendSingle(p: SinglePayload): Promise<boolean> {
     void openProjectById(id, true, url).then(result => {
       if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
     })
-  }, url,extension?.protocolReady?extension.ticket(id)??undefined:undefined)
+  }, url,extension?.protocolReady?extension.ticket(id)??undefined:undefined, id)
 }
 
 function snapshotKhamsatHealth(): SourceHealth {
@@ -456,7 +514,7 @@ async function sendSummary(p: SummaryPayload, latestId: number | null): Promise<
     // Even a summary without a project id stays a browser action.
     if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
     else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch(err => auditUi(`summary-browser-failed ${String(err)}`))
-  }, latestUrl ?? MOSTAQL_PROJECTS_URL)
+  }, latestUrl ?? MOSTAQL_PROJECTS_URL, undefined, latestUrl ? latestId : null)
 }
 
 /** Tagged test toast. Opens the public projects listing; touches no project, event or read state. */
@@ -1089,8 +1147,10 @@ function createWindow(): void {
   }
   // Bring the window forward on launch so it is not lost behind the IDE.
   win.once('ready-to-show', () => {
+    if (notificationBoot) { testHarness?.record('window-launch', { notificationBoot, visible: false }); return }
     win?.show()
     win?.focus()
+    testHarness?.record('window-launch', { notificationBoot, visible: win?.isVisible() ?? false })
   })
   win.on('close', (e) => {
     testHarness?.record('native-close', { quitRequested, tray: !!tray })
@@ -1314,6 +1374,7 @@ function doQuit(): void {
 async function shutdown(): Promise<void> {
   if (shutdownWork) return shutdownWork
   quitRequested = true
+  notificationActivation.close()
   paused = true
   khamsatPaused = true
   nafezlyPaused = true
@@ -1332,6 +1393,7 @@ async function shutdown(): Promise<void> {
   if (enrichTimer) clearInterval(enrichTimer)
   if (updateStartupTimer) clearTimeout(updateStartupTimer)
   if (updateTimer) clearInterval(updateTimer)
+  if (notificationCleanupTimer) clearInterval(notificationCleanupTimer)
   updates?.dispose()
   extension?.dispose()
   shutdownWork = (async () => {
@@ -1855,6 +1917,31 @@ async function boot(): Promise<void> {
   }
   await app.whenReady()
 
+  if (process.platform === 'win32') {
+    if (testHarness) nativeActivationReady = true
+    else {
+      // Match the distinct EXE ProductName set by run-desktop.mjs. Electron's
+      // native shortcut name comes from that metadata, not app.name itself.
+      if (!IS_PACKAGED) {
+        const userData = app.getPath('userData')
+        app.setName('RASED Development')
+        app.setPath('userData', userData)
+      }
+      try {
+        // The presenter registers the COM class used by a cold toast launch.
+        // handleActivation alone only installs the JS callback in Electron 44.
+        if (!Notification.isSupported()) throw Error('notifications-unavailable')
+        Notification.handleActivation(details => {
+          if (parseNotificationActivation(details.arguments, activationScheme)) dispatchNotificationActivation(details.arguments)
+        })
+        if (!IS_PACKAGED) {
+          await ensureDevelopmentComRegistration({ version: 1, executable: process.execPath, appPath: app.getAppPath(), userData: app.getPath('userData'), appId: RASED_DEV_APP_ID, relay: join(__dirname, 'developmentRelay.js') }, join(app.getPath('userData'), 'notifications', 'development-activation.json'), join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs'), windowsRegistrationPort(() => app.toastActivatorCLSID, path => shell.readShortcutLink(path)))
+        }
+        nativeActivationReady = true
+      } catch { auditUi('native-notification-activation-unavailable') }
+    }
+  }
+
   if (process.platform === 'win32' && !testHarness) {
     const windowsShortcuts = join(app.getPath('appData'), 'Microsoft', 'Windows')
     for (const folder of [join(windowsShortcuts, 'Start Menu', 'Programs'), join(windowsShortcuts, 'Start Menu', 'Programs', 'RASED'), join(app.getPath('appData'), 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar')]) {
@@ -1897,6 +1984,12 @@ async function boot(): Promise<void> {
   dataBackup.start()
   aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi)
   settings = loadSettings()
+  cleanupNotificationActivations(db)
+  notificationCleanupTimer = setInterval(() => { if (!quitRequested && db?.isOpen) cleanupNotificationActivations(db) }, 60 * 60 * 1000)
+  notificationCleanupTimer.unref()
+  if (!testHarness) await browserLauncher.prepare()
+  await notificationActivation.start()
+  for (const arg of process.argv) if (parseNotificationActivation(arg, activationScheme)) dispatchNotificationActivation(arg)
   // Retire only the old embedded-browser profiles, leaving all other app data intact.
   try {
     await retireQuickBrowser(app.getPath('userData'))
@@ -1909,8 +2002,9 @@ async function boot(): Promise<void> {
     await extension.start()
   }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
   if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
-  if(!testHarness&&extension){
-    extension.protocolReady=IS_PACKAGED?app.setAsDefaultProtocolClient('rased'):app.setAsDefaultProtocolClient('rased',process.execPath,[app.getAppPath()])
+  if(!testHarness){
+    const protocolReady=IS_PACKAGED?app.setAsDefaultProtocolClient(activationScheme):app.setAsDefaultProtocolClient(activationScheme,process.execPath,[app.getAppPath()])
+    if (extension) extension.protocolReady = protocolReady
   }
   if (testHarness) { paused = true; khamsatPaused = true; nafezlyPaused = true }
   const savedState = getSourceState(db, SOURCE)
@@ -1963,7 +2057,7 @@ async function boot(): Promise<void> {
   extensionReady=true
   for(const url of pendingExtensionUrls)void activateExtensionUrl(url)
   pendingExtensionUrls.clear()
-  for(const arg of process.argv)if(parseExtensionTicket(arg))void activateExtensionUrl(arg)
+  for(const arg of process.argv)if(parseExtensionTicket(IS_PACKAGED ? arg : arg.replace(/^rased-dev:/, 'rased:')))void activateExtensionUrl(arg)
   app.on('before-quit', (event) => {
     if (quitComplete) return
     event.preventDefault()

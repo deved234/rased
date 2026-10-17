@@ -12,12 +12,14 @@ let executable=require('electron')
 if(process.platform==='win32'){
   const dist=dirname(executable),target=join(dist,'RASED-Development.exe'),metadata=join(dist,'rased-development.json')
   const icon=resolve('resources/icon.ico'),editor=join(dirname(require.resolve('electron-winstaller/package.json')),'vendor','rcedit.exe')
-  const hash=createHash('sha256').update(readFileSync(executable)).update(readFileSync(icon)).update('rased-development-v1').digest('hex')
+  const hash=createHash('sha256').update(readFileSync(executable)).update(readFileSync(icon)).update('rased-development-v2').digest('hex')
   let previous=null
   try{previous=JSON.parse(readFileSync(metadata,'utf8'))}catch{ /* first run */ }
   if(previous?.hash!==hash||!existsSync(target)){
     copyFileSync(executable,target)
-    const changed=spawnSync(editor,[target,'--set-icon',icon,'--set-version-string','ProductName','RASED','--set-version-string','FileDescription','RASED Development'],{encoding:'utf8',windowsHide:true})
+    // Electron's native toast shortcut uses the EXE ProductName, not app.name.
+    // A distinct product name prevents development from replacing RASED.lnk.
+    const changed=spawnSync(editor,[target,'--set-icon',icon,'--set-version-string','ProductName','RASED Development','--set-version-string','FileDescription','RASED Development'],{encoding:'utf8',windowsHide:true})
     if(changed.error)throw changed.error
     if(changed.status!==0)throw Error(changed.stderr||'Could not brand the development executable')
     writeFileSync(metadata,JSON.stringify({hash}))

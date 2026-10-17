@@ -28,6 +28,8 @@ KAF is a fourth independent source from RASED 0.7.0. Its controller polls the pu
 
 ## Optional workflows
 
+Windows project notifications use Electron's persistent foreground activation handler and a local hashed destination ticket, independent of extension pairing. `src/main/notifications/` requests default-browser focus before URL delivery where the window can be identified, then observes the result without repeated activation. The main-only `koffi` Windows binding is bundled outside ASAR. No separate native-focus executable or system Node installation is required. Migration 9 adds non-portable notification tickets; schema-8 backups remain restorable. See [Notifications](NOTIFICATIONS.md) for limits and verification.
+
 AI generation is user initiated, uses one chosen provider and requires a preview/consent fingerprint. The app saves editable drafts and never submits them. [Assistant guide](AI_ASSISTANT.md).
 
 Quick Apply sends a snapshot to one paired Chrome profile through an authenticated local broker/native host. The content script checks the destination and fills permitted fields, preserving existing drafts. The retired embedded browser is not used. [Extension guide](QUICK_APPLY.md).

@@ -62,7 +62,7 @@ export function finalizeBackup(temporary: string, appVersion: string): Inspected
     copy.exec('PRAGMA secure_delete=ON; PRAGMA journal_mode=DELETE;')
     runInTransaction(copy, () => {
       portableSettings(copy)
-      copy.exec(`DELETE FROM diagnostics; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets;
+      copy.exec(`DELETE FROM diagnostics; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets; DELETE FROM notification_activations;
         DELETE FROM pending_classifications; DELETE FROM notification_batches;
         UPDATE notification_events SET status='suppressed' WHERE status IN ('pending','dispatching','uncertain');
         UPDATE notification_events SET session_id=NULL, batch_key=NULL;
@@ -104,9 +104,12 @@ export function inspectBackup(file: string): InspectedBackup {
   return withBackup(file, db => {
     const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
     if (version > SCHEMA_VERSION) throw Error('newer-schema')
-    if (version !== SCHEMA_VERSION) throw Error('bad-schema')
+    // Schema 9 adds only non-portable notification activation tickets. Existing
+    // schema-8 archives remain valid and contain every durable table we restore.
+    if (version !== SCHEMA_VERSION && version !== 8) throw Error('bad-schema')
     const schema = db.prepare("SELECT name,type,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all() as unknown as { name: string; type: string; sql: string | null }[]
-    const expected = referenceSchema()
+    const expected = new Map(referenceSchema())
+    if (version === 8) expected.delete('notification_activations')
     for (const item of schema) {
       if (item.type !== 'table' && item.type !== 'index') throw Error('bad-schema')
       if (item.type === 'table' && item.name !== 'rased_backup_manifest' && expected.get(item.name) !== item.sql?.replace(/\s+/g, ' ').trim()) throw Error('bad-schema')
@@ -120,6 +123,7 @@ export function inspectBackup(file: string): InspectedBackup {
     if (Object.values(db.prepare('PRAGMA integrity_check(1)').get() ?? {})[0] !== 'ok' || db.prepare('PRAGMA foreign_key_check').get()) throw Error('bad-schema')
     if (db.prepare(`SELECT 1 FROM settings WHERE key NOT IN (${PORTABLE_KEYS.map(() => '?').join(',')}) LIMIT 1`).get(...PORTABLE_KEYS)) throw Error('bad-schema')
     if (db.prepare('SELECT 1 FROM extension_jobs LIMIT 1').get() || db.prepare('SELECT 1 FROM quick_apply_tickets LIMIT 1').get()) throw Error('bad-schema')
+    if (version >= 9 && db.prepare('SELECT 1 FROM notification_activations LIMIT 1').get()) throw Error('bad-schema')
     const settings = JSON.parse(getSettingRaw(db, 'app') ?? 'null') as unknown
     parseSettingsTransfer({ format: 'rased-settings', version: 2, settings, savedFilters: settingsPayload(db).savedFilters, proposalProfile: JSON.parse(getSettingRaw(db, 'proposal-profile') ?? 'null'), aiSettings: JSON.parse(getSettingRaw(db, 'ai-settings') ?? 'null') })
     return { manifest, counts: backupCounts(db), startupRequested: sanitizeSettings(settings).runAtStartup }
@@ -134,7 +138,7 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
   db.prepare('ATTACH DATABASE ? AS restore_data').run(file)
   try {
     runInTransaction(db, () => {
-      db.exec(`DELETE FROM pending_classifications; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets;
+      db.exec(`DELETE FROM pending_classifications; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets; DELETE FROM notification_activations;
         DELETE FROM notification_events; DELETE FROM notification_batches; DELETE FROM proposal_drafts;
         DELETE FROM project_details; DELETE FROM project_user_state; DELETE FROM projects;
         DELETE FROM saved_filters; DELETE FROM tombstones; DELETE FROM source_state;`)

@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import { browserToastXml, supportsUrgentToasts } from '../src/main/toast.js'
+import { notificationActivationArguments } from '../src/shared/notificationActivation.js'
 
 const icon = 'C:/RASED branding/icon.png'
 const parser = new XMLParser({ ignoreAttributes: false })
 describe('Windows browser notification activation', () => {
+  it('uses persistent foreground activation for body and view while keeping quick apply a separate protocol action', () => {
+    const activation = notificationActivationArguments('a'.repeat(32))
+    const quick = { link: 'rased://quick-apply-v2?ticket=' + 'b'.repeat(32), language: 'en' as const }
+    const toast = parser.parse(browserToastXml('Project', 'Text', 'https://mostaql.com/go/123', icon, false, quick, activation)).toast
+    expect(toast['@_activationType']).toBe('foreground')
+    expect(toast['@_launch']).toBe(activation)
+    expect(toast.actions.action[0]['@_activationType']).toBe('protocol')
+    expect(toast.actions.action[1]['@_activationType']).toBe('foreground')
+    expect(toast.actions.action[1]['@_arguments']).toBe(activation)
+    expect(() => browserToastXml('P', '', 'https://mostaql.com/go/123', icon, false, undefined, 'file:///C:/app.exe')).toThrow()
+  })
   it('persists the HTTPS destination in native XML rather than an in-memory click handler', () => {
     const value = browserToastXml('مشروع جديد', 'React work', 'https://mostaql.com/go/123', icon)
     expect(XMLValidator.validate(value)).toBe(true)

@@ -155,6 +155,15 @@ const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN platform_status TEXT NULL;
   ALTER TABLE projects ADD COLUMN duration_days INTEGER NULL;
   ALTER TABLE projects ADD COLUMN duration_raw TEXT NULL;
+  `,/* 9 */ `
+  CREATE TABLE IF NOT EXISTS notification_activations (
+    token_hash TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    project_id INTEGER NULL,
+    expires_at INTEGER NOT NULL,
+    last_attempt_at INTEGER NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_notification_activation_expiry ON notification_activations(expires_at);
   `
 ]
 
