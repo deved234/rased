@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.10.0 — 2026-10-21
+
+- **Usage analytics acceptance is now required in the official build.** A bilingual **Agree & use RASED / Exit** screen appears before any feature or monitoring. Nothing is collected and no platform is checked until you accept. Disclosure `2026-10-21-v4`: 0.9.1 participants must accept again, and earlier declines stay declined behind the same screen. Withdrawing stops monitoring and returns to this screen without deleting local data. Development/unconfigured builds remain exempt and send nothing. This distribution policy does not change MIT or certify legal compliance; cloud-event deletion verification remains pending.
+- The language chosen on the acceptance screen is now saved and kept after acceptance.
+- Fixed transient project-search errors caused by reused refresh generations and expected request supersession. Expected cancellation no longer logs an Electron IPC handler error; genuine query failures keep a retry warning. Delayed progress feedback floats over the list, so quick refreshes neither move the toolbar nor reduce list height at small window sizes.
+- Added 0.9.1 (v3) consent migration, saved acceptance-screen language and deterministic live-search layout regressions.
+
 ## 0.9.1 — 2026-10-21
 
 - Enabled optional usage analytics in the official configured build, only after explicit user consent; ordinary development and fork builds remain unconfigured.

@@ -16,7 +16,10 @@ for (let id = 1; id <= 260; id++) insert.run(id, String(id), 'https://mostaql.co
 db.exec("INSERT INTO project_details(project_id,description_text,status) VALUES(1,'BodyOnly café','ready')")
 db.prepare("INSERT INTO settings VALUES('app',?)").run(JSON.stringify({ language: 'en', mostaqlEnabled: false, nafezlyEnabled: false, khamsatEnabled: false, kafEnabled: false, autoRevealNewAtTop: false }))
 db.close()
-const child = startApp({ exe: args.exe ?? 'node_modules/electron/dist/electron.exe', app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port })
+const child = startApp({ exe: args.exe ?? 'node_modules/electron/dist/electron.exe', app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port, captureOutput: true })
+let electronOutput = ''
+child.stdout.on('data', data => { electronOutput += data.toString() })
+child.stderr.on('data', data => { electronOutput += data.toString() })
 let ws, session
 const checks = [], check = (label, value) => { assert.ok(value, label); checks.push(label); console.log('PASS ' + label) }
 const ev = expression => evaluate(ws, expression)
@@ -29,6 +32,30 @@ try {
   await ev('document.querySelector(".splash-enter")?.click()')
   await eventually(() => ev('document.querySelectorAll("[data-row]").length===50'))
   check('database probe and isolated utility page are wired', await invoke('databaseReady') && (await invoke('queryProjectsPage', def, 50, 0)).total === 260)
+  // Sample on mutations, every frame and explicitly from the test: fast reloads
+  // can finish before delayed progress text appears, and occluded windows pause frames.
+  await ev(`window.searchUiProbe={errors:[],tops:[]};const sampleSearchUi=window.sampleSearchUi=()=>{const banner=document.querySelector('.list-pane .banner.bad');if(banner)window.searchUiProbe.errors.push(banner.textContent);const toolbar=document.querySelector('.list-toolbar');if(toolbar)window.searchUiProbe.tops.push(toolbar.getBoundingClientRect().top)};window.searchUiObserver=new MutationObserver(sampleSearchUi);window.searchUiObserver.observe(document.querySelector('.list-pane'),{childList:true,subtree:true,characterData:true});window.searchUiFrames=true;const frame=()=>{if(!window.searchUiFrames)return;sampleSearchUi();requestAnimationFrame(frame)};requestAnimationFrame(frame)`)
+  const burst = await ev(`(async()=>{
+    const d=${JSON.stringify(def)};
+    const settle=p=>p.then(()=> 'ready',e=>e.message);
+    return Promise.all(Array.from({length:20},()=>[
+      settle(window.rased.queryProjectsPage(d,50,0)),
+      settle(window.rased.getSidebarCounts()),
+      settle(window.rased.previewFilterCount(d)),
+      settle(window.rased.matchProjectIds(d,[1,2,3]))
+    ]).flat())
+  })()`)
+  check('overlapping IPC requests cancel quietly while the newest requests complete', burst.some(value => value === 'search-superseded') && burst.filter(value => value === 'ready').length >= 4 && burst.every(value => value === 'ready' || value === 'search-superseded'))
+  for (let i = 0; i < 8; i++) {
+    await invoke('updateProjectUserState', 10, { note: 'Live burst ' + i })
+    await sleep(110)
+    await ev('window.sampleSearchUi()')
+  }
+  await eventually(() => ev(`document.querySelector('.list-scroll').getAttribute('aria-busy')==='false'`))
+  const probe = await ev('window.searchUiFrames=false;window.searchUiObserver.disconnect();window.searchUiProbe')
+  console.log('live-reload probe', JSON.stringify({ errors: probe.errors.slice(0, 3), samples: probe.tops.length, shift: probe.tops.length ? Math.max(...probe.tops) - Math.min(...probe.tops) : null, rows: await ev('document.querySelectorAll("[data-row]").length') }))
+  check('live reloads retain rows without transient error banners or progress layout shifts', probe.errors.length === 0 && probe.tops.length > 0 && Math.max(...probe.tops) - Math.min(...probe.tops) < 1 && await ev('document.querySelectorAll("[data-row]").length===50'))
+  check('expected cancellations do not reach Electron IPC handler error logging', !electronOutput.includes('Error occurred in handler') && !electronOutput.includes('Error: search-superseded'))
   const body = await invoke('queryProjectsPage', { ...def, search: 'bodyonly' }, 50, 0)
   check('cached full description is searched without being returned', body.rows[0]?.id === 1 && body.rows[0].matchedFields.join() === 'body' && !JSON.stringify(body).includes('BodyOnly'))
   check('NFC and Arabic matching run in the real reader', (await invoke('queryProjectsPage', { ...def, search: 'cafe\u0301' }, 50, 0)).total === 1 && (await invoke('queryProjectsPage', { ...def, search: 'اداره 12' }, 50, 0)).total === 1)

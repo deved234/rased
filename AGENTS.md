@@ -50,4 +50,6 @@ History uses imperative subjects, such as `Prevent Gemini proposal JSON truncati
 
 ## Security & Current Scope
 
+Since 0.10.0, configured distributions use explicit **accept or exit** onboarding, disclosure `2026-10-21-v4`. Never infer acceptance from an update or silently enable a prior decline. Before acceptance, block monitoring/feature access; withdrawal restores this gate without deleting local data. Unconfigured development builds remain exempt and send nothing. Preserve private deletion-support access and the pending cloud-deletion notice. The 0.9.1 voluntary opt-in policy is historical. AI proposal-request consent remains separate and optional.
+
 Never commit credentials, browser profiles, databases, or generated builds. Preserve renderer isolation, URL validation, source backoff, and explicit update installation. Quick Apply uses `extension/`, `native-host/`, and `src/main/extension/`; Mostaql/Nafezly only, never Khamsat. Never submit offers or copy browser cookies. Consult `docs/QUICK_APPLY.md` for boundaries and verification. Do not bump versions or publish releases without explicit authorization.

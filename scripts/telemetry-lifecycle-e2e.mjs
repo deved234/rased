@@ -25,7 +25,13 @@ const sink=()=>{const file=join(profile,'telemetry-fixture-sink/fixture-events.j
 async function boot(){child=startApp({exe,app,profile,port});ws=await pageWs(port);await eventually(()=>ev('!!window.rased'));await ev('document.querySelector(".splash-enter")?.click()')}
 async function graceful(){await ev('window.rased.confirmClose(true);true');await eventually(()=>child.exitCode,code=>code!==null,15000);await eventually(async()=>{try{await fetch(`http://127.0.0.1:${port}/json/list`);return false}catch{return true}})}
 try{
- await boot();await ev('window.rased.analyticsConsent("enable")')
+ await boot()
+ await ev('window.rased.updateSettings({mostaqlEnabled:true,khamsatEnabled:true,nafezlyEnabled:true,kafEnabled:true});Promise.all([window.rased.resume(),window.rased.resumeKhamsat(),window.rased.resumeNafezly()])')
+ await ev('window.rased.refresh()');await new Promise(resolve=>setTimeout(resolve,500))
+ const blocked=await ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth(),window.rased.getNafezlyHealth(),window.rased.getKafHealth()])')
+ check('all four collectors stay idle before acceptance even after resume/refresh requests',blocked.every(h=>!h.lastAttemptAt&&!h.checking))
+ await ev('window.rased.updateSettings({khamsatEnabled:false,nafezlyEnabled:false,kafEnabled:false});window.rased.pause()')
+ await ev('window.rased.analyticsConsent("enable")')
  await ev('window.rased.updateSettings({mostaqlEnabled:true})');await ev('window.rased.resume()')
  await eventually(()=>ev('window.rased.getHealth()'),h=>!!h.lastSuccessAt,15000);await ev('window.rased.pause()')
  await eventually(()=>counters().success===1)

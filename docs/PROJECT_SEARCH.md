@@ -14,6 +14,8 @@ Category keyword rules keep their existing notification semantics: they use titl
 
 Typing waits 300ms, and composing text is not searched until composition ends. Older results remain available during refresh, with a busy indication. Failure shows a retry action instead of pretending there are no matches. Editing notes/drafts or receiving enriched details refreshes matching results.
 
+Each actual refresh owns a separate request generation, including live updates. Superseded requests cross IPC as expected cancellation rather than Electron handler failures; they neither replace newer results nor show an error banner. The progress message appears only after 200ms and floats over the list's lower corner, so quick refreshes neither flash, move the toolbar nor take list height. The numeric limits below are unchanged. Genuine query failures keep their warning visible until a successful retry.
+
 New matching projects can stay behind the new-arrivals button while you read. A snapshot ceiling keeps them deferred even if an older row changes; explicitly revealing arrivals or changing the query advances that ceiling. Pagination preserves the current window. Total/unread counters include deferred matches; load-more counts describe the current window.
 
 ## Implementation and verification

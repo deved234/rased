@@ -11,6 +11,7 @@ vi.mock('electron', () => ({ utilityProcess: { fork: () => {
 import { SearchService } from '../src/main/search/service.js'
 import { SearchCacheBuilder } from '../src/main/search/cacheBuilder.js'
 import { defaultFilterDefinition } from '../src/shared/types.js'
+import { searchReply, unwrapSearchReply } from '../src/shared/searchReply.js'
 
 type Child = EventEmitter & { postMessage: ReturnType<typeof vi.fn>; kill: ReturnType<typeof vi.fn> }
 const child = (): Child => runtime.children.at(-1) as Child
@@ -60,6 +61,18 @@ describe('isolated search lifecycle', () => {
     const next = service.page('page', defaultFilterDefinition(), 50, 0), replacement = child()
     expect(replacement).not.toBe(c); replacement.emit('message', { ready: true }); response(replacement)
     expect((await next).total).toBe(4)
+  })
+  it('settles an invalidated active request as cancellation when a newer page is waiting', async () => {
+    const first = searchReply(service.page('page', defaultFilterDefinition(), 50, 0))
+    const c = child(); c.emit('message', { ready: true })
+    service.invalidate()
+    const next = searchReply(service.page('page', { ...defaultFilterDefinition(), search: 'latest' }, 50, 0))
+    response(c)
+    expect(await first).toEqual({ status: 'superseded' })
+    await vi.advanceTimersByTimeAsync(200)
+    expect(c.postMessage.mock.calls.at(-1)![0].definition.search).toBe('latest')
+    response(c)
+    expect(unwrapSearchReply(await next)).toMatchObject({ total: 4, unread: 2, revision: 1 })
   })
   it('rejects every request on close, waits for exit, and never replaces after close', async () => {
     const active = service.page('page', defaultFilterDefinition(), 50, 0).catch(e => e.message)

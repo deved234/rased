@@ -76,7 +76,7 @@ html[lang="en"][data-sidebar="expanded"] { --side-w: 236px; }
 .list-pane {
   flex: 1 1 auto; min-inline-size: 320px;
   display: flex; flex-direction: column; min-block-size: 0;
-  container-type: inline-size;
+  container-type: inline-size; position: relative;
 }
 .preview-pane {
   flex: 0 0 min(calc(var(--preview-ratio, 0.32) * 100%), calc(100% - 320px));
@@ -99,6 +99,9 @@ html[lang="en"][data-sidebar="expanded"] { --side-w: 236px; }
 .list-scroll { flex: 1; overflow-y: auto; padding: 8px 14px 20px; position: relative; }
 .list-head { display: flex; align-items: baseline; gap: 10px; padding: 8px 2px; color: var(--muted); font-size: 0.9rem; }
 .list-head strong { color: var(--text); }
+/* Floats over the list so showing it never shifts the toolbar or steals list height at 900px/125%. */
+.search-progress { position: absolute; inset-block-end: 12px; inset-inline-end: 14px; z-index: 2; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--panel-2); pointer-events: none; visibility: hidden; }
+.search-progress.active { visibility: visible; }
 .list-toolbar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; flex-shrink: 0; padding: 10px 14px; border-block-end: 1px solid var(--border); }
 .list-toolbar > * { flex-shrink: 0; }
 .list-toolbar .filter-trigger { margin-inline-start: auto; }

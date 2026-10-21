@@ -42,13 +42,33 @@ try {
   await boot()
   const currentDisclosure = (await status()).disclosure
   check('fresh consent is unknown and no identity exists', (await status()).state === 'unknown' && !(await status()).reference)
+  await ev('document.querySelector(".splash-enter")?.click()')
+  await eventually(() => ev('!!document.querySelector(".analytics-access")'))
+  check('configured first launch presents accept or exit before feature views mount', !(await status()).accessAllowed && await ev('!document.querySelector(".sidebar") && !!document.querySelector(".analytics-consent-actions .primary") && document.body.innerText.includes("خروج") && document.body.innerText.includes("شرط")'))
+  const accessShots = resolve('.local/acceptance-required-2026-10-21/screenshots'); mkdirSync(accessShots, { recursive: true })
+  for (const language of ['ar', 'en']) {
+    if (language === 'en') await ev('document.querySelector(".analytics-access-heading button").click()')
+    await eventually(() => ev(`document.querySelector('.analytics-access').getAttribute('lang')===${JSON.stringify(language)}`))
+    check(language + ' onboarding has no hidden feature view or horizontal overflow', await ev('!document.querySelector(".sidebar") && document.documentElement.scrollWidth<=innerWidth+2'))
+    writeFileSync(join(accessShots, language + '-first-launch.png'), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })).data, 'base64'))
+  }
+  await ev('document.querySelector(".analytics-access-heading button").click()')
   await ev('window.rased.openProjectExternal(1)'); await flush()
   check('normal app actions before consent send no analytics', events().length === 0)
   check('renderer cannot invent arbitrary capture events', await ev('window.rased.track === undefined && window.rased.capture === undefined'))
   check('unknown consent actions are rejected', !(await ev('window.rased.analyticsConsent("made-up")')).ok)
   await ev('window.rased.analyticsConsent("disable")'); await stop(); await boot()
   check('decline survives real restart without identity', (await status()).state === 'disabled' && !(await status()).reference)
-  check('enable succeeds through actual preload/main/worker', (await ev('window.rased.analyticsConsent("enable")')).ok)
+  await eventually(() => ev('!!document.querySelector(".analytics-consent-actions .primary") && !document.querySelector(".analytics-consent-actions .primary").disabled'))
+  const gateLanguage = await ev('document.querySelector(".analytics-access").getAttribute("lang")'), chosenLanguage = gateLanguage === 'ar' ? 'en' : 'ar'
+  await ev('document.querySelector(".analytics-access-heading button").click()')
+  await eventually(() => ev(`document.querySelector('.analytics-access').getAttribute('lang')===${JSON.stringify(chosenLanguage)}`))
+  await ev('document.querySelector(".analytics-consent-actions .primary").click()')
+  await eventually(async () => (await status()).accessAllowed)
+  await eventually(() => ev('!!document.querySelector(".sidebar")'))
+  check('accepting in the startup screen unlocks the real application', await ev('!!document.querySelector(".sidebar") && !document.querySelector(".analytics-access")'))
+  check('the startup-screen language choice persists into the workspace after acceptance', (await ev('window.rased.getSettings()')).language === chosenLanguage)
+  await ev(`window.rased.updateSettings({language:${JSON.stringify(gateLanguage)}})`)
   const identity = (await status()).reference
   check('identity appears only after consent', /^[a-f0-9-]{36}$/.test(identity))
   await ev('window.rased.recordUiUsage("projects"); window.rased.recordUiUsage("detail")')
@@ -86,6 +106,8 @@ try {
   await ev('window.rased.analyticsConsent("disable")'); const before = events().length
   await ev('window.rased.openProjectExternal(1)'); await flush()
   check('revocation clears queued events and stops subsequent capture', (await status()).queued === 0 && events().length === before)
+  await eventually(() => ev('!!document.querySelector(".analytics-access")'))
+  check('withdrawal locks feature views but retains deletion support', !(await status()).accessAllowed && await ev('!document.querySelector(".sidebar") && !!document.querySelector(".analytics-reference")'))
   check('stopping retains the reference for a deletion request', (await status()).reference === identity)
   await ev('window.rased.analyticsConsent("forget")')
   check('forget removes local reference and keeps sharing disabled', !(await status()).reference && (await status()).state === 'disabled')
@@ -116,15 +138,24 @@ try {
   check('no new activity is captured before renewed policy consent', events().length === beforePolicyConsent && (await status()).queued === 0)
   await ev('window.rased.analyticsConsent("enable")')
   check('renewed consent preserves the installation reference under the new disclosure', (await status()).state === 'enabled' && (await status()).reference === retainedReference && (await status()).disclosure === currentDisclosure)
+  // 0.9.1 shipped the voluntary v3 disclosure; its opt-in must not carry into the required-acceptance policy.
+  await stop()
+  writeFileSync(consentFile, JSON.stringify({ ...JSON.parse(readFileSync(consentFile, 'utf8')), disclosure: '2026-10-21-v3' }))
+  await boot()
+  await eventually(() => ev('!!document.querySelector(".analytics-access")'))
+  check('a published 0.9.1 (v3) opt-in requires renewed acceptance behind the gate', (await status()).state === 'unknown' && !(await status()).accessAllowed && (await status()).reference === retainedReference && await ev('!document.querySelector(".sidebar")'))
+  await ev('window.rased.analyticsConsent("enable")')
+  check('accepting after v3 restores access with the same reference', (await status()).accessAllowed && (await status()).reference === retainedReference)
   const diagnostics = new DatabaseSync(join(profile, 'rased.db'))
   check('no uncaught errors through real IPC/worker flows', diagnostics.prepare("SELECT COUNT(*) AS n FROM diagnostics WHERE status='uncaught'").get().n === 0)
   diagnostics.close()
-  // A decline is durable across disclosure changes; it must not be re-solicited.
+  // A decline stays disabled: the new distribution gate never silently enables it.
   await ev('window.rased.analyticsConsent("disable")'); await stop()
   const declined = JSON.parse(readFileSync(consentFile,'utf8'))
-  writeFileSync(consentFile,JSON.stringify({...declined,disclosure:'2026-10-17-v1'}))
+  writeFileSync(consentFile,JSON.stringify({...declined,disclosure:'2026-10-21-v3'}))
   await boot()
-  check('old explicit decline stays disabled and does not show the banner',(await status()).state==='disabled' && (await status()).prompted)
+  await eventually(() => ev('!!document.querySelector(".analytics-access")'))
+  check('old explicit decline stays disabled behind the disclosed access requirement',(await status()).state==='disabled' && !(await status()).accessAllowed)
   // Actual main/worker cleanup failure remains visible after identity removal.
   await ev('window.rased.analyticsConsent("enable")')
   writeFileSync(fixture,JSON.stringify({purgeFail:true}))
@@ -161,6 +192,10 @@ try {
   writeFileSync(fixture,'{"purgeAckDelay":1400}'); await boot()
   await eventually(async()=>!(await status()).purgePending,Boolean,15000)
   check('pending purge resumes after real restart and delayed worker acknowledgement without enabling collection',(await status()).state==='disabled' && !(await status()).reference)
+  await eventually(() => ev('!!document.querySelector(".analytics-consent-actions")'))
+  await ev('Array.from(document.querySelectorAll(".analytics-consent-actions button")).find(button=>button.textContent==="Exit"||button.textContent==="خروج").click();true')
+  await eventually(() => child.exitCode, value => value !== null, 15000)
+  check('exit from the access screen closes the process instead of hiding to tray', child.exitCode !== null)
   console.log(`TELEMETRY E2E PASSED (${passed} assertions). TEMP profile: ${profile}`)
 } catch (error) { console.error(error); console.error('Retained TEMP profile:', profile); process.exitCode = 1 }
 finally { if (child) await stopApp(child) }

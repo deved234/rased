@@ -317,4 +317,12 @@
 .analytics-settings p, .analytics-settings li { line-height: 1.8; }
 .analytics-settings .actions { flex-wrap: wrap; margin-block: 16px; }
 .analytics-reference { display: block; overflow-wrap: anywhere; margin-block: 12px; }
+.analytics-access { flex: 1; min-block-size: 0; overflow: auto; padding: clamp(16px, 3vw, 40px); background: var(--bg); }
+.analytics-access-card { max-inline-size: 880px; margin-inline: auto; padding: clamp(16px, 3vw, 32px); border: 1px solid var(--border); border-radius: var(--radius-lg, 16px); background: var(--panel); }
+.analytics-access-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.analytics-access-heading img { inline-size: 48px; block-size: 48px; }
+.analytics-access-heading h1, .analytics-access-heading p { margin-block: 4px; }
+.analytics-access-heading > button { margin-inline-start: auto; }
+.analytics-access-card p, .analytics-access-card li { line-height: 1.8; overflow-wrap: anywhere; }
+.analytics-access .analytics-consent-actions { position: sticky; inset-block-end: 0; padding-block: 14px; border-block-start: 1px solid var(--border); background: var(--panel); z-index: 1; }
 .analytics-forget { margin-block-start: 20px; }

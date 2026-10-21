@@ -68,7 +68,7 @@ export class TelemetryService {
   private allowed(): boolean { return !this.closed && !this.blocked && this.available() && !!this.worker && this.consent.snapshot().state === 'enabled' && !this.consent.snapshot().purgePending }
   status(): AnalyticsStatus {
     const c = this.consent.snapshot()
-    return { available: this.available(), state: c.state, disclosure: TELEMETRY_DISCLOSURE, prompted: c.prompted, reference: c.identity, purgePending: c.purgePending === true, ...this.summary }
+    return { accessAllowed: !this.available() || (!this.closed && !this.blocked && c.state === 'enabled' && !c.purgePending), available: this.available(), state: c.state, disclosure: TELEMETRY_DISCLOSURE, prompted: c.prompted, reference: c.identity, purgePending: c.purgePending === true, ...this.summary }
   }
   private post(message: TelemetryMessage): void {
     try { this.worker?.postMessage(message) } catch { this.summary.transport = 'unavailable' }
@@ -113,6 +113,7 @@ export class TelemetryService {
     if (action === 'enable' && !this.available()) throw Error('analytics-unavailable')
     // Gate before persistence/await so no fresh event crosses a revoke click.
     this.blocked = true
+    this.options.changed()
     let next
     try { next = this.consent.change(action) }
     catch {
@@ -125,6 +126,8 @@ export class TelemetryService {
       this.options.changed()
       throw Error('analytics-write-failed')
     }
+    // Publish the persisted withdrawal/purge marker before any worker await.
+    this.options.changed()
     if (action === 'forget') {
       try {
         await this.purgeWorker()

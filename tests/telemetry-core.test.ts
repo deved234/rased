@@ -19,6 +19,25 @@ const store = (now = () => Date.parse('2026-10-17T12:15:00Z')): TelemetryStore =
 afterEach(() => { for (const s of stores.splice(0)) s.close(); for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true }); vi.unstubAllEnvs() })
 
 describe('Analytics consent and identity', () => {
+  it('requires acceptance only in configured builds and does not lock accepted use on a transport outage', async () => {
+    const dir = root(), consent = new ConsentStore(dir)
+    const options = { root: dir, entry: 'not started', version: '0.9.1', language: 'en' as const, windowsFamily: '10' as const, config: null, changed: () => {} }
+    const dev = new TelemetryService(options)
+    const configured = new TelemetryService({ ...options, fixture: true })
+    expect(dev.status()).toMatchObject({ available: false, accessAllowed: true })
+    expect(configured.status()).toMatchObject({ available: true, accessAllowed: false })
+    consent.change('enable')
+    const accepted = new TelemetryService({ ...options, fixture: true })
+    expect(accepted.status()).toMatchObject({ accessAllowed: true, transport: 'unavailable' })
+    consent.change('disable')
+    expect(new TelemetryService({ ...options, fixture: true }).status().accessAllowed).toBe(false)
+    consent.change('enable')
+    const file = join(dir, 'telemetry/consent.json')
+    writeFileSync(file, JSON.stringify({ ...consent.snapshot(), disclosure: '2026-10-21-v3' }))
+    const upgraded = new TelemetryService({ ...options, fixture: true })
+    expect(upgraded.status()).toMatchObject({ state: 'unknown', accessAllowed: false })
+    await Promise.all([dev.close(), configured.close(), accepted.close(), upgraded.close()])
+  })
   it('terminates the old sender after a failed consent write and cannot revive it on wake', async () => {
     const dir = root(), entry = join(dir, 'worker.cjs')
     writeFileSync(entry, `const {parentPort}=require('node:worker_threads'); parentPort.on('message',m=>parentPort.postMessage({type:'status',request:m.request,transport:'idle'})); parentPort.postMessage({type:'status',transport:'idle'});`)

@@ -1,5 +1,6 @@
 import { recordStartupFailure } from './startupFailure.js'
 import { SearchService } from './search/service.js'
+import { searchReply } from '../shared/searchReply.js'
 import { SearchCacheBuilder } from './search/cacheBuilder.js'
 import { searchCacheReady } from '../storage/searchCache.js'
 import { KafController } from './kaf.js'
@@ -152,6 +153,7 @@ async function activateExtensionUrl(raw:string):Promise<void> {
   if (!IS_PACKAGED) raw = raw.replace(/^rased-dev:/, 'rased:')
   const ticket=parseExtensionTicket(raw);if(!ticket)return
   if(!extensionReady){if(pendingExtensionUrls.size<10)pendingExtensionUrls.add(raw);return}
+  if (!applicationAccessAllowed()) { win?.show(); return }
   if(!extension||!await extension.activate(ticket)){
     win?.show();win?.webContents.send(IPC.openSettings)
     if(!testHarness)void dialog.showMessageBox({type:'info',message:settings.language==='ar'?'تعذر بدء التقديم السريع. راجع ربط Chrome وإعدادات القالب، أو ابدأ من بطاقة المشروع.':'Quick Apply could not start. Check Chrome pairing and your template, or start from the project card.'})
@@ -255,6 +257,7 @@ const notificationActivation = new NotificationActivationController(activationSc
   claim: token => db?.isOpen ? claimNotificationActivation(db, token) : null,
   open: async destination => {
     if (quitRequested) return { launch: 'failed', foreground: 'not-attempted', reason: 'quitting', durationMs: 0 }
+    if (!applicationAccessAllowed()) { win?.show(); return { launch: 'failed', foreground: 'not-attempted', reason: 'analytics-acceptance-required', durationMs: 0 } }
     if (testHarness) {
       testHarness.record('open-external', destination.url)
       return { launch: 'accepted', foreground: 'not-attempted', durationMs: 0 }
@@ -282,8 +285,14 @@ const notificationActivation = new NotificationActivationController(activationSc
   }
 })
 
+const pendingConsentActivations = new Set<string>()
 function dispatchNotificationActivation(raw: string): void {
   notificationBoot = true
+  if (telemetry && !applicationAccessAllowed()) {
+    if (pendingConsentActivations.size < 10) pendingConsentActivations.add(raw)
+    win?.show()
+    return
+  }
   const notification = activeNotificationActivations.get(raw)
   if (notification) { activeNotifications.delete(notification); activeNotificationActivations.delete(raw) }
   void trackWork(notificationActivation.activate(raw))
@@ -305,7 +314,30 @@ function broadcast(channel: string, payload: unknown): void {
 }
 
 function notificationAllowed(): boolean {
-  return notificationsAllowed(settings, Date.now(), quitRequested)
+  return applicationAccessAllowed() && notificationsAllowed(settings, Date.now(), quitRequested)
+}
+
+function applicationAccessAllowed(): boolean { return telemetry?.status().accessAllowed ?? true }
+let analyticsServicesReady = false
+let lastAnalyticsAccess: boolean | undefined
+function syncAnalyticsAccess(): void {
+  if (!analyticsServicesReady || quitRequested) return
+  const allowed = applicationAccessAllowed()
+  if (lastAnalyticsAccess === allowed) return
+  lastAnalyticsAccess = allowed
+  if (!allowed) {
+    activeRss?.abort(); khamsatAbort?.abort(); nafezlyAbort?.abort()
+    enrichQueue.abortActive(); detailsFetcher.abortActive(); nafezlyFacts.abortActive()
+    aiService?.cancel(); extension?.cancel()
+    compactWin?.close()
+  }
+  // The access gate is separate from per-source pauses/settings/backoff.
+  scheduleNext(); scheduleKhamsat(0); scheduleNafezly(0); kaf?.settingsChanged()
+  if (allowed) {
+    void trackWork(notificationActivation.start())
+    const pending = [...pendingConsentActivations]; pendingConsentActivations.clear()
+    for (const raw of pending) dispatchNotificationActivation(raw)
+  }
 }
 
 const singleInstance = app.requestSingleInstanceLock()
@@ -647,7 +679,7 @@ function scheduleKhamsat(delayMs?: number): void {
   if (khamsatTimer) clearTimeout(khamsatTimer)
   khamsatTimer = null
   khamsatNextAttemptMs = null
-  if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) { emitKhamsatHealth(); return }
+  if (!applicationAccessAllowed() || !db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) { emitKhamsatHealth(); return }
   const state = getSourceState(db, KHAMSAT_SOURCE)
   const backoff = state.backoffUntil ? Math.max(0, Date.parse(state.backoffUntil) - Date.now()) : 0
   const delay = Math.max(delayMs ?? 5000, backoff)
@@ -657,7 +689,7 @@ function scheduleKhamsat(delayMs?: number): void {
 }
 
 async function runKhamsatCycle(): Promise<void> {
-  if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) return
+  if (!applicationAccessAllowed() || !db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatInFlight) return
   const stored = getSourceState(db, KHAMSAT_SOURCE)
   if (stored.backoffUntil && Date.parse(stored.backoffUntil) > Date.now()) { scheduleKhamsat(); return }
   khamsatInFlight = true
@@ -667,7 +699,7 @@ async function runKhamsatCycle(): Promise<void> {
   try {
     saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
     const result = await fetchKhamsatRequests(khamsatAbort.signal, testHarness?.fetchImpl)
-    if (!db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
+    if (!applicationAccessAllowed() || !db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
     const previous = getSourceState(db, KHAMSAT_SOURCE)
@@ -706,7 +738,7 @@ function scheduleNafezly(delayMs?: number): void {
   if (nafezlyTimer) clearTimeout(nafezlyTimer)
   nafezlyTimer = null
   nafezlyNextAttemptMs = null
-  if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) { emitNafezlyHealth(); return }
+  if (!applicationAccessAllowed() || !db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) { emitNafezlyHealth(); return }
   const state = getSourceState(db, NAFEZLY_SOURCE)
   const backoff = state.backoffUntil ? Math.max(0, Date.parse(state.backoffUntil) - Date.now()) : 0
   const jitter = Math.floor(Math.random() * 3001)
@@ -717,7 +749,7 @@ function scheduleNafezly(delayMs?: number): void {
 }
 
 async function runNafezlyCycle(): Promise<void> {
-  if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) return
+  if (!applicationAccessAllowed() || !db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) return
   const stored = getSourceState(db, NAFEZLY_SOURCE)
   if (stored.backoffUntil && Date.parse(stored.backoffUntil) > Date.now()) { scheduleNafezly(); return }
   nafezlyInFlight = true
@@ -727,7 +759,7 @@ async function runNafezlyCycle(): Promise<void> {
   try {
     saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
     const result = await fetchNafezlyFeed(nafezlyAbort.signal, testHarness?.fetchImpl)
-    if (!db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyAbort.signal.aborted) return
+    if (!applicationAccessAllowed() || !db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyAbort.signal.aborted) return
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
     const previous = getSourceState(db, NAFEZLY_SOURCE)
@@ -803,7 +835,7 @@ function sweepUncertain(nowMs: number): number[] {
 }
 
 async function runCycle(): Promise<RefreshResult> {
-  if (quitRequested) return { ok: false, started: false, reason: 'paused' }
+  if (quitRequested || !applicationAccessAllowed()) return { ok: false, started: false, reason: 'paused' }
   if (!db) return { ok: false, started: false, reason: 'no-db' }
   if (!settings.mostaqlEnabled) return { ok: false, started: false, reason: 'disabled' }
   if (paused) return { ok: false, started: false, reason: 'paused' }
@@ -817,7 +849,7 @@ async function runCycle(): Promise<RefreshResult> {
     saveSourceState(db, { ...getSourceState(db, SOURCE), lastAttemptAt: new Date(lastStartMs).toISOString() })
     const res = await fetchRss(RSS_URL, { signal: activeRss.signal, fetchImpl: testHarness?.fetchImpl })
     lastDurationMs = res.durationMs
-    if (!settings.mostaqlEnabled || activeRss.signal.aborted || paused || quitRequested || (!res.ok && res.kind === 'cancelled')) return { ok: false, started: true, reason: 'paused' }
+    if (!applicationAccessAllowed() || !settings.mostaqlEnabled || activeRss.signal.aborted || paused || quitRequested || (!res.ok && res.kind === 'cancelled')) return { ok: false, started: true, reason: 'paused' }
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
     if (!res.ok) {
@@ -906,7 +938,7 @@ function scheduleNext(): void {
     clearTimeout(timer)
     timer = null
   }
-  if (!settings.mostaqlEnabled || paused || quitRequested || !db || inFlight) {
+  if (!applicationAccessAllowed() || !settings.mostaqlEnabled || paused || quitRequested || !db || inFlight) {
     nextAttemptAtMs = null
     emitHealth()
     return
@@ -944,7 +976,7 @@ function persistScheduler(): void {
 const enrichQueue = new EnrichmentQueue({
   fetchImpl: testHarness?.fetchImpl,
   budget: detailBudget,
-  gateOpen: () => settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
+  gateOpen: () => applicationAccessAllowed() && settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
   onTransportFailure: (kind: DetailFetchKind | 'http5xx' | 'forbidden' | 'rate_limited', retryAfterMs: number | null) => {
     const mapped: FailureKind =
       kind === 'forbidden' ? 'forbidden' : kind === 'rate_limited' ? 'rate_limited' : kind === 'http5xx' ? 'http5xx' : kind === 'timeout' ? 'timeout' : 'network'
@@ -1035,7 +1067,7 @@ function detailTransportFailure(kind: DetailFetchKind | 'http5xx' | 'forbidden' 
 const detailsFetcher = new DetailsFetcher(() => db, {
   fetchImpl: testHarness?.fetchImpl,
   budget: detailBudget,
-  gateOpen: () => settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
+  gateOpen: () => applicationAccessAllowed() && settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
   onMetadata: (projectId, data) => {
     if (!db || !getProjectById(db, projectId)) return
     const p = getProjectById(db, projectId)!
@@ -1055,7 +1087,7 @@ const detailsFetcher = new DetailsFetcher(() => db, {
 
 const nafezlyFacts = new ProjectFactsFetcher({
   db: () => db, fetchImpl: testHarness?.fetchImpl,
-  gateOpen: () => !!db && !quitRequested && settings.nafezlyEnabled && !nafezlyPaused && !nafezlyInFlight && !(getSourceState(db, NAFEZLY_SOURCE).backoffUntil && Date.parse(getSourceState(db, NAFEZLY_SOURCE).backoffUntil!) > Date.now()),
+  gateOpen: () => applicationAccessAllowed() && !!db && !quitRequested && settings.nafezlyEnabled && !nafezlyPaused && !nafezlyInFlight && !(getSourceState(db, NAFEZLY_SOURCE).backoffUntil && Date.parse(getSourceState(db, NAFEZLY_SOURCE).backoffUntil!) > Date.now()),
   settled: id => { emitProjects([], [id]); emitDetails([id]) },
   failure: result => {
     if (!db || quitRequested) return
@@ -1103,6 +1135,7 @@ async function openProjectById(id: number, fromNotification: boolean, notificati
     telemetry?.activity('interface')
   }
   if (quitRequested) return { ok: false, error: 'quitting' }
+  if (!applicationAccessAllowed()) { win?.show(); return { ok: false, error: 'analytics-acceptance-required' } }
   const openedDb = db
   // Native toast closures carry their original URL even if history was purged.
   // IPC callers never supply this argument; all destinations still pass the allow-list.
@@ -1203,7 +1236,7 @@ function createWindow(): void {
   }
   // Bring the window forward on launch so it is not lost behind the IDE.
   win.once('ready-to-show', () => {
-    if (notificationBoot) { testHarness?.record('window-launch', { notificationBoot, visible: false }); return }
+    if (notificationBoot && applicationAccessAllowed()) { testHarness?.record('window-launch', { notificationBoot, visible: false }); return }
     win?.show()
     win?.focus()
     testHarness?.record('window-launch', { notificationBoot, visible: win?.isVisible() ?? false })
@@ -1213,7 +1246,7 @@ function createWindow(): void {
     if (quitRequested || !tray) return
     e.preventDefault()
     // closeBehavior 'quit' ends the app; default 'tray' hides to background.
-    if (settings.ui.closeBehavior === 'quit') {
+    if (settings.ui.closeBehavior === 'quit' || !applicationAccessAllowed()) {
       win?.webContents.send(IPC.requestClose, { quit: true })
       return
     }
@@ -1227,6 +1260,7 @@ function createWindow(): void {
 
 function trayLabel(): string {
   const ar = settings.language === 'ar'
+  if (!applicationAccessAllowed()) return ar ? 'RASED — في انتظار الموافقة أو الخروج' : 'RASED — acceptance required'
   const stateValue = overallSourceState([
     ...(settings.mostaqlEnabled ? [snapshotHealth()] : []),
     ...(settings.khamsatEnabled ? [snapshotKhamsatHealth()] : []),
@@ -1255,7 +1289,7 @@ function updateTray(): void {
       { label: ar ? 'فتح راصد' : 'Open RASED', click: () => win?.show() },
       { type: 'separator' },
       ...SOURCES.filter(source => settings[source.enabledKey]).flatMap(source => [
-        { label: ar ? `${sourceHealth[source.id].paused ? 'استئناف' : 'إيقاف مؤقت:'} ${source.ar}` : `${sourceHealth[source.id].paused ? 'Resume' : 'Pause'} ${source.en}`, click: toggleSourcePause[source.id] },
+        { label: ar ? `${sourceHealth[source.id].paused ? 'استئناف' : 'إيقاف مؤقت:'} ${source.ar}` : `${sourceHealth[source.id].paused ? 'Resume' : 'Pause'} ${source.en}`, enabled: applicationAccessAllowed(), click: toggleSourcePause[source.id] },
         { label: ar ? `كتم تنبيهات ${source.ar}` : `Mute ${source.en} alerts`, type: 'checkbox' as const, checked: !settings[source.alertsKey], click: () => saveSettings({ ...settings, [source.alertsKey]: !settings[source.alertsKey] }) }
       ]),
       {
@@ -1321,6 +1355,7 @@ function persistCompactBounds(): void {
 }
 
 function openCompact(): void {
+  if (!applicationAccessAllowed()) { win?.show(); return }
   if (compactWin) {
     if (compactWin.isMinimized()) compactWin.restore()
     compactWin.show()
@@ -1488,34 +1523,33 @@ async function shutdown(): Promise<void> {
 
 function registerIpc(): void {
   const localSender = (event: Electron.IpcMainInvokeEvent): boolean => !quitRequested && (event.sender === win?.webContents || event.sender === compactWin?.webContents)
-  const mainSender = (event: Electron.IpcMainInvokeEvent): boolean => event.sender === win?.webContents && !quitRequested
+  const mainSender = (event: Electron.IpcMainInvokeEvent, allowBlocked = false): boolean => event.sender === win?.webContents && !quitRequested && (allowBlocked || applicationAccessAllowed())
   ipcMain.handle(IPC.databaseReady, event => !!(localSender(event) && db?.prepare('SELECT id FROM projects LIMIT 1').all()))
   ipcMain.handle(IPC.getSidebarCounts, async event => {
     if (!localSender(event) || !searchService) throw new Error('search-unavailable')
-    const [all, saved] = await Promise.all([
+    return searchReply(Promise.all([
       searchService.page(`${event.sender.id}:sidebar:all`, sanitizeFilterDefinition(legacyToFilterDef({ displayFilter: settings.displayFilter })), 0, 0),
       searchService.page(`${event.sender.id}:sidebar:saved`, { ...defaultFilterDefinition(), scope: 'saved' }, 0, 0)
-    ])
-    return { unread: all.unread, saved: saved.total }
+    ]).then(([all, saved]) => ({ unread: all.unread, saved: saved.total })))
   })
   ipcMain.handle(IPC.matchProjectIds, (event, v) => {
     if (!localSender(event) || !searchService || !Array.isArray(v?.ids) || v.ids.length > 200 || !v.ids.every((id: unknown) => Number.isSafeInteger(id) && Number(id) > 0)) throw new Error('bad-search-request')
-    return searchService.match(`${event.sender.id}:matches`, sanitizeFilterDefinition(v.definition), [...new Set<number>(v.ids)])
+    return searchReply(searchService.match(`${event.sender.id}:matches`, sanitizeFilterDefinition(v.definition), [...new Set<number>(v.ids)]))
   })
   ipcMain.handle(IPC.getAnalyticsStatus, async event => {
-    if (!mainSender(event)) return null
+    if (!localSender(event)) return null
     if (testHarness && telemetry && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json'))) {
       try { if (JSON.parse(readFileSync(join(app.getPath('userData'), 'telemetry-fixture.json'), 'utf8')).flush === true) await telemetry.flushFixture() } catch { /* Scoped fixture only. */ }
     }
     return telemetry?.status() ?? null
   })
   ipcMain.handle(IPC.analyticsConsent, async (event, action: unknown) => {
-    if (!mainSender(event) || !telemetry || typeof action !== 'string' || !['enable', 'disable', 'later', 'forget'].includes(action)) return { ok: false, error: 'bad-request' }
+    if (!mainSender(event, true) || !telemetry || typeof action !== 'string' || !['enable', 'disable', 'later', 'forget'].includes(action)) return { ok: false, error: 'bad-request' }
     try { await telemetry.change(action as 'enable' | 'disable' | 'later' | 'forget'); return { ok: true } }
     catch (error) { return { ok: false, error: error instanceof Error && error.message === 'forget-incomplete' ? 'forget-incomplete' : 'analytics-unavailable' } }
   })
   ipcMain.handle(IPC.analyticsAction, async (event, action: unknown) => {
-    if (!mainSender(event) || !telemetry) return { ok: false }
+    if (!mainSender(event, true) || !telemetry) return { ok: false }
     const reference = telemetry.status().reference
     if (action === 'copy-reference' && reference) { if (testHarness) testHarness.record('analytics-copy-reference', true); else clipboard.writeText(reference); return { ok: true } }
     if (action !== 'contact' || !reference) return { ok: false }
@@ -1607,7 +1641,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.confirmClose, (event, v: { quit: boolean }) => {
     if (event.sender !== win?.webContents) return
-    if (v.quit === true) return shutdown()
+    if (v.quit === true || !applicationAccessAllowed()) return shutdown()
     win?.hide()
     if (!hintShown) {
       hintShown = true
@@ -1818,7 +1852,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.previewFilterCount, (_e, v: { definition: unknown }) => {
     if (!localSender(_e) || !searchService) throw new Error('search-unavailable')
     const def = sanitizeFilterDefinition(v.definition)
-    return searchService.page(`${_e.sender.id}:preview:${def.scope}`, def, 0, 0).then(({ total, unread }) => ({ total, unread }))
+    return searchReply(searchService.page(`${_e.sender.id}:preview:${def.scope}`, def, 0, 0).then(({ total, unread }) => ({ total, unread })))
   })
   ipcMain.handle(IPC.queryProjectsPage, (_e, v: { definition: unknown; limit: unknown; offset: unknown; window?: { ceilingId?: unknown } }) => {
     if (!localSender(_e) || !db || !searchService) throw new Error('search-unavailable')
@@ -1832,7 +1866,7 @@ function registerIpc(): void {
       for (const id of ids) { const p = getProjectById(db, id); if (p) enrichQueue.enqueue(id, p.url) }
       void trackWork(enrichQueue.pump())
     }
-    return searchService.page(`${_e.sender.id}:page:${def.scope}`, def, limit, offset, { ceilingId })
+    return searchReply(searchService.page(`${_e.sender.id}:page:${def.scope}`, def, limit, offset, { ceilingId }))
   })
   ipcMain.handle(IPC.testNotification, () => sendTestNotification())
   ipcMain.handle(IPC.openWindowsNotificationSettings, async event => {
@@ -2100,14 +2134,14 @@ async function boot(): Promise<void> {
   settings = loadSettings()
   startupStage = 'later'
   if (testHarness && existsSync(join(app.getPath('userData'), 'startup-failure.json'))) throw Error('synthetic startup failure')
-  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, windowsFamily: Number(osRelease().split('.')[2]) >= 22000 ? '11' : process.platform === 'win32' ? '10' : 'other', config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) broadcast(IPC.analyticsChanged, telemetry.status()) } })
+  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, windowsFamily: Number(osRelease().split('.')[2]) >= 22000 ? '11' : process.platform === 'win32' ? '10' : 'other', config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) { syncAnalyticsAccess(); broadcast(IPC.analyticsChanged, telemetry.status()) } } })
   telemetry.start(notificationBoot)
   aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi, result => telemetry?.record('proposal_result', result))
   cleanupNotificationActivations(db)
   notificationCleanupTimer = setInterval(() => { if (!quitRequested && db?.isOpen) cleanupNotificationActivations(db) }, 60 * 60 * 1000)
   notificationCleanupTimer.unref()
   if (!testHarness) await browserLauncher.prepare()
-  await notificationActivation.start()
+  if (applicationAccessAllowed()) await notificationActivation.start()
   for (const arg of process.argv) if (parseNotificationActivation(arg, activationScheme)) dispatchNotificationActivation(arg)
   // Retire only the old embedded-browser profiles, leaving all other app data intact.
   try {
@@ -2117,7 +2151,7 @@ async function boot(): Promise<void> {
     recordDiagnostic(db, { at: new Date().toISOString(), endpointKind: 'quick-apply', status: 'retirement-failed', durationMs: 0, itemCount: null, errorCategory: 'legacy-browser-cleanup-failed', detail: null })
   }
   try{
-    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>settings,extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
+    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>applicationAccessAllowed() ? settings : { ...settings, quickApply: { ...settings.quickApply, enabled: false } },extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
     await extension.start()
   }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
   if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
@@ -2174,7 +2208,7 @@ async function boot(): Promise<void> {
     updateTimer.unref()
   }
   kaf = new KafController({
-    db: () => db, settings: () => settings, runId, fetchImpl: testHarness?.fetchImpl,
+    db: () => db, settings: () => settings, accessAllowed: applicationAccessAllowed, runId, fetchImpl: testHarness?.fetchImpl,
     health: h => { telemetry?.health('kaf', h); broadcast(IPC.kafHealthChanged, h); updateTray() },
     projects: emitProjects, details: id => emitDetails([id]), flush: () => flushNotifications(null).then(() => undefined)
   })
@@ -2182,6 +2216,8 @@ async function boot(): Promise<void> {
   kaf.start(!!testHarness)
   createWindow()
   createTray()
+  analyticsServicesReady = true
+  syncAnalyticsAccess()
   extensionReady=true
   for(const url of pendingExtensionUrls)void activateExtensionUrl(url)
   pendingExtensionUrls.clear()
@@ -2231,7 +2267,7 @@ async function boot(): Promise<void> {
 
   enrichTimer = setInterval(() => {
     void trackWork(nafezlyFacts.pump())
-    if (!settings.mostaqlEnabled || paused) return
+    if (!applicationAccessAllowed() || !settings.mostaqlEnabled || paused) return
     const swept = sweepUncertain(Date.now())
     if (swept.length > 0) {
       // Expired uncertain waits that just became notifiable: new to attention.

@@ -2,9 +2,9 @@
 
 2026-10-21 · RASED · david atef
 
-## إحصائيات الاستخدام الاختيارية
+## شرط إحصائيات الاستخدام
 
-في البناء المهيأ فقط، يمكنك الموافقة من الإعدادات على إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة حتى توافق، ولا يحد الرفض من الرصد أو التنبيهات أو الميزات. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة وعائلة Windows العامة، ونشاطًا يوميًا وملخصات رصد ونتائج ميزات من فئات محددة. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
+في البناء المهيأ فقط، تقبل صراحة من شاشة البدء إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة قبل القبول. القبول شرط لتشغيل الرصد والتنبيهات والميزات في هذه النسخة؛ عند الرفض يمكنك الخروج وتبقى بياناتك المحلية محفوظة. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة وعائلة Windows العامة، ونشاطًا يوميًا وملخصات رصد ونتائج ميزات من فئات محددة. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
 
 ## الاحتفاظ وإيقاف الإحصائيات وطلب الحذف
 
@@ -12,7 +12,7 @@
 
 ## حالة التحقق من حذف الإحصائيات
 
-التحقق النهائي من اكتمال حذف الأحداث لدى PostHog لم يكتمل بعد. يمكنك طلب الحذف؛ لن نؤكد اكتماله قبل التحقق من المزود، وقد تتأخر المعالجة. تظل المشاركة اختيارية ويمكن إيقافها في أي وقت.
+التحقق النهائي من اكتمال حذف الأحداث لدى PostHog لم يكتمل بعد. يمكنك طلب الحذف؛ لن نؤكد اكتماله قبل التحقق من المزود، وقد تتأخر المعالجة. يمكن سحب الموافقة في أي وقت؛ يتوقف الرصد والاستخدام وتعود شاشة القبول أو الخروج.
 
 ## اتصالات كاف
 
@@ -24,7 +24,7 @@
 
 ## ما يبقى على جهازك
 
-تُحفظ المشاريع والمقتطفات والوصف المجلوب، حالة القراءة والمحفوظات والملاحظات والفلاتر والإعدادات والسجل التشخيصي محليًا في SQLite ومجلد بيانات التطبيق. لا يحتاج الرصد حساب راصد أو خادمًا خاصًا، ولا تُرفع قاعدة المشاريع أو السجل التشخيصي تلقائيًا للمطور. إحصائيات الاستخدام الاختيارية المنفصلة موضحة أعلاه.
+تُحفظ المشاريع والمقتطفات والوصف المجلوب، حالة القراءة والمحفوظات والملاحظات والفلاتر والإعدادات والسجل التشخيصي محليًا في SQLite ومجلد بيانات التطبيق. لا يحتاج الرصد حساب راصد أو خادمًا خاصًا، ولا تُرفع قاعدة المشاريع أو السجل التشخيصي تلقائيًا للمطور. إحصائيات الاستخدام المنفصلة المشروطة بالقبول موضحة أعلاه.
 
 ## الاتصالات الخارجية
 
@@ -68,9 +68,9 @@
 
 2026-10-21 · RASED · david atef
 
-## Optional usage analytics
+## Required usage analytics acceptance
 
-Only a configured build can send limited usage analytics to PostHog US Cloud after explicit settings consent. Sharing starts off; declining never restricts monitoring, notifications or other features. Data includes a random installation identifier, version, language, broad Windows family, daily activity, aggregated monitoring counters and allow-listed feature outcomes. No name, project content or links, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
+Only a configured build can send limited usage analytics to PostHog US Cloud after explicit startup acceptance. Sharing starts off; this distribution requires acceptance to use its features. Declining leaves an exit option and preserves local data. Data includes a random installation identifier, version, language, broad Windows family, daily activity, aggregated monitoring counters and allow-listed feature outcomes. No name, project content or links, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
 
 ## Analytics retention, withdrawal and deletion requests
 
@@ -78,7 +78,7 @@ RASED sets no scheduled expiry or periodic deletion for previously sent analytic
 
 ## Analytics deletion verification status
 
-End-to-end verification of completed event deletion at PostHog is still pending. You can request deletion; completion will not be confirmed before provider verification, and processing may be delayed. Sharing remains optional and can be stopped at any time.
+End-to-end verification of completed event deletion at PostHog is still pending. You can request deletion; completion will not be confirmed before provider verification, and processing may be delayed. Acceptance can be withdrawn at any time; monitoring and use stop and the accept-or-exit screen returns.
 
 ## KAF connections
 
@@ -90,7 +90,7 @@ Your template, budget position and extra days remain local; optional settings ex
 
 ## Local data
 
-Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters, settings and diagnostics are stored locally in SQLite and the application data folder. Monitoring requires no RASED account or dedicated backend. The project database and diagnostics are not automatically uploaded to the developer. Separate optional usage analytics are described above.
+Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters, settings and diagnostics are stored locally in SQLite and the application data folder. Monitoring requires no RASED account or dedicated backend. The project database and diagnostics are not automatically uploaded to the developer. Separate usage analytics and the configured-distribution acceptance requirement are described above.
 
 ## External connections
 

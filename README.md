@@ -12,10 +12,10 @@
 
 ## التحميل والتشغيل
 
-حمّل **RASED-Setup-0.9.1.exe** من قسم **Assets** في صفحة الإصدار، ثم شغّل المثبت على **Windows x64**. لا تحتاج Node.js أو SQLite؛ ملفات Source code للمبرمجين فقط. المثبت غير موقّع حاليًا، وقد يعرض Windows تحذيرًا. تأكد من مصدر التحميل وقارن البصمة بملف `SHA256SUMS.txt`:
+حمّل **RASED-Setup-0.10.0.exe** من قسم **Assets** في صفحة الإصدار، ثم شغّل المثبت على **Windows x64**. لا تحتاج Node.js أو SQLite؛ ملفات Source code للمبرمجين فقط. المثبت غير موقّع حاليًا، وقد يعرض Windows تحذيرًا. تأكد من مصدر التحميل وقارن البصمة بملف `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.9.1.exe'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.10.0.exe'
 ```
 
 أول فحص ناجح لكل منصة يحفظ الموجود دون تنبيهات قديمة. بعدها ينبهك بالجديد بحسب فلاترك. إغلاق النافذة يبقي الرصد في الخلفية؛ للخروج الكامل استخدم قائمة أيقونة راصد بجوار الساعة. النقر على إشعار المشروع يفتح رابطه في المتصفح الافتراضي.
@@ -64,7 +64,7 @@ npm run dist
 
 `dist` ينشئ المثبت داخل `release/` دون نشر. اختبارات التكامل تستخدم ملفات مؤقتة وبيانات وهمية؛ لا تستخدم حساباتك أو مفاتيحك. [دليل المساهمة](CONTRIBUTING.md) يشرح الاختبارات الإضافية و[المعمارية](docs/ARCHITECTURE.md) تشرح تنظيم الكود. خطط العمل والمراجعات الداخلية وأدلة QA المولّدة ليست جزءًا من المستودع العام.
 
-إصدار **0.9.1** يفعّل إحصائيات الاستخدام الاختيارية بعد موافقة صريحة، مع توضيح أن التحقق النهائي من الحذف السحابي ما زال معلّقًا. ويحتفظ بتحسينات البحث في الأوصاف المحفوظة وملاحظاتك ومسوداتك اختياريًا، ويعزل البحث والفهرسة عن الرصد، مع تحسين تحديث النتائج واستعادة البيانات وبدء التشغيل. بعض أهداف الأداء ما زالت مؤجلة؛ راجع حدود القياس في دليل البحث. [تفاصيل الإصدار](docs/RELEASE_0.9.1.md) · [دليل الإشعارات](docs/NOTIFICATIONS.md) · [سجل التغييرات](CHANGELOG.md).
+إصدار **0.10.0** يجعل الموافقة على إحصائيات الاستخدام المحدودة **شرطًا لاستخدام النسخة الرسمية**. تظهر شاشة **«أوافق وأستخدم راصد / خروج»** قبل أي ميزة، ولا يبدأ الرصد أو الجمع قبل القبول. من وافق في 0.9.1 يحتاج إلى موافقة جديدة، والرفض السابق لا يتحول إلى موافقة. التحقق النهائي من الحذف السحابي ما زال معلّقًا. يصلح الإصدار أيضًا وميض رسالة الخطأ في نتائج البحث، وما زالت بعض أهداف أداء البحث مؤجلة. [تفاصيل الإصدار](docs/RELEASE_0.10.0.md) · [دليل الإحصائيات](docs/ANALYTICS.md) · [دليل الإشعارات](docs/NOTIFICATIONS.md) · [سجل التغييرات](CHANGELOG.md).
 
 تفاصيل نقل الإعدادات والنسخ الاحتياطي والاستعادة موجودة في [دليل حماية البيانات](docs/BACKUP_AND_RESTORE.md).
 
@@ -76,7 +76,7 @@ npm run dist
 
 ## الخصوصية والترخيص
 
-البيانات محلية في `%APPDATA%\RASED`. الإصدار الرسمي 0.9.1 يتيح إرسال إحصائيات محدودة إلى PostHog بعد موافقتك الصريحة فقط، دون حذف دوري من راصد؛ يمكن طلب حذفها مع مراعاة سياسات المزود ومتطلبات القانون. التحقق النهائي من اكتمال حذف الأحداث لدى المزود لم يكتمل بعد، وهذا موضح قبل الموافقة؛ يمكن إيقاف الإرسال وطلب الحذف من الإعدادات. [دليل الإحصائيات وحدود الأرقام](docs/ANALYTICS.md). يتصل الجهاز بالمنصات وGitHub، وبموفر AI المختار عند استخدامه. مفاتيح AI مشفرة بتشفير Windows؛ قاعدة البيانات والملاحظات ليست مشفرة بواسطة التطبيق. اقرأ [الخصوصية](PRIVACY.md) و[الشروط](TERMS.md) قبل الاستخدام.
+البيانات محلية في `%APPDATA%\RASED`. النسخة الرسمية من 0.10.0 تشترط موافقتك الصريحة على إرسال إحصائيات محدودة إلى PostHog قبل الاستخدام، ويمكنك الخروج بدلًا من الموافقة أو سحبها لاحقًا. لا يوجد حذف دوري من راصد؛ يمكن طلب حذفها مع مراعاة سياسات المزود ومتطلبات القانون. التحقق النهائي من اكتمال حذف الأحداث لدى المزود لم يكتمل بعد، وهذا موضح قبل الموافقة؛ يمكن إيقاف الإرسال وطلب الحذف من الإعدادات. [دليل الإحصائيات وحدود الأرقام](docs/ANALYTICS.md). يتصل الجهاز بالمنصات وGitHub، وبموفر AI المختار عند استخدامه. مفاتيح AI مشفرة بتشفير Windows؛ قاعدة البيانات والملاحظات ليست مشفرة بواسطة التطبيق. اقرأ [الخصوصية](PRIVACY.md) و[الشروط](TERMS.md) قبل الاستخدام.
 
 راصد مستقل عن المنصات ولا يمثلها. [MIT](LICENSE) يخص الكود ولا يمنح حقوقًا في محتوى المنصات أو إذنًا باستخدامها. [رخص المكونات](resources/legal/THIRD_PARTY_NOTICES.txt) مرفقة بالتوزيع.
 
@@ -86,7 +86,7 @@ npm run dist
 
 RASED is a local Windows desktop app monitoring freelance opportunities on Mostaql, Nafezly, Khamsat and KAF. It offers Arabic/English UI, independent source controls, desktop alerts, filters, previews and local notes.
 
-Download **RASED-Setup-0.9.1.exe** from [Releases](https://github.com/deved234/rased/releases/latest). End users need neither Node.js nor SQLite. The installer is unsigned; verify its source and SHA-256 checksum. Existing users on 0.2.5+ can update inside Settings → RASED updates. See [0.9.1 release notes](docs/RELEASE_0.9.1.md) for optional, consent-based analytics and its pending cloud-deletion verification, alongside the existing search improvements.
+Download **RASED-Setup-0.10.0.exe** from [Releases](https://github.com/deved234/rased/releases/latest). End users need neither Node.js nor SQLite. The installer is unsigned; verify its source and SHA-256 checksum. Existing users on 0.2.5+ can update inside Settings → RASED updates. Since 0.10.0 the official build requires accepting limited usage analytics (**Agree & use RASED** or **Exit**) before monitoring or any feature starts. 0.9.1 participants accept again, and earlier declines stay declined. Development builds are exempt and send nothing. Cloud-deletion verification is still pending. See the [0.10.0 release notes](docs/RELEASE_0.10.0.md) and [analytics guide](docs/ANALYTICS.md).
 
 The optional [Proposal Assistant](docs/AI_ASSISTANT.md) supports Gemini, OpenAI and Claude with your own API keys and model selection, currently for Mostaql projects. [Quick Apply](docs/QUICK_APPLY.md) uses a manually installed Chrome extension for Mostaql/Nafezly only. It fills a draft using your normal browser session and **never submits it**. Monitoring needs no platform login; browser form filling does.
 

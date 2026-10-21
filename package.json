@@ -140,5 +140,5 @@
     "test:telemetry": "node scripts/telemetry-worker-test.mjs && node scripts/telemetry-e2e.mjs && node scripts/telemetry-lifecycle-e2e.mjs",
     "test:startup": "node scripts/test-database-startup.mjs"
   },
-  "version": "0.9.1"
+  "version": "0.10.0"
 }

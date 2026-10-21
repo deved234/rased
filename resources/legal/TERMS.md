@@ -2,6 +2,10 @@
 
 2026-10-21 · RASED · david atef
 
+## شرط إحصائيات النسخة المهيأة
+
+تتطلب النسخة الرسمية المهيأة قبول إرسال إحصائيات الاستخدام المحدودة الموضحة في الخصوصية عبر شاشة موافقة أو خروج قبل تشغيل الرصد والميزات. مجرد التثبيت أو التحديث لا يعني الموافقة ولا يبدأ الجمع. يمكنك سحب الموافقة والتوقف عن الاستخدام أو الخروج دون حذف بياناتك المحلية. لا يغير هذا الشرط رخصة MIT أو يلغي حقوقك القانونية. لا نؤكد صلاحية هذا الشرط في كل ولاية قضائية. نسخة التطوير والبناء غير المهيأ لا ترسل الإحصائيات ولا تطبق هذا الشرط.
+
 ## رصد كاف (كفيل سابقًا)
 
 يقرأ راصد قائمة المشاريع العامة على kafiil.com دون حساب، ويجلب تفاصيل المشروع عند فتحها. أول رصد صامت والتنبيهات للمشاريع المفتوحة المكتشفة حديثًا؛ المكتمل يبقى في السجل. الظهور في القائمة ليس إثباتًا لوقت النشر، والمنطقة الزمنية لوقت كاف غير مؤكدة. كاف وعلاماته ومحتوى المستخدمين تخص أصحابها؛ وصول القراءة لا يمنح إذن إعادة نشر أو جلب غير محدود. مساعد العروض والتقديم السريع لا يدعمان كاف حاليًا.
@@ -43,6 +47,10 @@
 # Terms of use
 
 2026-10-21 · RASED · david atef
+
+## Configured distribution analytics requirement
+
+The officially configured distribution requires explicit acceptance of the limited usage analytics described in Privacy through an accept-or-exit screen before monitoring and features start. Installing or updating alone is not acceptance and starts no collection. You can withdraw acceptance and stop using or exit without deleting local data. This condition does not change the MIT license or waive statutory rights. Its legal validity in every jurisdiction is not certified. Development and unconfigured builds send no analytics and do not apply this condition.
 
 ## KAF monitoring (formerly Kafiil)
 

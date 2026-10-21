@@ -15,7 +15,7 @@ import { SplashView } from './views/SplashView.js'
 import { CompactView } from './views/CompactView.js'
 const SettingsView = React.lazy(() => import('./views/SettingsView.js').then(module => ({ default: module.SettingsView })))
 import { useUpdates, UpdateBanner } from './views/UpdatesView.js'
-import { AnalyticsBanner } from './views/AnalyticsSettings.js'
+import { AnalyticsAccess } from './views/AnalyticsAccess.js'
 
 type Boot = 'loading' | 'slow' | 'error' | 'welcome' | 'ready'
 
@@ -191,7 +191,7 @@ export function App(): React.ReactElement {
 
   // Compact follower window: standalone view, never inside the main shell.
   if (route.name === 'compact') {
-    return <div className="desktop-shell"><Titlebar lang={lang} /><CompactView /></div>
+    return <div className="desktop-shell"><Titlebar lang={lang} /><AnalyticsAccess lang={lang}><CompactView /></AnalyticsAccess></div>
   }
 
   const memory: ListMemory =
@@ -211,7 +211,7 @@ export function App(): React.ReactElement {
   }
 
   return (
-    <div className="desktop-shell"><Titlebar lang={lang} /><div className="app">
+    <div className="desktop-shell"><Titlebar lang={lang} /><AnalyticsAccess lang={lang}><div className="app">
       <Sidebar
         lang={lang}
         route={route}
@@ -222,7 +222,6 @@ export function App(): React.ReactElement {
       />
       <div className="main">
         <UpdateBanner lang={lang} state={updateState} />
-        <AnalyticsBanner lang={lang} />
         <Topbar
           lang={lang}
           title={title}
@@ -301,6 +300,6 @@ export function App(): React.ReactElement {
         )}
         <Statusbar lang={lang} health={health} khamsatHealth={khamsatHealth} nafezlyHealth={nafezlyHealth} kafHealth={kafHealth} settings={settings} />
       </div>
-    </div></div>
+    </div></AnalyticsAccess></div>
   )
 }

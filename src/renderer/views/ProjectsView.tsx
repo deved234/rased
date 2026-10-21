@@ -19,6 +19,7 @@ import { Icon } from '../components/Icon.js'
 import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
 import { timeAgo } from '../format.js'
 import { ProjectFactsPanel } from '../components/ProjectFacts.js'
+import { isSearchSuperseded } from '@shared/searchReply.js'
 
 const PAGE = 50
 
@@ -70,6 +71,7 @@ export function ProjectsView({
   const [unread, setUnread] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [updating, setUpdating] = React.useState(false)
+  const [showUpdating, setShowUpdating] = React.useState(false)
   const [filterBusy, setFilterBusy] = React.useState(false)
   const filterMutation = React.useRef(false)
   const [drawer, setDrawer] = React.useState(false)
@@ -129,11 +131,19 @@ export function ProjectsView({
     if (scope !== 'saved') void patchSettings({ displayQuery: d })
   }
 
-  const fetchPage = React.useCallback(async (d: FilterDefinition, lim: number, off: number, my: number, reveal = false) => {
+  React.useEffect(() => {
+    if (!updating) { setShowUpdating(false); return }
+    const timer = setTimeout(() => setShowUpdating(true), 200)
+    return () => clearTimeout(timer)
+  }, [updating])
+
+  const fetchPage = React.useCallback(async (d: FilterDefinition, lim: number, off: number, reveal = false) => {
+    // Every invocation owns a generation, including a trailing live refresh.
+    // Sharing a generation let an older cancelled request overwrite newer UI.
+    const my = ++gen.current
     setUpdating(true)
     try {
       if (reveal) ceilingRef.current = undefined
-      setSearchError(false)
       const accumulated: ProjectWithUser[] = []
       let totalCount = 0, unreadCount = 0, visibleCount = 0, revision: number | undefined, restarts = 0
       for (let offset = off; offset < off + lim; offset += 200) {
@@ -155,18 +165,22 @@ export function ProjectsView({
       setUnread(unreadCount)
       setVisibleTotal(visibleCount)
       setLoading(false)
+      setSearchError(false)
+    } catch (error) {
+      if (gen.current !== my || isSearchSuperseded(error)) return
+      setSearchError(true)
+      setLoading(false)
     } finally { if (gen.current === my) setUpdating(false) }
   }, [])
 
   // initial load + reload on query change (generation-guarded).
   // Deps are intentionally the serialized query + limit (fetchPage is stable).
   React.useEffect(() => {
-    const my = ++gen.current
     const key = JSON.stringify(fullDef)
     if (queryKeyRef.current !== key) { ceilingRef.current = undefined; queryKeyRef.current = key }
     if (rowsRef.current.length) restoreRef.current = captureAnchor()
     setLoading(rowsRef.current.length === 0)
-    void fetchPage(fullDef, limit, 0, my).catch(() => { if (gen.current === my) { setSearchError(true); setLoading(false) } })
+    void fetchPage(fullDef, limit, 0)
   }, [JSON.stringify(fullDef), limit, fetchPage])
 
   React.useLayoutEffect(() => {
@@ -196,7 +210,6 @@ export function ProjectsView({
   // Background updates preserve the visible row anchor. New arrivals stay
   // outside the loaded window until explicitly revealed (or auto-reveal at top).
   React.useEffect(() => {
-    let alive = true
     let timer: ReturnType<typeof setTimeout> | undefined, first = 0, arrivals = false
     const off = rased.onProjectsChanged(e => {
       arrivals ||= e.newIds.length > 0
@@ -208,12 +221,11 @@ export function ProjectsView({
         const reveal = arrivals && ((!listRef.current || listRef.current.scrollTop <= 120) && liveRef.current.autoReveal || rowsRef.current.length === 0)
         arrivals = false
         restoreRef.current = captureAnchor()
-        const my = gen.current
         const d = { ...defRef.current, search: liveRef.current.search.trim() }
-        void fetchPage(d, liveRef.current.limit, 0, my, reveal).catch(() => { if (alive && my === gen.current) { setLoading(false); setSearchError(true) } })
+        void fetchPage(d, liveRef.current.limit, 0, reveal)
       }, Math.min(100, Math.max(0, 300 - (Date.now() - first))))
     })
-    return () => { alive = false; clearTimeout(timer); ++gen.current; off() }
+    return () => { clearTimeout(timer); ++gen.current; off() }
   }, [fetchPage])
 
   const openDetail = React.useCallback((id: number) => {
@@ -332,9 +344,9 @@ export function ProjectsView({
     <div className="split" ref={splitRef}>
       <div className="list-pane">
         {actionError && <div className="banner bad" role="alert">{actionError}</div>}
-        {searchError && <div className="banner bad" role="alert">{lang === 'ar' ? 'تعذر تحديث النتائج. النتائج السابقة قد تكون قديمة.' : 'Could not update results. Previous results may be stale.'} <button className="btn sm" onClick={() => { const my = ++gen.current; void fetchPage(fullDef, limit, 0, my).catch(() => { setSearchError(true); setLoading(false) }) }}>{lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}</button></div>}
+        {searchError && <div className="banner bad" role="alert">{lang === 'ar' ? 'تعذر تحديث النتائج. النتائج السابقة قد تكون قديمة.' : 'Could not update results. Previous results may be stale.'} <button className="btn sm" onClick={() => { void fetchPage(fullDef, limit, 0) }}>{lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}</button></div>}
         <MonitoringNotices source={def.source} health={sourceHealth} settings={settings} lang={lang} />
-        {updating && <div className="small muted" role="status">{lang === 'ar' ? 'جارٍ تحديث نتائج البحث…' : 'Updating search results…'}</div>}
+        <div className={showUpdating ? 'small muted search-progress active' : 'small muted search-progress'} role="status">{showUpdating ? (lang === 'ar' ? 'جارٍ تحديث نتائج البحث…' : 'Updating search results…') : '\u00a0'}</div>
         {def.source === 'all' && def.categoryFilter.mode === 'selected' && <div className="banner">{t.filterCategoryScope}</div>}
         <div className="list-toolbar">
           <div className="source-segment" role="group" aria-label={t.filterSource}>
@@ -376,8 +388,7 @@ export function ProjectsView({
               className="pill"
               onClick={() => {
                 restoreRef.current = { scrollTop: 0 }
-                const my = ++gen.current
-                void fetchPage(fullDef, limit, 0, my, true).catch(() => setSearchError(true))
+                void fetchPage(fullDef, limit, 0, true)
               }}
             >
               {fmt(t.newArrivals, { n: total - visibleTotal })}

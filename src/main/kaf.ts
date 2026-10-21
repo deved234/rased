@@ -13,6 +13,7 @@ import { markFacts, saveFetchedFacts } from '../storage/projectFacts.js'
 interface Deps {
   db: () => Db | null
   settings: () => AppSettings
+  accessAllowed?: () => boolean
   health: (health: SourceHealth) => void
   projects: (newIds: number[], changedIds: number[]) => void
   details: (id: number) => void
@@ -42,7 +43,7 @@ export class KafController {
   private count: number | null = null
   constructor(private readonly deps: Deps) {}
   private now(): number { return this.deps.now?.() ?? Date.now() }
-  private available(): boolean { return !this.closed && !this.sleeping && !this.paused && this.deps.settings().kafEnabled && !!this.deps.db() }
+  private available(): boolean { return (this.deps.accessAllowed?.() ?? true) && !this.closed && !this.sleeping && !this.paused && this.deps.settings().kafEnabled && !!this.deps.db() }
   private cooldown(): number { const db = this.deps.db(); return Math.max(this.memoryBackoff, db ? Date.parse(getSourceState(db, 'kaf').backoffUntil ?? '') || 0 : 0) }
   health(): SourceHealth {
     const db = this.deps.db(), s = db ? getSourceState(db, 'kaf') : null, backoff = this.cooldown()

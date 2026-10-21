@@ -2,7 +2,6 @@ import React from 'react'
 import { rased } from '../api.js'
 import type { AnalyticsStatus } from '@shared/telemetry.js'
 import { ConfirmDialog } from '../components/ui.js'
-import { go } from '../router.js'
 
 function useAnalytics(): [AnalyticsStatus | null, (next: AnalyticsStatus | null) => void] {
   const [status, setStatus] = React.useState<AnalyticsStatus | null>(null)
@@ -14,29 +13,7 @@ function useAnalytics(): [AnalyticsStatus | null, (next: AnalyticsStatus | null)
   }, [])
   return [status, setStatus]
 }
-export function AnalyticsBanner({ lang }: { lang: 'ar' | 'en' }): React.ReactElement | null {
-  const [status, setStatus] = useAnalytics()
-  const [busy, setBusy] = React.useState(false)
-  const [failed, setFailed] = React.useState(false)
-  if (!status?.available || status.prompted || status.state !== 'unknown') return null
-  const later = async (): Promise<void> => {
-    if (busy) return
-    setBusy(true)
-    try {
-      if (!(await rased.analyticsConsent('later')).ok) throw Error()
-      setStatus(await rased.getAnalyticsStatus())
-    } catch { setFailed(true) } finally { setBusy(false) }
-  }
-  return <aside className="analytics-banner" aria-label={lang === 'ar' ? 'إحصائيات اختيارية' : 'Optional analytics'}>
-    <p>{lang === 'ar' ? 'ساعد في تحسين راصد بإحصائيات استخدام محدودة. المشاركة مغلقة حتى تختار تفعيلها.' : 'Help improve RASED with limited usage analytics. Sharing stays off unless you enable it.'}</p>
-    <div className="actions">
-      <button className="btn" onClick={() => go({ name: 'settings', section: 'analytics' })}>{lang === 'ar' ? 'مراجعة الخيارات' : 'Review options'}</button>
-      <button className="btn" disabled={busy} onClick={() => void later()}>{lang === 'ar' ? 'ليس الآن' : 'Not now'}</button>
-    </div>
-    {failed && <p className="field-err" role="alert">{lang === 'ar' ? 'تعذر حفظ اختيارك؛ المشاركة ما زالت مغلقة.' : 'Could not save your choice; sharing is still off.'}</p>}
-  </aside>
-}
-export function AnalyticsSettings({ lang }: { lang: 'ar' | 'en' }): React.ReactElement {
+export function AnalyticsSettings({ lang, onboarding = false }: { lang: 'ar' | 'en'; onboarding?: boolean }): React.ReactElement {
   const ar = lang === 'ar'
   const [status, setStatus] = useAnalytics()
   const [busy, setBusy] = React.useState(false)
@@ -68,7 +45,7 @@ export function AnalyticsSettings({ lang }: { lang: 'ar' | 'en' }): React.ReactE
   const stateText = !status ? ar ? 'جارٍ قراءة الحالة…' : 'Loading status…' : status.state === 'enabled' ? ar ? 'المشاركة مفعلة' : 'Sharing enabled' : ar ? 'المشاركة مغلقة' : 'Sharing off'
   return <section className="analytics-settings" aria-labelledby="analytics-heading">
     <h2 id="analytics-heading">{ar ? 'الخصوصية والإحصائيات' : 'Privacy & analytics'}</h2>
-    <p>{ar ? 'المشاركة اختيارية، والرصد والإشعارات وكل وظائف راصد تعمل عند رفضها.' : 'Sharing is optional. Monitoring, notifications and all RASED features work when you decline.'}</p>
+    <p>{ar ? 'في النسخة المهيأة رسميًا، قبول إحصائيات الاستخدام شرط لتشغيل راصد. يمكنك سحب الموافقة؛ يتوقف الرصد وتظهر شاشة الموافقة أو الخروج. لا تُحذف بياناتك المحلية.' : 'In the officially configured distribution, accepting usage analytics is required to use RASED. You can withdraw acceptance; monitoring stops and the accept-or-exit screen returns. Your local data is not deleted.'}</p>
     <p role="status">{stateText}</p>
     {status && !status.available && <p className="hint">{ar ? 'الإرسال غير متاح في نسخة التطوير أو البناء غير المهيأ. لا ترسل هذه النسخة إحصائيات إلى PostHog.' : 'Sending is unavailable in development or an unconfigured build. This build does not send analytics to PostHog.'}</p>}
     <h3>{ar ? 'البيانات التي تشاركها' : 'What you share'}</h3>
@@ -79,9 +56,9 @@ export function AnalyticsSettings({ lang }: { lang: 'ar' | 'en' }): React.ReactE
     <p>{ar ? 'لا نرسل اسمك أو محتوى المشاريع أو العروض والملاحظات أو البحث أو مفاتيح API أو حسابات المتصفح. لا تسجيل للشاشة أو تتبع تلقائي لكل ضغطة.' : 'No name, project content, proposals, notes, searches, API keys or browser accounts. No screen recording or automatic click capture.'}</p>
     <p>{ar ? 'الجهة المستقبلة: PostHog US Cloud. لا يحدد راصد موعد حذف دوري لبيانات الإحصائيات السابقة؛ تُحتفظ إلى أن تطلب حذفها، مع مراعاة سياسات التخزين لدى المزود ومتطلبات القانون. لا نضمن بقاء البيانات للأبد. طلب الحذف يُنفذ إداريًا وليس لحظيًا. يصل عنوان الشبكة للمزود أثناء الاتصال حتى مع استبعاده من بيانات الإحصائيات المخزنة.' : 'Destination: PostHog US Cloud. RASED sets no scheduled expiry for previously sent analytics; they are retained until you request deletion, subject to the provider’s storage policies and applicable legal requirements. Permanent availability is not guaranteed. Deletion requests are handled administratively and are not immediate. The provider receives your network address during connection even when it is discarded from stored analytics.'}</p>
     <p className="hint">{ar ? 'التحقق النهائي من اكتمال حذف الأحداث لدى PostHog لم يكتمل بعد. يمكنك طلب الحذف؛ لن نؤكد اكتماله قبل التحقق من المزود، وقد تتأخر المعالجة.' : 'End-to-end verification of completed event deletion at PostHog is still pending. You can request deletion; completion will not be confirmed before provider verification, and processing may be delayed.'}</p>
-    <div className="actions">
-      <button className="btn" disabled={busy || !status?.available || status.state === 'enabled' || status.purgePending} onClick={() => void action('enable')}>{ar ? 'أوافق وأشارك' : 'Agree & share'}</button>
-      <button className="btn" disabled={busy || !status} onClick={() => void action('disable')}>{ar ? status?.state === 'enabled' ? 'إيقاف المشاركة' : 'لا أشارك' : status?.state === 'enabled' ? 'Stop sharing' : 'Decline sharing'}</button>
+    <div className="actions analytics-consent-actions">
+      <button className="btn primary" disabled={busy || !status?.available || status.accessAllowed || status.purgePending} onClick={() => void action('enable')}>{ar ? 'أوافق وأستخدم راصد' : 'Agree & use RASED'}</button>
+      {onboarding ? <button className="btn" disabled={busy} onClick={() => { void rased.confirmClose(true) }}>{ar ? 'خروج' : 'Exit'}</button> : <button className="btn" disabled={busy || !status} onClick={() => void action('disable')}>{ar ? 'سحب الموافقة وإيقاف الاستخدام' : 'Withdraw acceptance & stop using'}</button>}
     </div>
     <p className="hint">{ar ? 'الإيقاف يوقف الإرسال ويمسح الأحداث المحلية المؤجلة؛ لا يحذف ما وصل للخادم سابقًا.' : 'Stopping cancels sending and clears queued local events. It does not erase previously received server data.'}</p>
     {status?.state === 'enabled' && <p className="hint">{ar ? `أحداث مؤجلة: ${status.queued} · آخر قبول إرسال: ` : `Queued: ${status.queued} · Last accepted: `}<bdi>{lastAccepted}</bdi>{ar ? ` · حالة النقل: ${({idle:'جاهز',sending:'جارٍ الإرسال',retrying:'إعادة محاولة لاحقًا',rejected:'توقف بسبب رفض الإعداد',unavailable:'غير متاح'})[status.transport]}` : ` · Transport: ${status.transport}`}</p>}

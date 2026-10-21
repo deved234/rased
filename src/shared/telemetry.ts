@@ -1,6 +1,6 @@
 import type { SourceId } from './sources.js'
 
-export const TELEMETRY_DISCLOSURE = '2026-10-21-v3'
+export const TELEMETRY_DISCLOSURE = '2026-10-21-v4'
 export const ANALYTICS_SUPPORT = 'https://wa.me/201201780258'
 export const TELEMETRY_SOURCES = ['mostaql', 'khamsat', 'nafezly', 'kaf'] as const
 export type TelemetryOutcome = 'success' | 'failed' | 'cancelled'
@@ -39,6 +39,8 @@ export interface TelemetryEnvelope {
   properties: Record<string, string | number>
 }
 export interface AnalyticsStatus {
+  /** Configured distributions require acceptance; transport outages do not revoke it. */
+  accessAllowed: boolean
   purgePending: boolean
   available: boolean
   state: 'unknown' | 'enabled' | 'disabled'

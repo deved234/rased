@@ -1,6 +1,7 @@
 // Preload: the ONLY bridge. Narrow, typed, no Node/SQL/fetch exposure.
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/channels.js'
+import { unwrapSearchReply, type SearchReply } from '../shared/searchReply.js'
 import type { AppInfo, ImportSummary, PurgePreview, RasedApi } from '../shared/api.js'
 import type { UpdateState } from '../shared/updates.js'
 import type {
@@ -29,8 +30,8 @@ function sub<T>(channel: string, cb: (v: T) => void): () => void {
 
 const api: RasedApi = {
   databaseReady: () => ipcRenderer.invoke(IPC.databaseReady),
-  getSidebarCounts: () => ipcRenderer.invoke(IPC.getSidebarCounts),
-  matchProjectIds: (definition, ids) => ipcRenderer.invoke(IPC.matchProjectIds, { definition, ids }),
+  getSidebarCounts: () => (ipcRenderer.invoke(IPC.getSidebarCounts) as Promise<SearchReply<{ unread: number; saved: number }>>).then(unwrapSearchReply),
+  matchProjectIds: (definition, ids) => (ipcRenderer.invoke(IPC.matchProjectIds, { definition, ids }) as Promise<SearchReply<number[]>>).then(unwrapSearchReply),
   getAnalyticsStatus: () => ipcRenderer.invoke(IPC.getAnalyticsStatus),
   analyticsConsent: action => ipcRenderer.invoke(IPC.analyticsConsent, action),
   analyticsAction: action => ipcRenderer.invoke(IPC.analyticsAction, action),
@@ -95,8 +96,8 @@ const api: RasedApi = {
   createSavedFilter: (name, definition) => ipcRenderer.invoke(IPC.createSavedFilter, { name, definition }) as Promise<MutationResult & { id?: string }>,
   updateSavedFilter: (id, name, definition) => ipcRenderer.invoke(IPC.updateSavedFilter, { id, name, definition }) as Promise<MutationResult>,
   deleteSavedFilter: (id) => ipcRenderer.invoke(IPC.deleteSavedFilter, { id }) as Promise<MutationResult>,
-  previewFilterCount: (definition) => ipcRenderer.invoke(IPC.previewFilterCount, { definition }) as Promise<{ total: number; unread: number }>,
-  queryProjectsPage: (definition, limit, offset, window) => ipcRenderer.invoke(IPC.queryProjectsPage, { definition, limit, offset, window }) as Promise<PageResult>,
+  previewFilterCount: (definition) => (ipcRenderer.invoke(IPC.previewFilterCount, { definition }) as Promise<SearchReply<{ total: number; unread: number }>>).then(unwrapSearchReply),
+  queryProjectsPage: (definition, limit, offset, window) => (ipcRenderer.invoke(IPC.queryProjectsPage, { definition, limit, offset, window }) as Promise<SearchReply<PageResult>>).then(unwrapSearchReply),
   testNotification: () => ipcRenderer.invoke(IPC.testNotification) as Promise<OpenProjectResult>,
   openWindowsNotificationSettings: () => ipcRenderer.invoke(IPC.openWindowsNotificationSettings) as Promise<MutationResult>,
   testSound: () => ipcRenderer.invoke(IPC.testSound) as Promise<void>,
