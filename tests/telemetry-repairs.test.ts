@@ -172,7 +172,8 @@ it('stops dropping at 20 per UTC day even while later mixed batches make progres
     expect(accepted.size).toBe(21);expect(s.status()).toMatchObject({queued:1,dropped:20})
     const remaining=s.batch();expect(remaining).toHaveLength(1);expect(bad.has(remaining[0]!.eventId)).toBe(true)
   }finally{s.close()}
-})
+  // This verifies durable multi-cycle behavior, not a disk-latency threshold.
+}, 90_000)
 
 it('does not count local cancellation as a new failure or reset a previous failure', async () => {
   let now = Date.now()

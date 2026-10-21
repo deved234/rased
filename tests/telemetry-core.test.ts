@@ -208,7 +208,8 @@ describe('Separate bounded persistent queue', () => {
     expect(s.status().dropped).toBeGreaterThan(0)
     now += 8 * 86400000; s.bind(null, false)
     expect(s.status().queued).toBe(0)
-  })
+    // Exercise the real queue limit; hosted Windows disks need a larger budget.
+  }, 90_000)
   it('clears pending data on revoke or identity replacement', () => {
     const s = store(), id = randomUUID()
     s.bind(id, true); s.add(event({ distinctId: id }))

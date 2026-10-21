@@ -180,5 +180,6 @@ describe('diagnostics', () => {
     const rows = listDiagnostics(db, 1000)
     expect(rows.length).toBeLessThanOrEqual(500)
     expect(rows[0]?.detail?.length).toBeLessThanOrEqual(500)
-  })
+    // Hundreds of durable writes can exceed the default timeout on Windows CI.
+  }, 90_000)
 })
