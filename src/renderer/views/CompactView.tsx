@@ -35,8 +35,14 @@ export function CompactView(): React.ReactElement {
   React.useEffect(() => {
     if (!ready) return
     reload()
-    const off = rased.onProjectsChanged(() => reload())
-    return () => { queryGeneration.current++; off() }
+    let timer: ReturnType<typeof setTimeout> | undefined, first = 0
+    const off = rased.onProjectsChanged(() => {
+      queryGeneration.current++
+      if (!first) first = Date.now()
+      clearTimeout(timer)
+      timer = setTimeout(() => { first = 0; reload() }, Math.min(100, Math.max(0, 300 - (Date.now() - first))))
+    })
+    return () => { queryGeneration.current++; clearTimeout(timer); off() }
   }, [ready, reload])
 
   const pin = settings.ui.compactAlwaysOnTop

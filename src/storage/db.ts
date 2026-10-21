@@ -29,6 +29,24 @@ export function closeDatabase(db: Db): void {
   db.close()
 }
 
+/** Windows may briefly retain a mapped WAL sidecar after a forced exit.
+ * Retry only the two observed mapping/truncation codes; never delete sidecars
+ * or treat corrupt databases, permissions or arbitrary disk errors as transient.
+ */
+export async function openDatabaseAtStartup(filePath: string, open: (file: string) => Db = openDatabase, wait: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms)), platform = process.platform, retried: (code: number, attempt: number) => void = () => {}): Promise<Db> {
+  const delays = [250, 750, 1500]
+  for (let attempt = 0; ; attempt++) {
+    try { return open(filePath) }
+    catch (error) {
+      const code = error && typeof error === 'object' && 'errcode' in error ? Number(error.errcode) : 0
+      const delay = delays[attempt]
+      if (platform !== 'win32' || ![1546, 4874].includes(code) || delay === undefined) throw error
+      retried(code, attempt + 1)
+      await wait(delay)
+    }
+  }
+}
+
 export function utcNowIso(): string {
   return new Date().toISOString()
 }

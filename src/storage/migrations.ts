@@ -165,6 +165,65 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX IF NOT EXISTS idx_notification_activation_expiry ON notification_activations(expires_at);
   `
+  ,/* 10 */ `
+  CREATE TABLE project_search_cache (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    normalization_version INTEGER NOT NULL,
+    published_sort_ms REAL NULL,
+    title_norm TEXT NOT NULL,
+    excerpt_norm TEXT NOT NULL,
+    skills_norm TEXT NOT NULL,
+    keywords_norm TEXT NOT NULL,
+    body_short TEXT NOT NULL
+  );
+  CREATE TABLE project_search_body (project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE, body_norm TEXT NOT NULL);
+  CREATE VIRTUAL TABLE project_search_fts USING fts5(text,content='',contentless_delete=1,detail=none,tokenize='trigram case_sensitive 1');
+  CREATE TABLE project_search_dirty (project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE);
+  CREATE TABLE project_search_state (id INTEGER PRIMARY KEY CHECK(id=1), normalization_version INTEGER NOT NULL, backfill_complete INTEGER NOT NULL);
+  INSERT INTO project_search_state VALUES(1,1,0);
+  INSERT INTO project_search_dirty SELECT id FROM projects;
+  CREATE INDEX idx_projects_source_seen ON projects(source,first_seen_at DESC,id DESC);
+  CREATE TRIGGER search_project_insert AFTER INSERT ON projects BEGIN
+    INSERT INTO project_search_dirty VALUES(NEW.id) ON CONFLICT DO NOTHING;
+    UPDATE project_search_state SET backfill_complete=0;
+  END;
+  CREATE TRIGGER search_project_update AFTER UPDATE OF title,description_excerpt,skills_json,published_at ON projects
+  WHEN OLD.title IS NOT NEW.title OR OLD.description_excerpt IS NOT NEW.description_excerpt OR OLD.skills_json IS NOT NEW.skills_json OR OLD.published_at IS NOT NEW.published_at BEGIN
+    DELETE FROM project_search_cache WHERE project_id=NEW.id;
+    DELETE FROM project_search_body WHERE project_id=NEW.id;
+    DELETE FROM project_search_fts WHERE rowid=NEW.id;
+    INSERT INTO project_search_dirty VALUES(NEW.id) ON CONFLICT DO NOTHING;
+    UPDATE project_search_state SET backfill_complete=0;
+  END;
+  CREATE TRIGGER search_project_delete AFTER DELETE ON projects BEGIN
+    DELETE FROM project_search_body WHERE project_id=OLD.id;
+    DELETE FROM project_search_fts WHERE rowid=OLD.id;
+    DELETE FROM project_search_cache WHERE project_id=OLD.id;
+    DELETE FROM project_search_dirty WHERE project_id=OLD.id;
+  END;
+  CREATE TRIGGER search_details_insert AFTER INSERT ON project_details BEGIN
+    DELETE FROM project_search_body WHERE project_id=NEW.project_id;
+    DELETE FROM project_search_fts WHERE rowid=NEW.project_id;
+    DELETE FROM project_search_cache WHERE project_id=NEW.project_id;
+    INSERT INTO project_search_dirty SELECT NEW.project_id WHERE EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id) ON CONFLICT DO NOTHING;
+    UPDATE project_search_state SET backfill_complete=0;
+  END;
+  CREATE TRIGGER search_details_update AFTER UPDATE OF description_text,project_id ON project_details
+  WHEN OLD.description_text IS NOT NEW.description_text OR OLD.project_id IS NOT NEW.project_id BEGIN
+    DELETE FROM project_search_body WHERE project_id IN (OLD.project_id,NEW.project_id);
+    DELETE FROM project_search_fts WHERE rowid IN (OLD.project_id,NEW.project_id);
+    DELETE FROM project_search_cache WHERE project_id IN (OLD.project_id,NEW.project_id);
+    INSERT INTO project_search_dirty SELECT id FROM projects WHERE id IN (OLD.project_id,NEW.project_id) ON CONFLICT DO NOTHING;
+    UPDATE project_search_state SET backfill_complete=0;
+  END;
+  CREATE TRIGGER search_details_delete AFTER DELETE ON project_details BEGIN
+    DELETE FROM project_search_body WHERE project_id=OLD.project_id;
+    DELETE FROM project_search_fts WHERE rowid=OLD.project_id;
+    DELETE FROM project_search_cache WHERE project_id=OLD.project_id;
+    INSERT INTO project_search_dirty SELECT OLD.project_id WHERE EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) ON CONFLICT DO NOTHING;
+    UPDATE project_search_state SET backfill_complete=0;
+  END;
+  `
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length
@@ -172,6 +231,7 @@ export const SCHEMA_VERSION = MIGRATIONS.length
 export function applyMigrations(db: Db): void {
   const row = db.prepare('PRAGMA user_version;').get() as { user_version: number }
   const current = row.user_version ?? 0
+  if (current > SCHEMA_VERSION) throw Error('newer-schema')
   for (let i = current; i < MIGRATIONS.length; i++) {
     const sql = MIGRATIONS[i]
     if (!sql) continue

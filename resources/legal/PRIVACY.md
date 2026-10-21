@@ -1,6 +1,14 @@
 # الخصوصية
 
-2026-10-15 · RASED · david atef
+2026-10-19 · RASED · david atef
+
+## إحصائيات الاستخدام الاختيارية
+
+في البناء المهيأ فقط، يمكنك الموافقة من الإعدادات على إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة حتى توافق، ولا يحد الرفض من الرصد أو التنبيهات أو الميزات. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة وعائلة Windows العامة، ونشاطًا يوميًا وملخصات رصد ونتائج ميزات من فئات محددة. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
+
+## الاحتفاظ وإيقاف الإحصائيات وطلب الحذف
+
+لا يحدد راصد مدة انتهاء أو حذفًا دوريًا لبيانات الإحصائيات التي سبق إرسالها؛ تُحتفظ إلى أن يطلب المستخدم حذفها، مع مراعاة سياسات التخزين والحذف لدى PostHog ومتطلبات القانون المطبقة. هذا لا يضمن تخزينًا أبديًا أو إتاحة دائمة، ولا يلغي حقوق المستخدم أو التزامات الحذف القانونية. تُراجع طلبات الحذف وتُنفذ إداريًا ويُتحقق من اكتمال المعالجة غير اللحظية لدى المزود. الصف المحلي مستقل ومحدود بسبعة أيام و1000 حدث أو 2 MiB من المحتوى، وقد تسقط بيانات عند الانقطاع أو تجاوز الحصة؛ هذا حد للمؤجل محليًا ولا يحدد مدة الاحتفاظ البعيد. إيقاف المشاركة يلغي النقل ويمسح المؤجل، ولا ينفذ تلقائيًا طلب حذف لما وصل للخادم سابقًا. المعرّف يبقى محليًا لدعم طلب الحذف ولا يدخل النسخ المحمولة أو تصدير الإعدادات. انسخ مرجعك من الإعدادات وتواصل بنفسك عبر واتساب 01201780258 / https://wa.me/201201780258 لطلب حذف بياناتك السابقة؛ لا يرسل فتح الرابط مرجعك تلقائيًا ولا يثبت اكتمال الحذف. احفظ المعرّف وأوقف المشاركة قبل طلب الحذف لتجنب إرسال أحداث جديدة أثناء معالجته؛ وبعد اكتماله انسَ المعرّف محليًا قبل أي مشاركة جديدة. نسيان المعرّف محليًا مختلف عن حذف الخادم. عدادات تنزيل GitHub بيانات مجمعة عامة، ولا تثبت أسماء أو عدد مستخدمين فريدًا.
 
 ## اتصالات كاف
 
@@ -12,7 +20,7 @@
 
 ## ما يبقى على جهازك
 
-تُحفظ المشاريع والمقتطفات والوصف المجلوب، حالة القراءة والمحفوظات والملاحظات والفلاتر والإعدادات والسجل التشخيصي محليًا في SQLite ومجلد بيانات التطبيق. لا يوجد حساب راصد أو خادم سحابي أو تحليلات أو رفع آلي لهذه البيانات للمطور في هذا الإصدار.
+تُحفظ المشاريع والمقتطفات والوصف المجلوب، حالة القراءة والمحفوظات والملاحظات والفلاتر والإعدادات والسجل التشخيصي محليًا في SQLite ومجلد بيانات التطبيق. لا يحتاج الرصد حساب راصد أو خادمًا خاصًا، ولا تُرفع قاعدة المشاريع أو السجل التشخيصي تلقائيًا للمطور. إحصائيات الاستخدام الاختيارية المنفصلة موضحة أعلاه.
 
 ## الاتصالات الخارجية
 
@@ -54,7 +62,15 @@
 
 # Privacy
 
-2026-10-15 · RASED · david atef
+2026-10-19 · RASED · david atef
+
+## Optional usage analytics
+
+Only a configured build can send limited usage analytics to PostHog US Cloud after explicit settings consent. Sharing starts off; declining never restricts monitoring, notifications or other features. Data includes a random installation identifier, version, language, broad Windows family, daily activity, aggregated monitoring counters and allow-listed feature outcomes. No name, project content or links, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
+
+## Analytics retention, withdrawal and deletion requests
+
+RASED sets no scheduled expiry or periodic deletion for previously sent analytics; they are retained until the user requests deletion, subject to PostHog storage/deletion policies and applicable legal requirements. This does not guarantee perpetual storage or availability, waive user rights, or remove legal deletion obligations. Deletion requests are reviewed and performed administratively, with verification of asynchronous provider completion. The separate local queue is limited to seven days and 1000 events or 2 MiB of content; offline periods and quota limits can cause losses. These local pending-data limits do not set server retention. Stopping sharing cancels sending and clears pending data, but does not automatically request deletion of previously received server events. The local reference remains available for deletion requests and is excluded from portable backups/settings. Copy it in Settings and contact the developer yourself on WhatsApp +20 120 178 0258 / https://wa.me/201201780258 to request deletion. Opening WhatsApp does not transmit the reference automatically or prove deletion completion. Save the reference and stop sharing before requesting deletion to avoid new events while it is processed; after completion, forget the local reference before enrolling again. Forgetting the local reference is distinct from server deletion. GitHub download counters are aggregate public data, not user identities or unique-user counts.
 
 ## KAF connections
 
@@ -66,7 +82,7 @@ Your template, budget position and extra days remain local; optional settings ex
 
 ## Local data
 
-Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters, settings and diagnostics are stored locally in SQLite and the application data folder. This version has no RASED account, cloud backend, analytics or automatic upload of this data to the developer.
+Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters, settings and diagnostics are stored locally in SQLite and the application data folder. Monitoring requires no RASED account or dedicated backend. The project database and diagnostics are not automatically uploaded to the developer. Separate optional usage analytics are described above.
 
 ## External connections
 

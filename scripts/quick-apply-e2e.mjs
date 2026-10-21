@@ -8,6 +8,7 @@ import {createHash} from 'node:crypto'
 import {spawnSync} from 'node:child_process'
 import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call} from './cdp-tools.mjs'
 const args=parseArgs(process.argv.slice(2)), profile=newProfile(),port=9366
+writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
 const db=new DatabaseSync(join(profile,'rased.db'))
 const schema=readFileSync('src/storage/migrations.ts','utf8'),migrations=[...schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
 for(const m of migrations)db.exec(m[1])
@@ -26,6 +27,7 @@ try {
  await eventually(()=>ev("!!document.querySelector('.app') || document.querySelector('.splash')?.dataset.phase==='ready'"))
  await ev("document.querySelector('.splash-enter')?.click()")
  await eventually(()=>ev("!!document.querySelector('.app')"))
+ await ev('window.rased.analyticsConsent("enable")')
  const saved=await ev('window.rased.getSettings()')
  check('saved template and calculation preferences preserved',saved.quickApply.template==='Preserved template'&&saved.quickApply.budgetPositionPercent===50&&saved.quickApply.extraDays===1)
  check('legacy enabled flag disabled',saved.quickApply.enabled===false)
@@ -74,6 +76,23 @@ try {
  check('result crosses broker, main, preload and UI status',true)
  await eventually(()=>ev("document.querySelector('.settings-content')?.textContent.includes('Draft ready')"))
  check('terminal job status is translated and offers no cancellation',await ev("!Array.from(document.querySelectorAll('.settings-content button')).some(b=>b.textContent.includes('Cancel preparation'))"))
+ for(const [phase,category] of [['needs-input','needs_input'],['needs-login','login_required'],['draft-exists','draft_exists'],['expired','expired']]){
+   const count=messages.filter(m=>m.type==='prepare').length
+   await ev('window.rased.quickApplyProject(2)')
+   await eventually(()=>messages.filter(m=>m.type==='prepare').length>count)
+   const next=messages.filter(m=>m.type==='prepare').at(-1)
+   send({type:'result',requestId:next.requestId,phase,error:'network-fixture'})
+   await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.lastJob?.phase===phase)
+   writeFileSync(join(profile,'telemetry-fixture.json'),'{"flush":true}')
+   await ev('window.rased.getAnalyticsStatus()')
+   await eventually(async()=>{
+     await ev('window.rased.getAnalyticsStatus()')
+     const file=join(profile,'telemetry-fixture-sink/fixture-events.jsonl')
+     return existsSync(file)&&readFileSync(file,'utf8').split('\n').filter(Boolean).map(JSON.parse).some(e=>e.name==='quick_apply_result'&&e.properties.error===category)
+   },Boolean,15000)
+   writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
+   check(phase+' reaches the built telemetry worker with phase-specific classification despite a raw error',true)
+ }
  check('Khamsat quick action rejected by actual main IPC',!(await ev('window.rased.quickApplyProject(3)')).ok)
  await ev(`window.rased.extensionAction(${JSON.stringify({action:'revoke',id:pair.id})})`)
  check('unpair disables Quick Apply without deleting template',!(await ev('window.rased.getSettings()')).quickApply.enabled)

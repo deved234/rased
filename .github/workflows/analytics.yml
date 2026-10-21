@@ -1,0 +1,25 @@
+name: Analytics operations
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: rased-analytics-operations
+  cancel-in-progress: false
+jobs:
+  downloads:
+    if: vars.RASED_ANALYTICS_OPERATIONS_READY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Capture aggregate public release counters
+        run: node scripts/analytics/github-downloads.mjs --apply
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RASED_POSTHOG_PROJECT_TOKEN: ${{ secrets.RASED_POSTHOG_PROJECT_TOKEN }}

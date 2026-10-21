@@ -31,6 +31,9 @@ Use Windows and Node.js 24 with npm.
 - `npm run test:data`: verify settings transfer, complete backup/restore, rollback, key isolation and damaged-database recovery in fresh profiles; build first.
 - `npm run test:monitoring`: verify independent source controls, persistent disabling, coverage warnings and cooldown guards in isolated Electron fixtures; build first.
 - `npm run test:project-facts`: verify cached/on-demand budget and duration in preview and full details, source cooldowns, and honest missing-data states; build first.
+- `npm run test:search`: verify isolated SQL search, private-field opt-ins, Unicode, live result windows and bilingual filter controls using TEMP profiles; build first. See `docs/PROJECT_SEARCH.md`. Cache/index data is public and disposable; never persist normalized notes/drafts or move archive scans back into Electron main.
+- `npm run test:telemetry`: verify built-worker retry/revocation, resumable identity cleanup, bilingual controls, real collector counters, graceful shutdown and backup restore with synthetic transport; build first. No scheduled expiry; changed disclosures require fresh consent from previously enabled participants while preserving declines. Production capture stays gated until individual-request cloud deletion and QA are verified.
+- `npm run test:startup`: hold a real Windows WAL mapping across a crashed fixture writer; verify bounded startup retry, preserved data and clean failure handling. Build first; TEMP profiles only.
 - `npm run dist`: build a Windows NSIS installer in `release/`, without publishing.
 
 ## Coding Style & Naming Conventions

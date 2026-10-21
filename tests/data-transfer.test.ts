@@ -9,6 +9,7 @@ import { getSettingRaw, setSettingRaw, upsertProjectsBatch, updateUserState, ups
 import { createPortableBackup, inspectBackup, restoreDatabase } from '../src/storage/backups.js'
 import { saveProposalDraft, getProposalDraft } from '../src/storage/proposalDrafts.js'
 import { issueNotificationActivation, claimNotificationActivation } from '../src/storage/notificationActivations.js'
+import { rebuildSearchBatch } from '../src/storage/searchCache.js'
 
 const folders: string[] = [], databases: Db[] = []
 const profile = (): string => { const path = mkdtempSync(join(tmpdir(), 'rased-test-data-')); folders.push(path); return path }
@@ -27,6 +28,18 @@ function seed(db: Db): void {
 afterEach(() => { for (const db of databases.splice(0)) if (db.isOpen) db.close(); for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true }) })
 
 describe('Portable settings', () => {
+  it('round-trips explicit private search scopes and defaults missing legacy flags off', () => {
+    const source = database(); seed(source)
+    const settings = defaultSettings(); settings.displayQuery.searchInNotes = true; settings.displayQuery.searchInDrafts = true
+    setSettingRaw(source, 'app', JSON.stringify(settings))
+    const transfer = parseSettingsTransfer(settingsPayload(source)), target = database()
+    importSettings(target, defaultSettings(), transfer, 'replace', false)
+    expect(JSON.parse(getSettingRaw(target, 'app')!).displayQuery.searchInNotes).toBe(true)
+    expect(JSON.parse(getSettingRaw(target, 'app')!).displayQuery.searchInDrafts).toBe(true)
+    const legacy = parseSettingsTransfer({ format: 'rased-settings', version: 2, settings: { displayQuery: { search: 'legacy' } }, savedFilters: [] })
+    const imported = importSettings(target, defaultSettings(), legacy, 'replace', false)
+    expect(imported.displayQuery.searchInNotes).toBe(false); expect(imported.displayQuery.searchInDrafts).toBe(false)
+  })
   it('accounts for every current setting and intentionally excludes only session/device state', () => {
     expect(Object.keys(defaultSettings()).filter(key => !TRANSFER_SETTINGS_KEYS.includes(key as typeof TRANSFER_SETTINGS_KEYS[number])).sort()).toEqual(['compactBounds', 'doNotDisturbUntil'])
   })
@@ -73,6 +86,23 @@ describe('Portable settings', () => {
 })
 
 describe('Complete portable backups', () => {
+  it('accepts genuine schema-nine archives and clears/requeues all derived data on restore', async () => {
+    const folder = profile(), source = database(folder); seed(source)
+    while (!rebuildSearchBatch(source).complete) { /* populate derived data before exporting */ }
+    const file = join(folder, 'schema-nine.rased-backup'); await createPortableBackup(source, file, '0.8.1')
+    const old = openDatabase(file); databases.push(old)
+    expect(old.prepare('SELECT COUNT(*) AS n FROM project_search_cache').get()!.n).toBe(0)
+    expect(old.prepare('SELECT COUNT(*) AS n FROM project_search_fts').get()!.n).toBe(0)
+    const manifest = JSON.parse(String(old.prepare('SELECT json FROM rased_backup_manifest').get()!.json))
+    manifest.schemaVersion = 9; removeSearchSchema(old); old.exec('PRAGMA user_version=9')
+    old.prepare('UPDATE rased_backup_manifest SET json=?').run(JSON.stringify(manifest)); old.close()
+    expect(inspectBackup(file).counts.projects).toBe(1)
+    const target = database(); seed(target); while (!rebuildSearchBatch(target).complete) { /* old target cache */ }
+    restoreDatabase(target, file, false, 'schema-nine', 'rollback')
+    expect(target.prepare('SELECT COUNT(*) AS n FROM project_search_cache').get()!.n).toBe(0)
+    expect(target.prepare('SELECT COUNT(*) AS n FROM project_search_dirty').get()!.n).toBe(1)
+    expect(target.prepare('SELECT note FROM project_user_state').get()!.note).toBe('ملاحظة شخصية')
+  })
   it('removes notification activation capabilities from portable bytes and clears destination leases on restore', async () => {
     const folder = profile(), source = database(folder); seed(source)
     const ticket = issueNotificationActivation(source, { url: 'https://mostaql.com/go/44', projectId: 1 })
@@ -93,6 +123,7 @@ describe('Complete portable backups', () => {
     const old = openDatabase(file); databases.push(old)
     const manifest = JSON.parse(String(old.prepare('SELECT json FROM rased_backup_manifest').get()!.json))
     manifest.schemaVersion = 8
+    removeSearchSchema(old)
     old.exec('DROP TABLE notification_activations; PRAGMA user_version=8')
     old.prepare('UPDATE rased_backup_manifest SET json=?').run(JSON.stringify(manifest))
     old.close()
@@ -159,3 +190,4 @@ describe('Complete portable backups', () => {
     expect(target.prepare('SELECT title FROM projects').get()).toEqual({ title: 'keep this title' })
   })
 })
+import { removeSearchSchema } from './helpers/oldSchema.js'

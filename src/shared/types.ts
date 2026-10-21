@@ -165,6 +165,8 @@ export interface FilterDefinition {
   /** empty = any status (stored NULL counts as 'none') */
   statuses: PersonalStatus[]
   search: string
+  searchInNotes: boolean
+  searchInDrafts: boolean
   categoryFilter: CategoryFilter
   budgetMin: number | null
   budgetMax: number | null
@@ -203,6 +205,7 @@ export interface ProjectWithUser extends Project {
   hidden: boolean
   personalStatus: PersonalStatus
   hasNote: boolean
+  matchedFields?: import('./searchText.js').MatchedField[]
 }
 
 /** Single-project payload: includes the private note body (never in lists). */
@@ -214,7 +217,12 @@ export interface PageResult {
   rows: ProjectWithUser[]
   total: number
   unread: number
+  ceilingId?: number
+  visibleTotal?: number
+  revision?: number
 }
+
+export interface QueryWindow { ceilingId?: number }
 
 export interface MutationResult {
   ok: boolean
@@ -326,6 +334,8 @@ export function defaultFilterDefinition(): FilterDefinition {
     unreadOnly: false,
     statuses: [],
     search: '',
+    searchInNotes: false,
+    searchInDrafts: false,
     categoryFilter: defaultCategoryFilter(),
     budgetMin: null,
     budgetMax: null,
@@ -448,6 +458,8 @@ export function sanitizeFilterDefinition(v: unknown): FilterDefinition {
     unreadOnly: o['unreadOnly'] === true,
     statuses,
     search: typeof o['search'] === 'string' ? o['search'].slice(0, 200) : '',
+    searchInNotes: o['searchInNotes'] === true,
+    searchInDrafts: o['searchInDrafts'] === true,
     categoryFilter: sanitizeFilter(o['categoryFilter']),
     budgetMin,
     budgetMax,

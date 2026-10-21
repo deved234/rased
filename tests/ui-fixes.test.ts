@@ -30,10 +30,11 @@ describe('UI fixes: storage and policies', () => {
     createPendingEvents(db, [2], 'new_project', '2020-01-01T00:00:00.000Z')
     saveClassificationWaits(db, new Map([[3, 2_000_000_000_000]]))
     setSettingRaw(db, 'app', JSON.stringify({ language: 'en', showUnreadOnly: true }))
+    removeSearchSchema(db)
     db.exec('ALTER TABLE projects DROP COLUMN platform_status; ALTER TABLE projects DROP COLUMN duration_days; ALTER TABLE projects DROP COLUMN duration_raw; DROP TABLE extension_jobs; DROP TABLE quick_apply_tickets; DROP TABLE proposal_drafts; DROP TABLE project_user_state; DROP TABLE project_details; DROP TABLE saved_filters; DROP TABLE tombstones; PRAGMA user_version=2;')
     closeDatabase(db)
     db = openDatabase(file); databases.push(db)
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 })
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 10 })
     expect(queryProjectsPage(db, defaultFilterDefinition(), { limit: 20, offset: 0 }).unread).toBe(2)
     expect(listEventsByStatus(db, 'pending')).toHaveLength(1)
     expect(listClassificationWaits(db).get(3)).toBe(2_000_000_000_000)
@@ -152,3 +153,4 @@ describe('UI fixes: HTML request lifecycle', () => {
     await f.pump(); expect(getProjectDetailsRow(db, 1)).toMatchObject({ provenance: 'truncated', status: 'ready' })
   })
 })
+import { removeSearchSchema } from './helpers/oldSchema.js'

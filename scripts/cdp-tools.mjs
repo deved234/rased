@@ -36,23 +36,23 @@ export async function eventually(fn, predicate = Boolean, timeout = 10000) {
   }
   throw Error(`Timed out; last value: ${JSON.stringify(value)}`)
 }
-export function startApp({ exe, app, profile, port, url, test = true }) {
+export function startApp({ exe, app, profile, port, url, test = true, captureOutput = false }) {
   const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`]
   if (test) args.push('--rased-test')
   if (app) args.unshift(resolve(app))
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL
   if (url) env.ELECTRON_RENDERER_URL = url
-  const child = spawn(resolve(exe), args, { env, windowsHide: true, stdio: 'ignore' })
+  const child = spawn(resolve(exe), args, { env, windowsHide: true, stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' })
   child.on('error', err => { console.error(err.message) })
   return child
 }
 export async function targets(port) {
   return (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
 }
-export async function pageWs(port, match = t => t.url.includes('index.html') && !t.url.includes('compact')) {
+export async function pageWs(port, match = t => t.url.includes('index.html') && !t.url.includes('compact'), timeout = 30000) {
   return eventually(async () => {
     try { return (await targets(port)).find(t => t.type === 'page' && match(t))?.webSocketDebuggerUrl } catch { return null }
-  })
+  }, Boolean, timeout)
 }
 export function call(wsUrl, method, params = {}) {
   return new Promise((resolve, reject) => {
@@ -72,9 +72,10 @@ export async function evaluate(ws, expression) {
 export async function stopApp(child) {
   if (child.exitCode !== null) return
   await new Promise(resolve => {
-    child.once('exit', resolve)
+    // The root may exit before taskkill finishes closing its renderer/worker
+    // descendants. Wait for the whole tree before reopening its SQLite files.
     const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
-    killer.once('exit', resolve)
+    killer.once('close', resolve)
   })
 }
 

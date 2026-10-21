@@ -11,6 +11,8 @@ Thumbs.db
 # user runtime data (SQLite) must never be committed or shipped
 *.db
 *.db-*
+*.sqlite
+*.sqlite-*
 # vitest cache
 coverage/
 # local notes

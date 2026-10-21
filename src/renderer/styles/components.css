@@ -310,3 +310,11 @@
 .quick-setup-steps h3 { margin-block: 0 8px; font-size: 15px; }
 .quick-setup-steps code { display: block; overflow-wrap: anywhere; padding: 10px; font-size: 12px; border-radius: 8px; background: var(--bg); }
 .quick-setup-steps .row-actions { margin-block-start: 10px; flex-wrap: wrap; }
+/* Explicit analytics choices reuse the desktop's existing semantic tokens. */
+.analytics-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.analytics-banner p { flex: 1 1 320px; margin: 0; }
+.analytics-settings { max-width: 820px; }
+.analytics-settings p, .analytics-settings li { line-height: 1.8; }
+.analytics-settings .actions { flex-wrap: wrap; margin-block: 16px; }
+.analytics-reference { display: block; overflow-wrap: anywhere; margin-block: 12px; }
+.analytics-forget { margin-block-start: 20px; }

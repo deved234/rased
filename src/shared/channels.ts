@@ -1,6 +1,14 @@
 // Narrow, typed IPC surface. The renderer never sees Node, SQL or fetch.
 // Every channel used by the renderer MUST be listed here exactly once.
 export const IPC = {
+  databaseReady: 'rased:database-ready',
+  getSidebarCounts: 'rased:get-sidebar-counts',
+  matchProjectIds: 'rased:match-project-ids',
+  getAnalyticsStatus: 'rased:get-analytics-status',
+  analyticsConsent: 'rased:analytics-consent',
+  analyticsAction: 'rased:analytics-action',
+  analyticsChanged: 'rased:analytics-changed',
+  recordUiUsage: 'rased:record-ui-usage',
   extensionStatus: 'rased:extension-status',
   getExtensionStatus: 'rased:get-extension-status',
   extensionAction: 'rased:extension-action',

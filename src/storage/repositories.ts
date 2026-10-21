@@ -11,7 +11,7 @@ import type {
   ProjectQuery
 } from '../shared/types.js'
 import { utcNowIso } from './db.js'
-import { matchesDefinition } from '../shared/filters.js'
+import { queryProjectIds, matchingFields } from './projectQuery.js'
 
 export interface UpsertInput {
   source: string
@@ -437,6 +437,7 @@ import type {
   ProjectDetails,
   ProjectUserState,
   ProjectWithUser,
+  QueryWindow,
   SavedFilter
 } from '../shared/types.js'
 import { defaultFilterDefinition, sanitizeFilterDefinition } from '../shared/types.js'
@@ -626,60 +627,23 @@ function mapWithUser(row: PrefilterRow): ProjectWithUser {
 }
 
 /**
- * Single predicate path for list AND count: SQL pre-filters
- * (scope/unread/status/search), then the shared category+keyword evaluator,
- * budget overlap and sort in JS, then pagination. Nothing filters after paging.
+ * All predicates and paging run in SQL. Only the requested page is hydrated.
+ * Production callers use the isolated search process; direct use supports tests.
  */
-export function queryProjectsPage(db: Db, def: FilterDefinition, page: { limit: number; offset: number }): PageResult {
-  const where: string[] = []
-  const params: (string | number)[] = []
-  if (def.scope === 'hidden') {
-    where.push('u.hidden_at IS NOT NULL')
-  } else {
-    where.push('(u.hidden_at IS NULL OR u.project_id IS NULL)')
-    if (def.scope === 'saved') where.push('u.saved_at IS NOT NULL')
-  }
-  if (def.unreadOnly) where.push('p.read_at IS NULL')
-  if (def.statuses.length > 0) {
-    where.push(`COALESCE(u.personal_status, 'none') IN (${def.statuses.map(() => '?').join(',')})`)
-    params.push(...def.statuses)
-  }
-  const sql =
-    'SELECT p.*, u.saved_at AS saved_at, u.hidden_at AS hidden_at, u.personal_status AS personal_status FROM projects p LEFT JOIN project_user_state u ON u.project_id = p.id' +
-    (where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '') +
-    ' ORDER BY p.first_seen_at DESC, p.id DESC;'
-  const pre = db.prepare(sql).all(...params) as unknown as PrefilterRow[]
-  const kept: ProjectWithUser[] = []
-  for (const row of pre) {
-    const base = mapWithUser(row)
-    if (!matchesDefinition(base, def)) continue
-    kept.push(base)
-  }
-  if (def.sort === 'latestPublished') {
-    kept.sort((a, b) => {
-      const pa = a.publishedAt ? Date.parse(a.publishedAt) : NaN
-      const pb = b.publishedAt ? Date.parse(b.publishedAt) : NaN
-      const aNaN = Number.isNaN(pa)
-      const bNaN = Number.isNaN(pb)
-      if (aNaN && bNaN) return b.id - a.id
-      if (aNaN) return 1
-      if (bNaN) return -1
-      if (pb !== pa) return pb - pa
-      return b.id - a.id
-    })
-  }
-  const total = kept.length
-  const unread = kept.filter((p) => !p.readAt).length
-  const rows = kept.slice(page.offset, page.offset + page.limit)
-  // note bodies stay out of list payloads; flag presence cheaply
-  if (rows.length > 0) {
-    const notes = db.prepare(`SELECT project_id FROM project_user_state WHERE project_id IN (${rows.map(() => '?').join(',')}) AND note != '';`).all(...rows.map((r) => r.id)) as unknown as {
-      project_id: number
-    }[]
-    const withNote = new Set(notes.map((n) => n.project_id))
-    for (const r of rows) r.hasNote = withNote.has(r.id)
-  }
-  return { rows, total, unread }
+export function queryProjectsPage(db: Db, def: FilterDefinition, page: { limit: number; offset: number }, window: QueryWindow = {}): PageResult {
+  const ownsTransaction = !db.isTransaction
+  if (ownsTransaction) db.exec('BEGIN')
+  try {
+    const result = queryProjectIds(db, def, page, window)
+    const fields = matchingFields(db, def, result.ids)
+    const byId = new Map<number, ProjectWithUser>()
+    if (result.ids.length) {
+      const data = db.prepare(`SELECT p.*,u.saved_at,u.hidden_at,u.personal_status,(COALESCE(u.note,'')!='') AS has_note FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id WHERE p.id IN (${result.ids.map(() => '?').join(',')})`).all(...result.ids) as unknown as (PrefilterRow & {has_note: number})[]
+      for (const row of data) byId.set(row.id, { ...mapWithUser(row), hasNote: row.has_note === 1, ...(fields.has(row.id) ? { matchedFields: fields.get(row.id) } : {}) })
+    }
+    if (ownsTransaction) db.exec('COMMIT')
+    return { rows: result.ids.map(id => byId.get(id)!), total: result.total, unread: result.unread, ceilingId: result.ceilingId, visibleTotal: result.visibleTotal }
+  } catch (error) { if (ownsTransaction) db.exec('ROLLBACK'); throw error }
 }
 
 /** Legacy v1 query shape, mapped onto the unified engine (keeps old tests green). */

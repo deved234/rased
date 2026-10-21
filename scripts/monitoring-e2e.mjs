@@ -1,7 +1,7 @@
 // Fresh profiles and synthetic responses. No live account, provider key or OS clipboard.
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
 
@@ -45,7 +45,10 @@ const nav = async route => {
   else await sleep(180)
 }
 async function boot() {
-  child = startApp({ exe, app, profile, port }); ws = await pageWs(port)
+  child = startApp({ exe, app, profile, port, captureOutput: true })
+  const capture = chunk => appendFileSync(join(profile, 'electron-output.log'), chunk)
+  child.stdout.on('data', capture); child.stderr.on('data', capture)
+  ws = await pageWs(port)
   try {
     await eventually(() => ev('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".sidebar")'), Boolean, 20000)
   } catch (error) {

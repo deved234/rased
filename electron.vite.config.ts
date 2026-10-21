@@ -2,6 +2,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 import type { Plugin } from 'vite'
+import { analyticsBuildDefines } from './scripts/analytics/build-guard.mjs'
 
 // Dev-only: strip the strict production CSP meta tag when serving. Vite dev
 // injects styles and the react-refresh preamble as inline <style>/<script>,
@@ -17,7 +18,8 @@ const devCspRelax: Plugin = {
 
 export default defineConfig({
   main: {
-    build: { rollupOptions: { input: { index: resolve('src/main/index.ts'), backupWorker: resolve('src/main/backupWorker.ts'), developmentRelay: resolve('src/main/notifications/developmentRelay.ts') } } },
+    define: analyticsBuildDefines(),
+    build: { rollupOptions: { input: { index: resolve('src/main/index.ts'), searchReader: resolve('src/main/search/reader.ts'), searchCacheWriter: resolve('src/main/search/cacheWriter.ts'), backupWorker: resolve('src/main/backupWorker.ts'), developmentRelay: resolve('src/main/notifications/developmentRelay.ts'), telemetryWorker: resolve('src/main/telemetry/worker.ts') } } },
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: { '@shared': resolve('src/shared') } }
   },

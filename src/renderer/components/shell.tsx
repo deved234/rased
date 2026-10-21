@@ -179,6 +179,7 @@ export function Topbar({
   showSearch,
   search,
   onSearch,
+  onComposition,
   searchRef,
   onTogglePause,
   onRefresh
@@ -195,6 +196,7 @@ export function Topbar({
   showSearch: boolean
   search: string
   onSearch: (v: string) => void
+  onComposition: (composing: boolean) => void
   searchRef: React.RefObject<HTMLInputElement | null>
   onTogglePause: (source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf') => void
   onRefresh: () => void
@@ -222,6 +224,8 @@ export function Topbar({
         aria-label={t.searchPlaceholder}
         value={search}
         onChange={(e) => onSearch(e.target.value)}
+        onCompositionStart={() => onComposition(true)}
+        onCompositionEnd={() => onComposition(false)}
       />}
       <span className="spacer" />
       <div className="source-health-strip">

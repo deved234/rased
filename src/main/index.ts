@@ -1,3 +1,7 @@
+import { recordStartupFailure } from './startupFailure.js'
+import { SearchService } from './search/service.js'
+import { SearchCacheBuilder } from './search/cacheBuilder.js'
+import { searchCacheReady } from '../storage/searchCache.js'
 import { KafController } from './kaf.js'
 import { matchesKafKeywords } from '../collector/kaf.js'
 // RASED main process: lifecycle, collector loop, IPC, tray, notifications.
@@ -9,7 +13,7 @@ import { NsisUpdater } from 'electron-updater'
 import { UpdateController } from './updates.js'
 import { testUpdater } from './testHarness.js'
 import { version as APP_VERSION } from '../../package.json'
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import {
   app,
@@ -26,6 +30,10 @@ import {
   type Session
 } from 'electron'
 import { IPC } from '../shared/channels.js'
+import { TelemetryService, telemetryWorkerEntry } from './telemetry/service.js'
+import { telemetryConfig } from './telemetry/config.js'
+import { ANALYTICS_SUPPORT, UI_SURFACES, durationBucket, quickApplyTelemetryError } from '../shared/telemetry.js'
+import type { SourceId } from '../shared/sources.js'
 import { repairLegacyDevShortcut, RASED_APP_ID, RASED_DEV_APP_ID, taskbarDetails } from './taskbar.js'
 import { backupError, DataBackupManager, isCorruptDatabaseError, recoverCorruptDatabase, recoverPendingRestore } from './dataBackup.js'
 import { finalizeBackupInWorker } from './backupWorkerClient.js'
@@ -38,6 +46,7 @@ import { acknowledgeMonitoringGap, monitoringFields } from '../storage/monitorin
 import { ABOUT_LINKS, type AboutLink } from '../shared/about.js'
 import {
   defaultSettings,
+  defaultFilterDefinition,
   sanitizeFilterDefinition,
   sanitizeSettings,
   sanitizeUserStatePatch,
@@ -50,9 +59,9 @@ import {
   type SourceHealth
 } from '../shared/types.js'
 import type { ImportSummary, PurgePreview } from '../shared/api.js'
-import { openDatabase, closeDatabase, type Db } from '../storage/db.js'
+import { openDatabaseAtStartup, closeDatabase, type Db } from '../storage/db.js'
 import {
-  countProjects,
+  legacyToFilterDef,
   countPurgeable,
   createPendingEvents,
   deleteClassificationWait,
@@ -66,13 +75,11 @@ import {
   listClassificationWaits,
   listDiagnostics,
   listEventsByStatus,
-  listProjects,
   listSavedFilters,
   markAllRead,
   markEnrichmentPending,
   markEvents,
   purgeHistory,
-  queryProjectsPage,
   recordDiagnostic,
   runInTransaction,
   saveSavedFilterRow,
@@ -162,6 +169,8 @@ app.setAppUserModelId(IS_PACKAGED ? RASED_APP_ID : RASED_DEV_APP_ID)
 const sessionId = randomUUID()
 const runId = randomUUID()
 let db: Db | null = null
+let searchService: SearchService | undefined
+let searchCache: SearchCacheBuilder | undefined
 let dataBackup: DataBackupManager | null = null
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -217,6 +226,27 @@ let updateStartupTimer: NodeJS.Timeout | null = null
 let updateTimer: NodeJS.Timeout | null = null
 let notificationCleanupTimer: NodeJS.Timeout | null = null
 const testHarness = isolatedTestHarness(app.getPath('userData'), process.argv)
+let telemetry: TelemetryService | null = null
+let lastQuickTelemetry = ''
+let quickTelemetryStarted = Date.now()
+let quickTelemetryRequest = ''
+function sourceForTelemetry(url: string): SourceId | 'unknown' {
+  try {
+    const host = new URL(url).hostname
+    return host === 'mostaql.com' ? 'mostaql' : host === 'nafezly.com' ? 'nafezly' : host === 'khamsat.com' ? 'khamsat' : host === 'kafiil.com' ? 'kaf' : 'unknown'
+  } catch { return 'unknown' }
+}
+function extensionChanged(): void {
+  const state = extensionSnapshot()
+  broadcast(IPC.extensionStatus, state)
+  const job = state?.lastJob
+  if (!job) return
+  if (quickTelemetryRequest !== job.requestId) { quickTelemetryRequest = job.requestId; quickTelemetryStarted = Date.now() }
+  if (lastQuickTelemetry === job.requestId || !['ready', 'needs-input', 'needs-login', 'draft-exists', 'failed', 'cancelled', 'expired'].includes(job.phase)) return
+  lastQuickTelemetry = job.requestId
+  const source = db?.isOpen ? getProjectById(db, job.projectId)?.source : null
+  if (source === 'mostaql' || source === 'nafezly') telemetry?.record('quick_apply_result', { source, outcome: job.phase === 'ready' ? 'success' : job.phase === 'cancelled' ? 'cancelled' : 'failed', error: quickApplyTelemetryError(job.phase, job.error), duration: durationBucket(Date.now() - quickTelemetryStarted) })
+}
 const activationScheme = notificationScheme(IS_PACKAGED)
 let notificationBoot = process.argv.some(arg => /^-+embedding$/i.test(arg) || !!parseNotificationActivation(arg, activationScheme))
 let nativeActivationReady = false
@@ -232,6 +262,12 @@ const notificationActivation = new NotificationActivationController(activationSc
     return browserLauncher.launch(destination.url)
   },
   completed: (destination, result) => {
+    if (destination.projectId !== null) {
+      const source = sourceForTelemetry(destination.url)
+      telemetry?.record('project_open_result', { source, entry: 'notification', launch: result.launch, foreground: result.foreground, duration: durationBucket(result.durationMs) })
+      if (source !== 'unknown') telemetry?.counter('notification_summary', `${source}_activated`)
+      telemetry?.activity('interface')
+    }
     auditUi(`notification-open launch=${result.launch} foreground=${result.foreground} durationMs=${result.durationMs}`)
     testHarness?.record('notification-open-result', result)
     if (result.launch === 'accepted' && db?.isOpen && destination.projectId !== null && getProjectById(db, destination.projectId)) {
@@ -306,6 +342,7 @@ function saveSettings(s: AppSettings): void {
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
   const previous = settings
   settings = s
+  telemetry?.language(s.language)
   applyMonitoringSettings(previous, s)
   kaf?.settingsChanged()
   if(!s.quickApply.enabled)extension?.cancel()
@@ -364,18 +401,22 @@ function snapshotHealth(): SourceHealth {
 }
 
 function emitHealth(): void {
+  telemetry?.health('mostaql', snapshotHealth())
   broadcast(IPC.healthChanged, snapshotHealth())
   updateTray()
 }
 
 function emitProjects(newIds: number[], changedIds: number[] = []): void {
   episode++
-  const summary = db ? countProjects(db, {}) : null
+  searchService?.invalidate()
+  if (db && !quitRequested && !searchCacheReady(db)) searchCache?.start()
+  const summary = null
   win?.webContents.send(IPC.projectsChanged, { episode, newIds, changedIds, summary })
   compactWin?.webContents.send(IPC.projectsChanged, { episode, newIds, changedIds, summary })
 }
 
 function emitDetails(projectIds: number[]): void {
+  emitProjects([], projectIds)
   win?.webContents.send(IPC.detailsChanged, { projectIds })
   compactWin?.webContents.send(IPC.detailsChanged, { projectIds })
 }
@@ -391,6 +432,9 @@ const activeNotifications = new Set<Notification>()
 const activeNotificationActivations = new Map<string, Notification>()
 
 function showToast(title: string, body: string, onClick: () => void, url: string, quickLink?:string, projectId: number | null = null): Promise<boolean> {
+  const measuredSource = projectId === null ? 'unknown' : sourceForTelemetry(url)
+  const measure = (kind: 'requested' | 'shown' | 'failed'): void => { if (measuredSource !== 'unknown') telemetry?.counter('notification_summary', `${measuredSource}_${kind}`) }
+  measure('requested')
   let activation: string | undefined
   if (process.platform === 'win32' && nativeActivationReady && db?.isOpen) {
     try { activation = notificationActivationArguments(issueNotificationActivation(db, { url, projectId })) }
@@ -402,6 +446,7 @@ function showToast(title: string, body: string, onClick: () => void, url: string
     : undefined
   if (testHarness) {
     testHarness.record('toast', { title, body, toastXml, urgency: 'critical' })
+    measure('shown') // The isolated OS fixture acknowledges a successful show.
     // Simulate the OS protocol destination, not a native Windows mouse click.
     if (activation) return notificationActivation.activate(activation).then(() => true)
     if (toastXml) testHarness.record('open-external', url)
@@ -421,8 +466,9 @@ function showToast(title: string, body: string, onClick: () => void, url: string
       activeNotifications.add(n)
       if (activation) activeNotificationActivations.set(activation, n)
       const release = (): void => { activeNotifications.delete(n); if (activation) activeNotificationActivations.delete(activation) }
-      n.on('show', () => finish(true))
+      n.once('show', () => { measure('shown'); finish(true) })
       n.on('failed', (_event, error: string) => {
+        if (!done) measure('failed')
         auditUi(`notification-failed ${String(error)}`)
         release()
         finish(false)
@@ -437,6 +483,7 @@ function showToast(title: string, body: string, onClick: () => void, url: string
       n.show()
       setTimeout(() => finish(true), 2000)
     } catch {
+      measure('failed')
       finish(false)
     }
   })
@@ -467,6 +514,7 @@ function snapshotKhamsatHealth(): SourceHealth {
 }
 
 function emitKhamsatHealth(): void {
+  telemetry?.health('khamsat', snapshotKhamsatHealth())
   broadcast(IPC.khamsatHealthChanged, snapshotKhamsatHealth())
   updateTray()
 }
@@ -479,6 +527,7 @@ function snapshotNafezlyHealth(): SourceHealth {
 }
 
 function emitNafezlyHealth(): void {
+  telemetry?.health('nafezly', snapshotNafezlyHealth())
   broadcast(IPC.nafezlyHealthChanged, snapshotNafezlyHealth())
   updateTray()
 }
@@ -1048,6 +1097,11 @@ function requestFacts(id: number, force: boolean): ProjectFacts | null {
 // ---------------------------------------------------------------- open project
 
 async function openProjectById(id: number, fromNotification: boolean, notificationUrl?: string): Promise<{ ok: boolean; error?: string }> {
+  const openStarted = Date.now()
+  const measureOpen = (url: string, launch: 'accepted' | 'failed'): void => {
+    telemetry?.record('project_open_result', { source: sourceForTelemetry(url), entry: fromNotification ? 'notification' : 'app', launch, foreground: 'not-attempted', duration: durationBucket(Date.now() - openStarted) })
+    telemetry?.activity('interface')
+  }
   if (quitRequested) return { ok: false, error: 'quitting' }
   const openedDb = db
   // Native toast closures carry their original URL even if history was purged.
@@ -1058,10 +1112,12 @@ async function openProjectById(id: number, fromNotification: boolean, notificati
     if (testHarness) testHarness.record('open-external', url)
     else await shell.openExternal(url)
   } catch {
+    measureOpen(url, 'failed')
     return { ok: false, error: 'open-failed' }
   }
   if (!quitRequested && openedDb && db === openedDb && openedDb.isOpen && getProjectById(openedDb, id)) setReadState(openedDb, id, true)
   auditUi(`open-project id=${id}${fromNotification ? ' via-notification' : ''}`)
+  measureOpen(url, 'accepted')
   emitProjects([], [id])
   return { ok: true }
 }
@@ -1375,6 +1431,7 @@ async function shutdown(): Promise<void> {
   if (shutdownWork) return shutdownWork
   quitRequested = true
   notificationActivation.close()
+  const closingTelemetry = telemetry?.close()
   paused = true
   khamsatPaused = true
   nafezlyPaused = true
@@ -1385,6 +1442,12 @@ async function shutdown(): Promise<void> {
   const closingFacts = nafezlyFacts.close()
   const closingAi = aiService?.close()
   const closingBackup = dataBackup?.close()
+  const closingSearchCache = searchCache?.close()
+  const closingSearch = searchService?.close()
+  // Observe rejection immediately while waiting for the other shutdown jobs;
+  // awaiting below still propagates a failure before touching the DB file.
+  void closingSearch?.catch(() => {})
+  void closingSearchCache?.catch(() => {})
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
   if (timer) clearTimeout(timer)
@@ -1398,12 +1461,15 @@ async function shutdown(): Promise<void> {
   extension?.dispose()
   shutdownWork = (async () => {
   try {
+    await closingTelemetry
     while (work.size) await Promise.allSettled([...work])
     if (flushing) await Promise.allSettled([flushing])
     await closingKaf
     await closingFacts
     await closingAi
     await closingBackup
+    await closingSearch
+    await closingSearchCache
     if (db) {
       const st = getSourceState(db, SOURCE)
       saveSourceState(db, { ...st, runId });
@@ -1423,6 +1489,42 @@ async function shutdown(): Promise<void> {
 function registerIpc(): void {
   const localSender = (event: Electron.IpcMainInvokeEvent): boolean => !quitRequested && (event.sender === win?.webContents || event.sender === compactWin?.webContents)
   const mainSender = (event: Electron.IpcMainInvokeEvent): boolean => event.sender === win?.webContents && !quitRequested
+  ipcMain.handle(IPC.databaseReady, event => !!(localSender(event) && db?.prepare('SELECT id FROM projects LIMIT 1').all()))
+  ipcMain.handle(IPC.getSidebarCounts, async event => {
+    if (!localSender(event) || !searchService) throw new Error('search-unavailable')
+    const [all, saved] = await Promise.all([
+      searchService.page(`${event.sender.id}:sidebar:all`, sanitizeFilterDefinition(legacyToFilterDef({ displayFilter: settings.displayFilter })), 0, 0),
+      searchService.page(`${event.sender.id}:sidebar:saved`, { ...defaultFilterDefinition(), scope: 'saved' }, 0, 0)
+    ])
+    return { unread: all.unread, saved: saved.total }
+  })
+  ipcMain.handle(IPC.matchProjectIds, (event, v) => {
+    if (!localSender(event) || !searchService || !Array.isArray(v?.ids) || v.ids.length > 200 || !v.ids.every((id: unknown) => Number.isSafeInteger(id) && Number(id) > 0)) throw new Error('bad-search-request')
+    return searchService.match(`${event.sender.id}:matches`, sanitizeFilterDefinition(v.definition), [...new Set<number>(v.ids)])
+  })
+  ipcMain.handle(IPC.getAnalyticsStatus, async event => {
+    if (!mainSender(event)) return null
+    if (testHarness && telemetry && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json'))) {
+      try { if (JSON.parse(readFileSync(join(app.getPath('userData'), 'telemetry-fixture.json'), 'utf8')).flush === true) await telemetry.flushFixture() } catch { /* Scoped fixture only. */ }
+    }
+    return telemetry?.status() ?? null
+  })
+  ipcMain.handle(IPC.analyticsConsent, async (event, action: unknown) => {
+    if (!mainSender(event) || !telemetry || typeof action !== 'string' || !['enable', 'disable', 'later', 'forget'].includes(action)) return { ok: false, error: 'bad-request' }
+    try { await telemetry.change(action as 'enable' | 'disable' | 'later' | 'forget'); return { ok: true } }
+    catch (error) { return { ok: false, error: error instanceof Error && error.message === 'forget-incomplete' ? 'forget-incomplete' : 'analytics-unavailable' } }
+  })
+  ipcMain.handle(IPC.analyticsAction, async (event, action: unknown) => {
+    if (!mainSender(event) || !telemetry) return { ok: false }
+    const reference = telemetry.status().reference
+    if (action === 'copy-reference' && reference) { if (testHarness) testHarness.record('analytics-copy-reference', true); else clipboard.writeText(reference); return { ok: true } }
+    if (action !== 'contact' || !reference) return { ok: false }
+    try { if (testHarness) testHarness.record('open-external', ANALYTICS_SUPPORT); else await shell.openExternal(ANALYTICS_SUPPORT); return { ok: true } }
+    catch { return { ok: false } }
+  })
+  ipcMain.handle(IPC.recordUiUsage, (event, surface: unknown) => {
+    if (mainSender(event) && typeof surface === 'string' && (UI_SURFACES as readonly string[]).includes(surface)) telemetry?.activity('interface')
+  })
   const proposalId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0
   const proposalNotes = (value: unknown): value is string => typeof value === 'string' && value.length <= 2000
   ipcMain.handle(IPC.getExtensionStatus,event=>mainSender(event)?extensionSnapshot():null)
@@ -1471,9 +1573,12 @@ function registerIpc(): void {
     const selection = selectionFor(v?.selection)
     return mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && selection ? aiService?.preview(v.id, v.projectNotes, selection) : null
   })
-  ipcMain.handle(IPC.generateProposal, (event, v) => {
+  ipcMain.handle(IPC.generateProposal, async (event, v) => {
     const selection = selectionFor(v?.selection)
-    return mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && typeof v?.fingerprint === 'string' && v.fingerprint.length === 64 && selection && aiService ? aiService.generate(v.id, v.projectNotes, v.fingerprint, selection) : { ok: false, error: 'bad-request' }
+    if (!(mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && typeof v?.fingerprint === 'string' && v.fingerprint.length === 64 && selection && aiService)) return { ok: false, error: 'bad-request' }
+    const result = await aiService.generate(v.id, v.projectNotes, v.fingerprint, selection)
+    if (result.ok) emitProjects([], [v.id])
+    return result
   })
   ipcMain.handle(IPC.cancelProposal, event => { if (mainSender(event)) aiService?.cancel() })
   ipcMain.handle(IPC.getProposalDraft, (event, v: { id?: unknown }) => mainSender(event) && db && proposalId(v?.id) ? getProposalDraft(db, v.id) : null)
@@ -1482,9 +1587,10 @@ function registerIpc(): void {
     if (!mainSender(event) || !db || !draft || !proposalId(draft.projectId) || !getProjectById(db, draft.projectId) || typeof draft.proposal !== 'string' || draft.proposal.length > 12000 || !Array.isArray(draft.assumptions) || !Array.isArray(draft.questions)) return { ok: false, error: 'bad-draft' }
     const existing = getProposalDraft(db, draft.projectId)
     saveProposalDraft(db, { provider: existing?.provider, model: existing?.model, promptVersion: existing?.promptVersion, generatedAt: existing?.generatedAt, projectId: draft.projectId, proposal: draft.proposal, assumptions: draft.assumptions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), questions: draft.questions.filter(x => typeof x === 'string').slice(0, 8).map(x => x.slice(0, 400)), updatedAt: new Date().toISOString() })
+    emitProjects([], [draft.projectId])
     return { ok: true }
   })
-  ipcMain.handle(IPC.deleteProposalDraft, (event, v: { id?: unknown }) => { if (!mainSender(event) || !db || !proposalId(v?.id)) return { ok: false }; deleteProposalDraft(db, v.id); return { ok: true } })
+  ipcMain.handle(IPC.deleteProposalDraft, (event, v: { id?: unknown }) => { if (!mainSender(event) || !db || !proposalId(v?.id)) return { ok: false }; deleteProposalDraft(db, v.id); emitProjects([], [v.id]); return { ok: true } })
   ipcMain.handle(IPC.getUpdateState, () => updates?.snapshot())
   ipcMain.handle(IPC.checkUpdate, event => mainSender(event) ? updates?.check() : { ok: false, error: 'not-main' })
   ipcMain.handle(IPC.downloadUpdate, event => mainSender(event) ? updates?.download() : { ok: false, error: 'not-main' })
@@ -1511,19 +1617,17 @@ function registerIpc(): void {
       })
     }
   })
-  ipcMain.handle(IPC.getProjects, (_e, q: ProjectQuery) => {
-    if (!db) return []
+  ipcMain.handle(IPC.getProjects, async (_e, q: ProjectQuery) => {
+    if (!localSender(_e) || !db || !searchService) throw new Error('search-unavailable')
     const limit = Math.min(200, Math.max(1, Math.floor(q.limit) || 50))
-    const offset = Math.max(0, Math.floor(q.offset) || 0)
+    const offset = Math.min(10_000_000, Math.max(0, Math.floor(q.offset) || 0))
     const categories = Array.isArray(q.categories) ? q.categories.filter((c): c is string => typeof c === 'string').slice(0, 20) : undefined
-    const rows = listProjects(db, {
-      limit,
-      offset,
+    const definition = sanitizeFilterDefinition(legacyToFilterDef({
       unreadOnly: q.unreadOnly === true,
       search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
       categories,
       displayFilter: settings.displayFilter
-    })
+    }))
     // Display on demand: when the user explicitly filters by category,
     // gradually enrich unconfirmed projects (bounded; claimed as pending
     // so repeated queries never re-enqueue). Baseline lists stay untouched.
@@ -1538,16 +1642,17 @@ function registerIpc(): void {
         void trackWork(enrichQueue.pump())
       }
     }
-    return rows
+    return (await searchService.page(`${_e.sender.id}:legacy`, definition, limit, offset)).rows
   })
   ipcMain.handle(IPC.getProjectCount, (_e, q: Omit<ProjectQuery, 'limit' | 'offset'>) => {
-    if (!db) return { total: 0, unread: 0 }
-    return countProjects(db, {
+    if (!localSender(_e) || !searchService) throw new Error('search-unavailable')
+    const definition = sanitizeFilterDefinition(legacyToFilterDef({
       unreadOnly: q.unreadOnly === true,
       search: typeof q.search === 'string' ? q.search.slice(0, 200) : undefined,
       categories: Array.isArray(q.categories) ? q.categories.filter((c): c is string => typeof c === 'string').slice(0, 20) : undefined,
       displayFilter: settings.displayFilter
-    })
+    }))
+    return searchService.page(`${_e.sender.id}:counts`, definition, 0, 0).then(({ total, unread }) => ({ total, unread }))
   })
   ipcMain.handle(IPC.setReadState, (_e, v: { id: number; read: boolean }) => {
     if (!db || !Number.isInteger(v.id) || typeof v.read !== 'boolean') return
@@ -1663,6 +1768,7 @@ function registerIpc(): void {
     const d: Db = db
     const applied = runInTransaction(d, () => updateUserState(d, v.id, patch))
     if (!applied) return { ok: false, error: 'unknown-project' } satisfies MutationResult
+    if ('saved' in patch && patch.saved) telemetry?.record('feature_used', { feature: 'bookmark', outcome: 'success' })
     auditUi(`user-state id=${v.id} ${Object.keys(patch).join(',')}`)
     emitProjects([], [v.id])
     return { ok: true } satisfies MutationResult
@@ -1680,6 +1786,7 @@ function registerIpc(): void {
     while (taken.has(id)) id = `sf_${randomUUID().replace(/-/g, '').slice(0, 12)}`
     const row: SavedFilter = { id, name: v.name.trim(), definition: def, createdAt: now, updatedAt: now }
     saveSavedFilterRow(db, row)
+    telemetry?.record('feature_used', { feature: 'saved_filter', outcome: 'success' })
     auditUi(`filter-create ${id}`)
     return { ok: true, id }
   })
@@ -1709,23 +1816,23 @@ function registerIpc(): void {
     return { ok: true }
   })
   ipcMain.handle(IPC.previewFilterCount, (_e, v: { definition: unknown }) => {
-    if (!db) return { total: 0, unread: 0 }
+    if (!localSender(_e) || !searchService) throw new Error('search-unavailable')
     const def = sanitizeFilterDefinition(v.definition)
-    const { total, unread } = queryProjectsPage(db, def, { limit: 0, offset: 0 })
-    return { total, unread }
+    return searchService.page(`${_e.sender.id}:preview:${def.scope}`, def, 0, 0).then(({ total, unread }) => ({ total, unread }))
   })
-  ipcMain.handle(IPC.queryProjectsPage, (_e, v: { definition: unknown; limit: unknown; offset: unknown }) => {
-    if (!db) return { rows: [], total: 0, unread: 0 }
+  ipcMain.handle(IPC.queryProjectsPage, (_e, v: { definition: unknown; limit: unknown; offset: unknown; window?: { ceilingId?: unknown } }) => {
+    if (!localSender(_e) || !db || !searchService) throw new Error('search-unavailable')
     const def = sanitizeFilterDefinition(v.definition)
     const limit = Math.min(200, Math.max(1, Math.floor(v.limit as number) || 50))
-    const offset = Math.max(0, Math.floor(v.offset as number) || 0)
+    const offset = Math.min(10_000_000, Math.max(0, Math.floor(Number(v.offset)) || 0))
+    const ceilingId = Number.isSafeInteger(v.window?.ceilingId) && Number(v.window?.ceilingId) >= 0 ? Number(v.window?.ceilingId) : undefined
     if (def.categoryFilter.mode === 'selected' || def.budgetMin !== null || def.budgetMax !== null || !def.includeUnknownBudget) {
       const ids = getUnenrichedNewIds(db, 50).slice(0, 5)
       markEnrichmentPending(db, ids)
       for (const id of ids) { const p = getProjectById(db, id); if (p) enrichQueue.enqueue(id, p.url) }
       void trackWork(enrichQueue.pump())
     }
-    return queryProjectsPage(db, def, { limit, offset })
+    return searchService.page(`${_e.sender.id}:page:${def.scope}`, def, limit, offset, { ceilingId })
   })
   ipcMain.handle(IPC.testNotification, () => sendTestNotification())
   ipcMain.handle(IPC.openWindowsNotificationSettings, async event => {
@@ -1775,8 +1882,8 @@ function registerIpc(): void {
     let chosen: string | null
     try { chosen = await chooseDataFile('save-backup') } catch (error) { return { ok: false, error: backupError(error, 'write-failed') } }
     if (!chosen) return { ok: false }
-    try { await dataBackup.create(chosen); auditUi('backup-created'); return { ok: true, path: chosen } }
-    catch (error) { return { ok: false, error: backupError(error, 'write-failed') } }
+    try { await dataBackup.create(chosen); telemetry?.record('feature_used', { feature: 'backup_created', outcome: 'success' }); auditUi('backup-created'); return { ok: true, path: chosen } }
+    catch (error) { telemetry?.record('feature_used', { feature: 'backup_created', outcome: 'failed' }); return { ok: false, error: backupError(error, 'write-failed') } }
   })
   ipcMain.handle(IPC.validateRestore, async event => {
     if (!mainSender(event) || !dataBackup || quitRequested) return { ok: false, error: 'busy' }
@@ -1790,6 +1897,8 @@ function registerIpc(): void {
     if (!mainSender(event) || !dataBackup || quitRequested || typeof value?.token !== 'string' || typeof value?.applyStartup !== 'boolean') return { ok: false, error: 'bad-request' }
     try {
       await dataBackup.stage(value.token, value.applyStartup)
+      await telemetry?.reset()
+        telemetry?.record('feature_used', { feature: 'restore_requested', outcome: 'success' })
       setTimeout(() => {
         if (testHarness) testHarness.record('restore-restart', true)
         else app.relaunch({ args: process.argv.slice(1).filter(arg => arg !== '--updated' && !arg.startsWith('rased:')) })
@@ -1910,6 +2019,7 @@ function registerIpc(): void {
 
 // ---------------------------------------------------------------- boot
 
+let startupStage: 'database' | 'later' = 'database'
 async function boot(): Promise<void> {
   if (!singleInstance) {
     app.quit()
@@ -1953,7 +2063,7 @@ async function boot(): Promise<void> {
     }
   }
 
-  try { db = openDatabase(join(app.getPath('userData'), 'rased.db')) }
+  try { db = await openDatabaseAtStartup(join(app.getPath('userData'), 'rased.db'), undefined, undefined, process.platform, (code, attempt) => testHarness?.record('startup-db-retry', { code, attempt })) }
   catch (error) {
     if (!isCorruptDatabaseError(error)) throw error
     let archive: string | null = null
@@ -1979,11 +2089,20 @@ async function boot(): Promise<void> {
       app.quit(); return
     }
   }
+  startupStage = 'later'
   await recoverPendingRestore(db, app.getPath('userData'), APP_VERSION, finalizeBackupInWorker)
+  const searchPath = join(app.getPath('userData'), 'rased.db')
+  searchService = new SearchService(searchPath, join(__dirname, 'searchReader.js'), () => !!db && !searchCacheReady(db))
+  searchCache = new SearchCacheBuilder(searchPath, join(__dirname, 'searchCacheWriter.js'), () => !!db && !quitRequested && !searchCacheReady(db))
+  searchCache.start()
   dataBackup = new DataBackupManager(db, app.getPath('userData'), APP_VERSION, Date.now, finalizeBackupInWorker)
   dataBackup.start()
-  aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi)
   settings = loadSettings()
+  startupStage = 'later'
+  if (testHarness && existsSync(join(app.getPath('userData'), 'startup-failure.json'))) throw Error('synthetic startup failure')
+  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, windowsFamily: Number(osRelease().split('.')[2]) >= 22000 ? '11' : process.platform === 'win32' ? '10' : 'other', config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) broadcast(IPC.analyticsChanged, telemetry.status()) } })
+  telemetry.start(notificationBoot)
+  aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi, result => telemetry?.record('proposal_result', result))
   cleanupNotificationActivations(db)
   notificationCleanupTimer = setInterval(() => { if (!quitRequested && db?.isOpen) cleanupNotificationActivations(db) }, 60 * 60 * 1000)
   notificationCleanupTimer.unref()
@@ -1998,7 +2117,7 @@ async function boot(): Promise<void> {
     recordDiagnostic(db, { at: new Date().toISOString(), endpointKind: 'quick-apply', status: 'retirement-failed', durationMs: 0, itemCount: null, errorCategory: 'legacy-browser-cleanup-failed', detail: null })
   }
   try{
-    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>settings,()=>broadcast(IPC.extensionStatus,extensionSnapshot()),()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
+    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>settings,extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
     await extension.start()
   }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
   if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
@@ -2039,7 +2158,16 @@ async function boot(): Promise<void> {
   // Development never installs updates over a working checkout. Test mode
   // replaces only the updater boundary inside the explicitly marked profile.
   const updatePort = testHarness ? testUpdater(app.getPath('userData'), testHarness.record) : IS_PACKAGED && process.platform === 'win32' ? new NsisUpdater() : null
-  updates = new UpdateController(updatePort, APP_VERSION, state => broadcast(IPC.updateState, state), error => auditUi(`update-error ${String(error).slice(0, 200)}`))
+  let lastUpdateTelemetry = ''
+  updates = new UpdateController(updatePort, APP_VERSION, state => {
+    broadcast(IPC.updateState, state)
+    if (state.phase === 'downloading') lastUpdateTelemetry = ''
+    const result = state.phase === 'downloaded' ? 'success' : state.phase === 'error' && state.error === 'download' ? 'failed' : null
+    if (result && state.version && `${state.version}:${result}` !== lastUpdateTelemetry) {
+      lastUpdateTelemetry = `${state.version}:${result}`
+      telemetry?.record('update_download_result', { target_version: state.version, outcome: result, error: result === 'success' ? 'none' : 'other' })
+    }
+  }, error => auditUi(`update-error ${String(error).slice(0, 200)}`))
   if (updatePort && !testHarness) {
     updateStartupTimer = setTimeout(() => { if (!quitRequested) void updates?.check() }, 10_000)
     updateTimer = setInterval(() => { if (!quitRequested) void updates?.check() }, 6 * 60 * 60 * 1000)
@@ -2047,7 +2175,7 @@ async function boot(): Promise<void> {
   }
   kaf = new KafController({
     db: () => db, settings: () => settings, runId, fetchImpl: testHarness?.fetchImpl,
-    health: h => { broadcast(IPC.kafHealthChanged, h); updateTray() },
+    health: h => { telemetry?.health('kaf', h); broadcast(IPC.kafHealthChanged, h); updateTray() },
     projects: emitProjects, details: id => emitDetails([id]), flush: () => flushNotifications(null).then(() => undefined)
   })
   registerIpc()
@@ -2070,6 +2198,8 @@ async function boot(): Promise<void> {
     else win?.show()
   })
   powerMonitor.on('suspend', () => {
+    searchCache?.suspend(true)
+    telemetry?.suspend()
     nafezlyFacts.abortActive()
     kaf?.sleep()
     activeRss?.abort()
@@ -2087,6 +2217,8 @@ async function boot(): Promise<void> {
     }
   })
   powerMonitor.on('resume', () => {
+    searchCache?.suspend(false)
+    telemetry?.resume()
     kaf?.wake()
     if (settings.mostaqlEnabled && !paused) {
       lastRecovering = true
@@ -2296,4 +2428,19 @@ process.on('uncaughtException', (err) => {
   }
 })
 
-void boot()
+void boot().catch(async (error: unknown) => {
+  // Startup failures can happen before a window or diagnostics DB exists.
+  // Surface them and exit instead of leaving an invisible, unusable process.
+  const failure = recordStartupFailure(app.getPath('userData'), startupStage, error)
+  console.error('RASED startup failed', failure)
+  const code = error && typeof error === 'object' && 'errcode' in error ? Number(error.errcode) : null
+  if (testHarness) testHarness.record('boot-failed', { ...failure, sqliteCode: code })
+  else {
+    try { await dialog.showMessageBox({ type: 'error', title: 'RASED', message: startupStage === 'later' ? 'تعذر إكمال بدء راصد. أعد المحاولة أو تواصل مع المطور. لم يتم حذف بياناتك.\nRASED could not finish starting. Retry or contact the developer. Your data was not deleted.' : 'تعذر بدء راصد. تأكد من توفر مساحة وصلاحية الوصول إلى بيانات التطبيق، ثم أعد المحاولة. لم يتم حذف بياناتك.\nRASED could not start. Check free disk space and access to the app data folder, then retry. Your data was not deleted.' }) } catch { /* Exit even when the OS cannot display a dialog. */ }
+  }
+  try { await telemetry?.close() } catch { /* Best effort after failed boot. */ }
+  try { if (db?.isOpen) closeDatabase(db) } catch { /* Preserve the original files. */ }
+  quitRequested = true
+  quitComplete = true
+  app.quit()
+})

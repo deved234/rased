@@ -8,6 +8,7 @@ import { getSettingRaw, runInTransaction, setSettingRaw } from './repositories.j
 import { parseSettingsTransfer, settingsPayload } from './settingsTransfer.js'
 import { sanitizeSettings } from '../shared/types.js'
 import type { BackupCounts } from '../shared/data.js'
+import { resetSearchCache } from './searchCache.js'
 
 export const MAX_BACKUP_BYTES = 512 * 1024 * 1024
 export const PORTABLE_KEYS = ['app', 'proposal-profile', 'ai-settings', 'kaf:last-list-ids', 'kaf:checkpoint']
@@ -70,6 +71,7 @@ export function finalizeBackup(temporary: string, appVersion: string): Inspected
         UPDATE project_details SET status='not_requested' WHERE status='loading';
         DROP TABLE IF EXISTS rased_backup_manifest;
         CREATE TABLE rased_backup_manifest (json TEXT NOT NULL);`)
+      copy.exec("DELETE FROM project_search_cache; DELETE FROM project_search_body; INSERT INTO project_search_fts(project_search_fts) VALUES('delete-all'); DELETE FROM project_search_dirty; UPDATE project_search_state SET backfill_complete=0;")
       const manifest: Manifest = { format: 'rased-backup', version: 1, schemaVersion: SCHEMA_VERSION, createdAt: new Date().toISOString(), appVersion }
       copy.prepare('INSERT INTO rased_backup_manifest(json) VALUES(?)').run(JSON.stringify(manifest))
     })
@@ -84,7 +86,7 @@ function referenceSchema(): Map<string, string> {
   if (expectedSchema) return expectedSchema
   const reference = openDatabase(':memory:')
   try {
-    expectedSchema = new Map((reference.prepare("SELECT name,sql FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as unknown as { name: string; sql: string }[]).map(row => [row.name, row.sql.replace(/\s+/g, ' ').trim()]))
+    expectedSchema = new Map((reference.prepare("SELECT name,sql FROM sqlite_schema WHERE type IN ('table','trigger') AND name NOT LIKE 'sqlite_%'").all() as unknown as { name: string; sql: string }[]).map(row => [row.name, row.sql.replace(/\s+/g, ' ').trim()]))
     return expectedSchema
   } finally { reference.close() }
 }
@@ -106,16 +108,18 @@ export function inspectBackup(file: string): InspectedBackup {
     if (version > SCHEMA_VERSION) throw Error('newer-schema')
     // Schema 9 adds only non-portable notification activation tickets. Existing
     // schema-8 archives remain valid and contain every durable table we restore.
-    if (version !== SCHEMA_VERSION && version !== 8) throw Error('bad-schema')
+    if (![8,9,SCHEMA_VERSION].includes(version)) throw Error('bad-schema')
     const schema = db.prepare("SELECT name,type,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all() as unknown as { name: string; type: string; sql: string | null }[]
     const expected = new Map(referenceSchema())
     if (version === 8) expected.delete('notification_activations')
+    if (version < 10) for (const name of expected.keys()) if (name.startsWith('project_search_') || name.startsWith('search_')) expected.delete(name)
     for (const item of schema) {
-      if (item.type !== 'table' && item.type !== 'index') throw Error('bad-schema')
-      if (item.type === 'table' && item.name !== 'rased_backup_manifest' && expected.get(item.name) !== item.sql?.replace(/\s+/g, ' ').trim()) throw Error('bad-schema')
+      if (!['table','index','trigger'].includes(item.type)) throw Error('bad-schema')
+      if ((item.type === 'table' || item.type === 'trigger') && item.name !== 'rased_backup_manifest' && expected.get(item.name) !== item.sql?.replace(/\s+/g, ' ').trim()) throw Error('bad-schema')
       if (item.name === 'rased_backup_manifest' && item.sql?.replace(/\s+/g, ' ').trim() !== 'CREATE TABLE rased_backup_manifest (json TEXT NOT NULL)') throw Error('bad-schema')
     }
-    for (const name of expected.keys()) if (!schema.some(item => item.type === 'table' && item.name === name)) throw Error('bad-schema')
+    for (const name of expected.keys()) if (!schema.some(item => item.name === name && ['table','trigger'].includes(item.type))) throw Error('bad-schema')
+    if (version >= 10 && (db.prepare('SELECT 1 FROM project_search_cache LIMIT 1').get() || db.prepare('SELECT 1 FROM project_search_body LIMIT 1').get() || db.prepare('SELECT rowid FROM project_search_fts LIMIT 1').get() || db.prepare('SELECT 1 FROM project_search_dirty LIMIT 1').get())) throw Error('bad-schema')
     const rows = db.prepare('SELECT json FROM rased_backup_manifest').all() as unknown as { json: string }[]
     if (rows.length !== 1) throw Error('bad-schema')
     const manifest = JSON.parse(rows[0]!.json) as Manifest
@@ -162,6 +166,7 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
       }
       setSettingRaw(db, 'data-last-restore-id', restoreId)
       setSettingRaw(db, 'data-restore-result', JSON.stringify({ ok: true, at: new Date().toISOString(), rollbackPath }))
+      resetSearchCache(db)
     })
   } finally { db.exec('DETACH DATABASE restore_data') }
 }

@@ -20,12 +20,14 @@ import { ConfirmDialog, FieldError, Toggle } from '../components/ui.js'
 import { KeywordTokens } from '../components/FilterDrawer.js'
 import { SourceMonitoringSettings } from './SourceMonitoringSettings.js'
 import { SOURCES } from '@shared/sources.js'
+import { AnalyticsSettings } from './AnalyticsSettings.js'
 
-type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'quick' | 'data' | 'about' | 'legal' | 'updates'
+type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'quick' | 'data' | 'about' | 'legal' | 'updates' | 'analytics'
 
-const SECTIONS: Section[] = ['watching', 'notifications', 'appearance', 'ai', 'quick', 'data', 'updates', 'about', 'legal']
+const SECTIONS: Section[] = ['watching', 'notifications', 'appearance', 'ai', 'quick', 'data', 'updates', 'analytics', 'about', 'legal']
 
 function sectionTitle(s: Section, lang: Lang): string {
+  if (s === 'analytics') return lang === 'ar' ? 'الخصوصية والإحصائيات' : 'Privacy & analytics'
   if (s === 'quick') return lang === 'ar' ? 'التقديم السريع' : 'Quick apply'
   const t = STRINGS[lang]
   if (s === 'watching') return t.settingsWatching
@@ -174,7 +176,7 @@ export function SettingsView({
         <nav className="settings-nav" aria-label={t.navSettings}>
           {SECTIONS.map((s, index) => (
             <React.Fragment key={s}>
-            {[0,2,3,5,7].includes(index) && <span className="settings-nav-heading">{({0:lang==='ar'?'الرصد والتنبيهات':'Monitoring',2:lang==='ar'?'المظهر':'Appearance',3:lang==='ar'?'العروض':'Proposals',5:lang==='ar'?'إدارة التطبيق':'App management',7:lang==='ar'?'المساعدة والمعلومات':'Help and information'} as Record<number,string>)[index]}</span>}
+            {[0,2,3,5,8].includes(index) && <span className="settings-nav-heading">{({0:lang==='ar'?'الرصد والتنبيهات':'Monitoring',2:lang==='ar'?'المظهر':'Appearance',3:lang==='ar'?'العروض':'Proposals',5:lang==='ar'?'إدارة التطبيق':'App management',8:lang==='ar'?'المساعدة والمعلومات':'Help and information'} as Record<number,string>)[index]}</span>}
             <button
               aria-current={active === s ? 'page' : undefined}
               className={active === s ? 'settings-nav-item active' : 'settings-nav-item'}
@@ -588,6 +590,7 @@ export function SettingsView({
         {active === 'ai' && <ProposalSettings lang={lang} />}
         {active === 'quick' && <QuickApplySettings settings={settings} />}
         {active === 'updates' && <UpdatesView lang={lang} />}
+        {active === 'analytics' && <AnalyticsSettings lang={lang} />}
 
         {active === 'about' && (
           <div className="about-page">

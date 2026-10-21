@@ -122,6 +122,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e": "node scripts/e2e-cdp.mjs",
+    "test:search": "node scripts/search-e2e.mjs",
     "test:ai": "node scripts/ai-e2e.mjs",
     "test:ui": "node scripts/ui-ux-e2e.mjs",
     "test:quick-apply": "node scripts/quick-apply-e2e.mjs",
@@ -135,7 +136,9 @@
     "test:data": "node scripts/data-e2e.mjs",
     "test:monitoring": "node scripts/monitoring-e2e.mjs",
     "test:project-facts": "node scripts/project-facts-e2e.mjs",
-    "test:notification-activation": "node scripts/notification-activation-e2e.mjs"
+    "test:notification-activation": "node scripts/notification-activation-e2e.mjs",
+    "test:telemetry": "node scripts/telemetry-worker-test.mjs && node scripts/telemetry-e2e.mjs && node scripts/telemetry-lifecycle-e2e.mjs",
+    "test:startup": "node scripts/test-database-startup.mjs"
   },
-  "version": "0.8.1"
+  "version": "0.9.0"
 }

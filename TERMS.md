@@ -1,6 +1,6 @@
 # شروط الاستخدام
 
-2026-10-15 · RASED · david atef
+2026-10-19 · RASED · david atef
 
 ## رصد كاف (كفيل سابقًا)
 
@@ -42,7 +42,7 @@
 
 # Terms of use
 
-2026-10-15 · RASED · david atef
+2026-10-19 · RASED · david atef
 
 ## KAF monitoring (formerly Kafiil)
 

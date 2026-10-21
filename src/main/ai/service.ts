@@ -6,13 +6,14 @@ import type { ProposalPreview, ProposalResult } from '../../shared/proposals.js'
 import { deleteAiKey, keyStatus, readAiKey, saveAiKey } from './keyStore.js'
 import { getAiSetup, getCapabilities, saveCatalog, saveVerification } from './settings.js'
 import { listProviderModels } from './providers.js'
+import { durationBucket, telemetryError, type TelemetryEvents } from '../../shared/telemetry.js'
 
 export class AiService {
   private active: { provider: AiProviderId; controller: AbortController } | null = null
   private catalogs = new Map<AiProviderId, AbortController>()
   private jobs = new Set<Promise<unknown>>()
   private closed = false
-  constructor(private db: Db, private userData: string, private fetchImpl: typeof fetch = fetch, private audit: (message: string) => void = () => {}) {}
+  constructor(private db: Db, private userData: string, private fetchImpl: typeof fetch = fetch, private audit: (message: string) => void = () => {}, private measured: (result: TelemetryEvents['proposal_result']) => void = () => {}) {}
   setup(): ReturnType<typeof getAiSetup> { return getAiSetup(this.db, this.userData) }
   preview(id: number, notes: string, selection: AiSelection): ProposalPreview | null {
     return getProposalPreview(this.db, id, notes, selection, keyStatus(this.userData, selection.provider).revision, getCapabilities(this.db, this.userData, selection))
@@ -81,10 +82,12 @@ export class AiService {
         const testedAt = new Date().toISOString()
         saveVerification(this.db, preview.provider, { model: preview.model, revision, testedAt })
         this.audit(`ai ${test ? 'test' : 'generate'} ${preview.provider} ${preview.model} ok ${Date.now() - start}ms`)
+        if (!test) this.measured({ provider: preview.provider, outcome: 'success', error: 'none', duration: durationBucket(Date.now() - start) })
         return test ? { ok: true, testedAt, elapsedMs: Date.now() - start } : { ok: true, draft }
       } catch (error) {
         const code = timedOut ? 'timeout' : controller.signal.aborted ? 'cancelled' : safeAiError(error)
         this.audit(`ai ${test ? 'test' : 'generate'} ${preview.provider} ${preview.model} ${code} ${Date.now() - start}ms`)
+        if (!test) this.measured({ provider: preview.provider, outcome: code === 'cancelled' ? 'cancelled' : 'failed', error: telemetryError(code), duration: durationBucket(Date.now() - start) })
         return { ok: false, error: code, retryAfterSeconds: retryAfter(error) }
       } finally { clearTimeout(timeout); if (this.active?.controller === controller) this.active = null }
     })())

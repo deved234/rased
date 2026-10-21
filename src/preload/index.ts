@@ -28,6 +28,14 @@ function sub<T>(channel: string, cb: (v: T) => void): () => void {
 }
 
 const api: RasedApi = {
+  databaseReady: () => ipcRenderer.invoke(IPC.databaseReady),
+  getSidebarCounts: () => ipcRenderer.invoke(IPC.getSidebarCounts),
+  matchProjectIds: (definition, ids) => ipcRenderer.invoke(IPC.matchProjectIds, { definition, ids }),
+  getAnalyticsStatus: () => ipcRenderer.invoke(IPC.getAnalyticsStatus),
+  analyticsConsent: action => ipcRenderer.invoke(IPC.analyticsConsent, action),
+  analyticsAction: action => ipcRenderer.invoke(IPC.analyticsAction, action),
+  recordUiUsage: surface => ipcRenderer.invoke(IPC.recordUiUsage, surface),
+  onAnalyticsChanged: cb => sub(IPC.analyticsChanged, cb),
   getExtensionStatus: () => ipcRenderer.invoke(IPC.getExtensionStatus),
   extensionAction: (action) => ipcRenderer.invoke(IPC.extensionAction,action),
   quickApplyProject: (id) => ipcRenderer.invoke(IPC.quickApplyProject,{id}),
@@ -88,7 +96,7 @@ const api: RasedApi = {
   updateSavedFilter: (id, name, definition) => ipcRenderer.invoke(IPC.updateSavedFilter, { id, name, definition }) as Promise<MutationResult>,
   deleteSavedFilter: (id) => ipcRenderer.invoke(IPC.deleteSavedFilter, { id }) as Promise<MutationResult>,
   previewFilterCount: (definition) => ipcRenderer.invoke(IPC.previewFilterCount, { definition }) as Promise<{ total: number; unread: number }>,
-  queryProjectsPage: (definition, limit, offset) => ipcRenderer.invoke(IPC.queryProjectsPage, { definition, limit, offset }) as Promise<PageResult>,
+  queryProjectsPage: (definition, limit, offset, window) => ipcRenderer.invoke(IPC.queryProjectsPage, { definition, limit, offset, window }) as Promise<PageResult>,
   testNotification: () => ipcRenderer.invoke(IPC.testNotification) as Promise<OpenProjectResult>,
   openWindowsNotificationSettings: () => ipcRenderer.invoke(IPC.openWindowsNotificationSettings) as Promise<MutationResult>,
   testSound: () => ipcRenderer.invoke(IPC.testSound) as Promise<void>,

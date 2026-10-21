@@ -2,7 +2,6 @@ import { MonitoringNotices } from '../components/SourceHealthDetails.js'
 import React from 'react'
 import { QuickApplyButton } from '../components/QuickApplyButton.js'
 import { rased } from '../api.js'
-import { matchesDefinition } from '@shared/filters.js'
 import {
   defaultFilterDefinition,
   type AppSettings,
@@ -70,10 +69,13 @@ export function ProjectsView({
   const [total, setTotal] = React.useState(0)
   const [unread, setUnread] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
+  const [updating, setUpdating] = React.useState(false)
   const [filterBusy, setFilterBusy] = React.useState(false)
   const filterMutation = React.useRef(false)
   const [drawer, setDrawer] = React.useState(false)
-  const [pendingNew, setPendingNew] = React.useState<number[]>([])
+  const [visibleTotal, setVisibleTotal] = React.useState(0)
+  const ceilingRef = React.useRef<number | undefined>(undefined)
+  const queryKeyRef = React.useRef('')
   const [selectedId, setSelectedId] = React.useState<number | null>(memory.selectedId)
   const [narrow, setNarrow] = React.useState(() => window.innerWidth < 900)
   const listRef = React.useRef<HTMLDivElement>(null)
@@ -83,6 +85,7 @@ export function ProjectsView({
   const restoreRef = React.useRef<{ id?: number; offset?: number; scrollTop: number } | null>({ scrollTop: memory.scrollTop })
   const previewAnchorRef = React.useRef<{ id?: number; offset?: number; scrollTop: number } | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
+  const [searchError, setSearchError] = React.useState(false)
   const captureAnchor = (): { id?: number; offset?: number; scrollTop: number } => {
     const el = listRef.current
     if (!el) return { scrollTop: 0 }
@@ -111,13 +114,11 @@ export function ProjectsView({
     scopeRef.current = scope
     setDef(d => ({ ...d, scope: scope === 'saved' ? 'saved' : settings.displayQuery.scope }))
     setLimit(PAGE)
-    setPendingNew([])
   }, [scope])
 
   React.useEffect(() => {
     if (scope !== 'saved' && JSON.stringify(defRef.current) !== JSON.stringify(settings.displayQuery)) {
       setDef(settings.displayQuery)
-      setPendingNew([])
     }
   }, [JSON.stringify(settings.displayQuery)])
 
@@ -125,34 +126,47 @@ export function ProjectsView({
     if (d.search !== search) onSearch(d.search)
     setDef(d)
     setLimit(PAGE)
-    setPendingNew([])
     if (scope !== 'saved') void patchSettings({ displayQuery: d })
   }
 
-  const fetchPage = React.useCallback(async (d: FilterDefinition, lim: number, off: number, my: number) => {
-    const accumulated: ProjectWithUser[] = []
-    let totalCount = 0, unreadCount = 0
-    for (let offset = off; offset < off + lim; offset += 200) {
-      const r = await rased.queryProjectsPage(d, Math.min(200, off + lim - offset), offset)
-      if (gen.current !== my) return
-      totalCount = r.total; unreadCount = r.unread
-      accumulated.push(...r.rows)
-      if (offset + r.rows.length >= r.total || r.rows.length === 0) break
-    }
-    setRows(accumulated)
-    setTotal(totalCount)
-    setUnread(unreadCount)
-    setLoading(false)
+  const fetchPage = React.useCallback(async (d: FilterDefinition, lim: number, off: number, my: number, reveal = false) => {
+    setUpdating(true)
+    try {
+      if (reveal) ceilingRef.current = undefined
+      setSearchError(false)
+      const accumulated: ProjectWithUser[] = []
+      let totalCount = 0, unreadCount = 0, visibleCount = 0, revision: number | undefined, restarts = 0
+      for (let offset = off; offset < off + lim; offset += 200) {
+        const r = await rased.queryProjectsPage(d, Math.min(200, off + lim - offset), offset, { ceilingId: ceilingRef.current })
+        if (gen.current !== my) return
+        ceilingRef.current = r.ceilingId
+        if (revision !== undefined && revision !== r.revision) {
+          if (++restarts > 3) throw new Error('search-changing')
+          accumulated.length = 0; revision = undefined; offset = off - 200; continue
+        }
+        revision = r.revision
+        totalCount = r.total; unreadCount = r.unread
+        visibleCount = r.visibleTotal ?? r.total
+        accumulated.push(...r.rows)
+        if (offset + r.rows.length >= visibleCount || r.rows.length === 0) break
+      }
+      setRows(accumulated)
+      setTotal(totalCount)
+      setUnread(unreadCount)
+      setVisibleTotal(visibleCount)
+      setLoading(false)
+    } finally { if (gen.current === my) setUpdating(false) }
   }, [])
 
   // initial load + reload on query change (generation-guarded).
   // Deps are intentionally the serialized query + limit (fetchPage is stable).
   React.useEffect(() => {
     const my = ++gen.current
+    const key = JSON.stringify(fullDef)
+    if (queryKeyRef.current !== key) { ceilingRef.current = undefined; queryKeyRef.current = key }
     if (rowsRef.current.length) restoreRef.current = captureAnchor()
     setLoading(rowsRef.current.length === 0)
-    setPendingNew([])
-    void fetchPage(fullDef, limit, 0, my).catch(err => { if (gen.current === my) { setActionError(String(err)); setLoading(false) } })
+    void fetchPage(fullDef, limit, 0, my).catch(() => { if (gen.current === my) { setSearchError(true); setLoading(false) } })
   }, [JSON.stringify(fullDef), limit, fetchPage])
 
   React.useLayoutEffect(() => {
@@ -183,39 +197,23 @@ export function ProjectsView({
   // outside the loaded window until explicitly revealed (or auto-reveal at top).
   React.useEffect(() => {
     let alive = true
-    let serial = Promise.resolve()
-    const off = rased.onProjectsChanged((e) => {
-      serial = serial.then(async () => {
-        if (!alive) return
+    let timer: ReturnType<typeof setTimeout> | undefined, first = 0, arrivals = false
+    const off = rased.onProjectsChanged(e => {
+      arrivals ||= e.newIds.length > 0
+      ++gen.current // Do not apply a response from before this committed change.
+      if (!first) first = Date.now()
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        first = 0
+        const reveal = arrivals && ((!listRef.current || listRef.current.scrollTop <= 120) && liveRef.current.autoReveal || rowsRef.current.length === 0)
+        arrivals = false
+        restoreRef.current = captureAnchor()
         const my = gen.current
         const d = { ...defRef.current, search: liveRef.current.search.trim() }
-        const matched: number[] = []
-        for (const id of e.newIds) {
-          const p = await rased.getProject(id)
-          if (p && matchesDefinition(p, d)) matched.push(id)
-        }
-        if (!alive || my !== gen.current) return
-        if (matched.length && ((!listRef.current || listRef.current.scrollTop <= 120) && liveRef.current.autoReveal || rowsRef.current.length === 0)) {
-          restoreRef.current = { scrollTop: 0 }
-          setPendingNew([])
-          await fetchPage(d, liveRef.current.limit, 0, my)
-          return
-        }
-        if (matched.length) setPendingNew(prev => [...new Set([...prev, ...matched.filter(id => !rowsRef.current.some(p => p.id === id))])])
-        if (e.changedIds.length) {
-          const updates = await Promise.all(e.changedIds.map(id => rased.getProject(id)))
-          if (!alive || my !== gen.current) return
-          restoreRef.current = captureAnchor()
-          const byId = new Map(updates.filter((p): p is NonNullable<typeof p> => p !== null).map(p => [p.id, p]))
-          const removed = new Set(e.changedIds.filter(id => !byId.has(id)))
-          setRows(prev => prev.filter(p => !removed.has(p.id)).map(p => byId.get(p.id) ?? p).filter(p => matchesDefinition(p, d)))
-          setPendingNew(prev => prev.filter(id => !e.changedIds.includes(id) || !!byId.get(id) && matchesDefinition(byId.get(id)!, d)))
-        }
-        const counts = await rased.previewFilterCount(d)
-        if (alive && my === gen.current) { setTotal(counts.total); setUnread(counts.unread) }
-      }).catch(err => { if (alive) setActionError(String(err)) })
+        void fetchPage(d, liveRef.current.limit, 0, my, reveal).catch(() => { if (alive && my === gen.current) { setLoading(false); setSearchError(true) } })
+      }, Math.min(100, Math.max(0, 300 - (Date.now() - first))))
     })
-    return () => { alive = false; off() }
+    return () => { alive = false; clearTimeout(timer); ++gen.current; off() }
   }, [fetchPage])
 
   const openDetail = React.useCallback((id: number) => {
@@ -334,7 +332,9 @@ export function ProjectsView({
     <div className="split" ref={splitRef}>
       <div className="list-pane">
         {actionError && <div className="banner bad" role="alert">{actionError}</div>}
+        {searchError && <div className="banner bad" role="alert">{lang === 'ar' ? 'تعذر تحديث النتائج. النتائج السابقة قد تكون قديمة.' : 'Could not update results. Previous results may be stale.'} <button className="btn sm" onClick={() => { const my = ++gen.current; void fetchPage(fullDef, limit, 0, my).catch(() => { setSearchError(true); setLoading(false) }) }}>{lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}</button></div>}
         <MonitoringNotices source={def.source} health={sourceHealth} settings={settings} lang={lang} />
+        {updating && <div className="small muted" role="status">{lang === 'ar' ? 'جارٍ تحديث نتائج البحث…' : 'Updating search results…'}</div>}
         {def.source === 'all' && def.categoryFilter.mode === 'selected' && <div className="banner">{t.filterCategoryScope}</div>}
         <div className="list-toolbar">
           <div className="source-segment" role="group" aria-label={t.filterSource}>
@@ -359,7 +359,7 @@ export function ProjectsView({
               {activeFilterCount > 0 && <span className="num">({activeFilterCount})</span>}
           </button>
         </div>
-        <div className="list-scroll" ref={listRef} onKeyDown={onListKey} tabIndex={0} aria-label={scope === 'saved' ? t.navSaved : t.allProjects}
+        <div className="list-scroll" ref={listRef} onKeyDown={onListKey} tabIndex={0} aria-busy={loading || updating} aria-label={scope === 'saved' ? t.navSaved : t.allProjects}
           onScroll={() => { onMemory({ def: fullDef, limit, scrollTop: listRef.current?.scrollTop ?? 0, selectedId }) }}
         >
 
@@ -371,23 +371,22 @@ export function ProjectsView({
             <span className="num">{total} {t.projectsUnit}</span>
           </div>
 
-          {pendingNew.length > 0 && (
+          {total > visibleTotal && (
             <button
               className="pill"
               onClick={() => {
-                setPendingNew([])
                 restoreRef.current = { scrollTop: 0 }
                 const my = ++gen.current
-                void fetchPage(fullDef, limit, 0, my)
+                void fetchPage(fullDef, limit, 0, my, true).catch(() => setSearchError(true))
               }}
             >
-              {fmt(t.newArrivals, { n: pendingNew.length })}
+              {fmt(t.newArrivals, { n: total - visibleTotal })}
             </button>
           )}
 
           {loading ? (
             <SkeletonList lang={lang} rows={6} />
-          ) : rows.length === 0 ? (
+          ) : !searchError && rows.length === 0 ? (
             <EmptyState
               title={scope === 'saved' && activeFilterCount === 0 ? t.emptySaved : activeFilterCount === 0 ? t.emptyNone : t.emptyFilter}
               body={activeFilterCount === 0 ? t.firstRunHint : undefined}
@@ -396,6 +395,7 @@ export function ProjectsView({
           ) : (
             rows.map((p) => (
               <div key={p.id} data-row={p.id}>
+                {!!p.matchedFields?.length && <div className="small muted">{lang === 'ar' ? 'تطابق في: ' : 'Matched in: '}{p.matchedFields.map(field => ({ title: lang === 'ar' ? 'العنوان' : 'title', excerpt: lang === 'ar' ? 'المقتطف' : 'excerpt', skills: lang === 'ar' ? 'المهارات' : 'skills', body: lang === 'ar' ? 'الوصف المحفوظ' : 'cached description', note: lang === 'ar' ? 'ملاحظاتي' : 'my notes', draft: lang === 'ar' ? 'مسودة العرض' : 'proposal draft' })[field]).join('، ')}</div>}
                 <ProjectRow
                   lang={lang}
                   project={p}
@@ -408,9 +408,9 @@ export function ProjectsView({
               </div>
             ))
           )}
-          {!loading && rows.length < total && (
+          {!loading && rows.length < visibleTotal && (
             <button className="btn" onClick={() => setLimit((l) => l + PAGE)}>
-              {t.loadMore} <span className="num">({rows.length}/{total})</span>
+              {t.loadMore} <span className="num">({rows.length}/{visibleTotal})</span>
             </button>
           )}
         </div>

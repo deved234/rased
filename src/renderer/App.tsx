@@ -2,7 +2,6 @@ import React from 'react'
 import { Titlebar } from './components/Titlebar.js'
 import { ScreenBoundary } from './components/ScreenBoundary.js'
 import { rased } from './api.js'
-import { defaultFilterDefinition } from '@shared/types.js'
 import { STRINGS } from './i18n.js'
 import { applyUiPrefs, useHashRoute, useHealth, useKhamsatHealth, useNafezlyHealth, useKafHealth, useSettings } from './hooks.js'
 import { go, navigateHash, requestAction, type Route } from './router.js'
@@ -16,18 +15,33 @@ import { SplashView } from './views/SplashView.js'
 import { CompactView } from './views/CompactView.js'
 const SettingsView = React.lazy(() => import('./views/SettingsView.js').then(module => ({ default: module.SettingsView })))
 import { useUpdates, UpdateBanner } from './views/UpdatesView.js'
+import { AnalyticsBanner } from './views/AnalyticsSettings.js'
 
 type Boot = 'loading' | 'slow' | 'error' | 'welcome' | 'ready'
 
 export function App(): React.ReactElement {
   const updateState = useUpdates()
   const route = useHashRoute()
+  const analyticsActivityDay = React.useRef('')
+  React.useEffect(() => {
+    const active = (): void => {
+      if (route.name === 'compact' || !document.hasFocus()) return
+      const day = new Date().toISOString().slice(0, 10)
+      if (analyticsActivityDay.current === day) return
+      analyticsActivityDay.current = day
+      void rased.recordUiUsage(route.name === 'project' ? 'detail' : route.name).catch(() => {})
+    }
+    document.addEventListener('pointerdown', active)
+    document.addEventListener('keydown', active)
+    return () => { document.removeEventListener('pointerdown', active); document.removeEventListener('keydown', active) }
+  }, [route.name])
   const [bootEpoch, setBootEpoch] = React.useState(0)
   const [settings, patchSettings, settingsReady] = useSettings(bootEpoch)
   const [boot, setBoot] = React.useState<Boot>('loading')
   const [bootError, setBootError] = React.useState<string | null>(null)
   const [bootStage, setBootStage] = React.useState<'settings' | 'database' | 'ready'>('settings')
   const [searchInput, setSearchInput] = React.useState('')
+  const [composing, setComposing] = React.useState(false)
   const [search, setSearch] = React.useState('')
   const [unread, setUnread] = React.useState(0)
   const [savedCount, setSavedCount] = React.useState(0)
@@ -61,7 +75,7 @@ export function App(): React.ReactElement {
         if (!alive) return
         setBootStage('database')
         // local list proves the DB is readable; failures surface honestly
-        await rased.queryProjectsPage({ ...defaultFilterDefinition(), search: '' }, 1, 0)
+        if (!await rased.databaseReady()) throw new Error('database-unavailable')
         if (!alive) return
         void s
         // A short presentation interval makes the launch visible, without
@@ -110,20 +124,28 @@ export function App(): React.ReactElement {
 
   // search debounce
   React.useEffect(() => {
+    if (composing) return
     const id = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(id)
-  }, [searchInput])
+  }, [searchInput, composing])
 
   // sidebar counts
+  const countGeneration = React.useRef(0)
   const refreshCounts = React.useCallback(() => {
-    void rased.getProjectCount({}).then((c) => setUnread(c.unread))
-    void rased.queryProjectsPage({ ...defaultFilterDefinition(), scope: 'saved' }, 0, 0).then((r) => setSavedCount(r.total))
+    const generation = ++countGeneration.current
+    void rased.getSidebarCounts().then(c => { if (generation === countGeneration.current) { setUnread(c.unread); setSavedCount(c.saved) } }).catch(() => {})
   }, [])
   React.useEffect(() => {
     if (boot !== 'ready') return
     refreshCounts()
-    const off = rased.onProjectsChanged(() => refreshCounts())
-    return off
+    let timer: ReturnType<typeof setTimeout> | undefined, first = 0
+    const off = rased.onProjectsChanged(() => {
+      countGeneration.current++
+      if (!first) first = Date.now()
+      clearTimeout(timer)
+      timer = setTimeout(() => { first = 0; refreshCounts() }, Math.min(100, Math.max(0, 300 - (Date.now() - first))))
+    })
+    return () => { countGeneration.current++; clearTimeout(timer); off() }
   }, [boot, refreshCounts])
 
   // tray + compact navigation events
@@ -200,6 +222,7 @@ export function App(): React.ReactElement {
       />
       <div className="main">
         <UpdateBanner lang={lang} state={updateState} />
+        <AnalyticsBanner lang={lang} />
         <Topbar
           lang={lang}
           title={title}
@@ -211,6 +234,7 @@ export function App(): React.ReactElement {
           showSearch={route.name === 'projects' || route.name === 'saved'}
           search={searchInput}
           onSearch={setSearchInput}
+          onComposition={setComposing}
           searchRef={searchRef}
           onTogglePause={pause}
           onRefresh={refresh}

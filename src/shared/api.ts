@@ -1,4 +1,5 @@
 import type { AboutLink } from './about.js'
+import type { AnalyticsStatus, UiSurface } from './telemetry.js'
 import type { ExtensionStatus } from './extension/protocol.js'
 export type ExtensionAction = { action:'prepare'|'folder'|'copy-path'|'chrome-extensions'|'cancel' } | { action:'approve'; id:string; code:string; label:string } | { action:'select'|'revoke'; id:string }
 import type { UpdateState } from './updates.js'
@@ -24,6 +25,7 @@ import type {
   ProjectDetails,
   ProjectFull,
   ProjectQuery,
+  QueryWindow,
   ProjectUserState,
   RefreshResult,
   RendererProjectEvent,
@@ -58,6 +60,14 @@ export interface AppInfo {
 }
 
 export interface RasedApi {
+  databaseReady(): Promise<boolean>
+  getSidebarCounts(): Promise<{ unread: number; saved: number }>
+  matchProjectIds(definition: FilterDefinition, ids: number[]): Promise<number[]>
+  getAnalyticsStatus(): Promise<AnalyticsStatus | null>
+  analyticsConsent(action: 'enable' | 'disable' | 'later' | 'forget'): Promise<MutationResult>
+  analyticsAction(action: 'copy-reference' | 'contact'): Promise<MutationResult>
+  recordUiUsage(surface: UiSurface): Promise<void>
+  onAnalyticsChanged(cb: (status: AnalyticsStatus) => void): () => void
   getExtensionStatus():Promise<ExtensionStatus>
   extensionAction(action:ExtensionAction):Promise<MutationResult>
   quickApplyProject(id:number):Promise<MutationResult>
@@ -119,7 +129,7 @@ export interface RasedApi {
   updateSavedFilter(id: string, name: string, definition: FilterDefinition): Promise<MutationResult>
   deleteSavedFilter(id: string): Promise<MutationResult>
   previewFilterCount(definition: FilterDefinition): Promise<{ total: number; unread: number }>
-  queryProjectsPage(definition: FilterDefinition, limit: number, offset: number): Promise<PageResult>
+  queryProjectsPage(definition: FilterDefinition, limit: number, offset: number, window?: QueryWindow): Promise<PageResult>
   testNotification(): Promise<OpenProjectResult>
   openWindowsNotificationSettings(): Promise<MutationResult>
   testSound(): Promise<void>

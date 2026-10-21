@@ -142,7 +142,9 @@ export function FilterDrawer({
             <option value="kaf">{t.sourceKaf}</option>
           </select>
         </div>
-        <p className="hint">{def.source === 'khamsat' ? t.filterKhamsatScope : def.source === 'nafezly' ? (lang === 'ar' ? 'نفذلي: البحث في العنوان ومقتطف الوصف؛ المجال والميزانية غير مؤكدين.' : 'Nafezly: search the title and description excerpt; category and budget are unverified.') : def.source === 'kaf' ? (lang === 'ar' ? 'كاف: الميزانية من القائمة، وكلمات البحث في العنوان والمقتطف. فلتر مجالات مستقل لا ينطبق هنا.' : 'KAF: list budgets and title/excerpt search. Mostaql category filters do not apply here.') : t.filterCategoryScope}</p>
+        <p className="hint">{lang === 'ar' ? 'البحث في العنوان والمقتطف والمهارات والوصف المحفوظ على جهازك. لا يحمّل البحث وصف كل مشروع من المنصة. فلتر المجالات خاص بمستقل.' : 'Search titles, excerpts, skills and descriptions already cached on this device. Searching does not fetch every description. Category filters apply to Mostaql.'}</p>
+        <div className="set-row"><label>{lang === 'ar' ? 'البحث في ملاحظاتي' : 'Search my notes'}</label><Toggle checked={def.searchInNotes} onChange={searchInNotes => setDef({ ...def, searchInNotes })} label={lang === 'ar' ? 'البحث في ملاحظاتي' : 'Search my notes'} /></div>
+        <div className="set-row"><label>{lang === 'ar' ? 'البحث في مسودات عروضي' : 'Search my proposal drafts'}</label><Toggle checked={def.searchInDrafts} onChange={searchInDrafts => setDef({ ...def, searchInDrafts })} label={lang === 'ar' ? 'البحث في مسودات عروضي' : 'Search my proposal drafts'} /></div>
 
         <div className="set-row">
           <label htmlFor="filter-field-2">{t.scopeAll}</label>

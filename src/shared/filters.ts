@@ -4,26 +4,10 @@
 // decides what 'uncertain' means (show with badge / wait 30s / optional ping).
 
 import type { CategoryFilter, Project, ProjectWithUser, FilterDefinition } from '../shared/types.js'
+import { foldForSearch, normalizeGeneralSearch } from './searchText.js'
+export { foldForSearch } from './searchText.js'
 
 export type FilterVerdict = 'match' | 'nomatch' | 'uncertain'
-
-export function foldForSearch(s: string): string {
-  return (
-    s
-      // Arabic diacritics + tatweel
-      .replace(/[ً-ٰٟ]/g, '')
-      .replace(/ـ/g, '')
-      // alef variants -> bare alef; hamza forms
-      .replace(/[أإآٱ]/g, 'ا')
-      .replace(/ؤ/g, 'و')
-      .replace(/ئ/g, 'ي')
-      .replace(/ة/g, 'ه')
-      .replace(/ى/g, 'ي')
-      // Arabic-Indic digits -> ASCII
-      .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      .toLowerCase()
-  )
-}
 
 export interface FilterableProject {
   title: string
@@ -84,7 +68,8 @@ export function evaluateFilter(p: FilterableProject, f: CategoryFilter): FilterV
   return f.categories.includes(p.categorySlug) ? 'match' : 'nomatch'
 }
 
-/** Identical predicate for stored queries and arrivals/updates in the UI. */
+/** Legacy basic-field helper. Live UI matching uses the authoritative SQL engine,
+ * which also has cached descriptions and explicitly enabled personal fields. */
 export function matchesDefinition(p: ProjectWithUser, d: FilterDefinition): boolean {
   if (d.source !== 'all' && p.source !== d.source) return false
   if ((p.source === 'khamsat' || p.source === 'nafezly' || p.source === 'kaf') && d.categoryFilter.mode === 'selected') return false
@@ -92,7 +77,8 @@ export function matchesDefinition(p: ProjectWithUser, d: FilterDefinition): bool
   if (d.scope === 'saved' && !p.saved) return false
   if (d.unreadOnly && p.readAt) return false
   if (d.statuses.length && !d.statuses.includes(p.personalStatus)) return false
-  if (d.search.trim() && !`${p.title}\n${p.descriptionExcerpt}\n${(p.skills ?? []).join('\n')}`.toLowerCase().includes(d.search.trim().toLowerCase())) return false
+  const needle = normalizeGeneralSearch(d.search)
+  if (needle && ![p.title, p.descriptionExcerpt, (p.skills ?? []).join(' ')].some(text => normalizeGeneralSearch(text).includes(needle))) return false
   if (evaluateFilter(toFilterable(p), d.categoryFilter) === 'nomatch') return false
   if (p.budgetMin === null && p.budgetMax === null) return d.includeUnknownBudget
   const lo = p.budgetMin ?? p.budgetMax!

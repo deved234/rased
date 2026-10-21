@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+## 0.9.0 — 2026-10-21
+
+- Expanded literal Arabic/Unicode search to cached project descriptions, with separate opt-ins for personal notes and proposal drafts and labels showing the matching fields.
+- Moved SQL filtering, counts and pagination into a bounded read-only utility process, and incremental public indexing into a separate process that exits when idle. Monitoring stays independent of search failures.
+- Preserved deferred arrivals and browsing windows during live detail/note changes; added IME-aware debounce, batched refreshes and explicit search errors with retry.
+- Added schema-10 disposable public indexes and schema-8/9 backup compatibility. Portable archives omit derived indexes; restore rebuilds them without persisting normalized personal text.
+- Added bounded Windows startup retries for transient SQLite WAL mapping failures, preserved committed data and explicit startup failure handling.
+- Added optional analytics controls, an isolated queue/worker and maintainer tools with replay-safe counters, cancellation and resumable local identity cleanup. **Production application-usage collection is disabled in this release** pending verified requested-person cloud deletion; the installer has no ingest token.
+- Updated privacy, terms, architecture and feature guides, and expanded real Electron, backup, monitoring, search and telemetry regression checks.
+- Documented deferred performance work: a synthetic 50,000-project archive measured a first cold text search around three seconds; some warm queries and index-write transactions exceeded internal targets. See [search limits](docs/PROJECT_SEARCH.md#known-performance-limits-in-090).
+
 ## 0.8.1 — 2026-10-17
 
 - Fixed source-development notification activation launching Electron's welcome screen: an explicit COM relay preserves the app entry and profile, handles activation separately from the singleton lock, and forwards body/View project tickets through the existing validated dispatcher. Owned legacy development shortcut classes now redirect to the active class as well.

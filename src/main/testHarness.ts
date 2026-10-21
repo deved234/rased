@@ -15,8 +15,9 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   if (!argv.includes('--rased-test') || rel.startsWith('..') || isAbsolute(rel) || rel === '' || !basename(profile).startsWith('rased-test-')) return null
   const marker = join(profile, '.rased-test-profile')
   if (!existsSync(marker) || readFileSync(marker, 'utf8') !== 'RASED isolated integration test') return null
+  const searchPerformance = existsSync(join(profile, 'search-performance.json'))
   const record = (kind: string, data: unknown): void => {
-    appendFileSync(join(profile, 'test-trace.jsonl'), JSON.stringify({ kind, data }) + '\n')
+    appendFileSync(join(profile, 'test-trace.jsonl'), JSON.stringify({ kind, data, ...(searchPerformance ? { at: performance.now() } : {}) }) + '\n')
   }
   const fetchImpl = (async (url, options) => {
     record('fetch', String(url))
@@ -63,7 +64,9 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
       return new Response(existsSync(file) ? readFileSync(file, 'utf8') : '<html>fixture not supplied</html>', { status: config.status ?? 200, headers: { 'content-type': 'text/html', ...(config.retryAfter ? { 'retry-after': config.retryAfter } : {}) } })
     }
     const rss = String(url).endsWith('/rss')
-    return new Response(readFileSync(join(profile, rss ? 'rss-fixture.xml' : 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': rss ? 'application/rss+xml' : 'text/html' } })
+    const response = new Response(readFileSync(join(profile, rss ? 'rss-fixture.xml' : 'detail-fixture.html'), 'utf8'), { status: 200, headers: { 'content-type': rss ? 'application/rss+xml' : 'text/html' } })
+    if (searchPerformance && rss) record('fetch-response', String(url))
+    return response
   }) as typeof fetch
   const aiFetchImpl = (async (input, options) => {
     const url = new URL(String(input))

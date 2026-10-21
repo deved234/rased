@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDatabase, openDatabase, type Db } from '../src/storage/db.js'
 import { SCHEMA_VERSION } from '../src/storage/migrations.js'
+import { removeSearchSchema } from './helpers/oldSchema.js'
 import {
   countProjects,
   createPendingEvents,
@@ -67,6 +68,7 @@ describe('migrations', () => {
     const path = join(dir, 'test.db')
     closeDatabase(db)
     db = openDatabase(path)
+    removeSearchSchema(db)
     db.exec('ALTER TABLE projects DROP COLUMN platform_status; ALTER TABLE projects DROP COLUMN duration_days; ALTER TABLE projects DROP COLUMN duration_raw; DROP TABLE extension_jobs; DROP TABLE quick_apply_tickets; DROP TABLE proposal_drafts; DROP TABLE project_user_state; DROP TABLE project_details; DROP TABLE saved_filters; DROP TABLE tombstones; DROP TABLE pending_classifications; PRAGMA user_version = 1;')
     closeDatabase(db)
     db = openDatabase(path)
