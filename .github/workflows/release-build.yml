@@ -1,0 +1,63 @@
+name: Configured Windows release build
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact committed package version to build (no automatic publishing)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: rased-configured-release
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'deved234/rased' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validate requested version
+        run: node -e "if(require('./package.json').version!==process.env.REQUESTED_VERSION)throw Error('Committed version mismatch')"
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Build configured installer with reviewed ingest token
+        run: npm run dist
+        env:
+          RASED_ANALYTICS_BUILD_READY: 'true'
+          RASED_ANALYTICS_BUILD_ENVIRONMENT: production
+          RASED_ANALYTICS_BUILD_TOKEN: ${{ secrets.RASED_POSTHOG_PROJECT_TOKEN }}
+      - name: Verify production configuration, consent isolation and package contents
+        run: node scripts/analytics/verify-package.mjs
+      - run: node scripts/telemetry-worker-test.mjs
+      - run: node scripts/telemetry-e2e.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/telemetry-lifecycle-e2e.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/test-database-startup.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/e2e-cdp.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/search-e2e.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/data-e2e.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/monitoring-e2e.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - run: node scripts/notification-activation-e2e.mjs --exe=release/win-unpacked/RASED.exe --app=
+      - name: Upload verified release artifacts (not a public release)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rased-configured-${{ inputs.version }}
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            release/RASED-Setup-${{ inputs.version }}.exe
+            release/RASED-Setup-${{ inputs.version }}.exe.blockmap
+            release/latest.yml
+            release/SHA256SUMS.txt
+            release/build-verification.json

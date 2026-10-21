@@ -7,11 +7,12 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
+import { TELEMETRY_DISCLOSURE } from '../src/shared/telemetry.ts'
 
 const root = mkdtempSync(join(tmpdir(),'rased-test-telemetry-worker-'))
 const directory = join(root,'telemetry'); mkdirSync(directory)
 const entry = resolve('out/main/telemetryWorker.js')
-const identity = randomUUID(), disclosure = '2026-10-19-v2'
+const identity = randomUUID(), disclosure = TELEMETRY_DISCLOSURE
 let generation = 0, worker, request=0, messages=[], passed=0, timeOffset=0, configuration=0
 const consent = state => ({state,identity:state==='unknown'?null:identity,disclosure,generation:++generation,prompted:state!=='unknown'})
 const check = (label,value) => { assert.ok(value,label); passed++; console.log('PASS '+label) }

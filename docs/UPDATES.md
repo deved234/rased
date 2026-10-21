@@ -32,7 +32,7 @@ The helper requires a clean checkout matching `origin/main`, checks `latest.yml`
 
 Fork maintainers must change `build.publish.owner/repo` and app identity intentionally before distributing their own update channel. Never put publishing tokens in packaged application files.
 
-Optional analytics has a separate readiness gate; an ordinary `npm run dist` does not enable it. Before an analytics-enabled release, follow [ANALYTICS.md](ANALYTICS.md): finish the cloud deletion QA, select the production ingest token and set the build-only readiness/environment explicitly. Never use the QA token or a private administrative token. The public-download workflow is also separately gated and remains inactive until deployed and configured. Do not infer collection readiness from a successful installer build.
+Optional analytics has a separate readiness gate; an ordinary `npm run dist` does not enable it. Before an analytics-enabled release, follow [ANALYTICS.md](ANALYTICS.md): select the reviewed production ingest token and set the build-only readiness/environment explicitly. On 21 October 2026 the owner authorized production launch with cloud-event deletion completion verification deferred; this limitation must remain disclosed. Never use the QA token or a private administrative token. The public-download workflow is also separately gated and is activated separately after its approved production configuration is verified. Do not infer collection readiness from a successful installer build.
 
 ## Tests and remaining limits
 

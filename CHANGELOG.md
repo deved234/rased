@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.1 — 2026-10-21
+
+- Enabled optional usage analytics in the official configured build, only after explicit user consent; ordinary development and fork builds remain unconfigured.
+- Added a bilingual pre-consent disclosure that completed cloud-event deletion is still awaiting end-to-end verification. The owner explicitly accepted deferring that check; no deletion-completion claim is made. Updated disclosure version preserves prior declines and requires renewed approval from earlier participants.
+- Added a manual GitHub build using the existing reviewed ingest secret, package destination/isolation verification and artifact-only upload. Administrative tokens remain excluded.
+- Activated the separately gated public GitHub installer-counter workflow as part of launch verification. Local search behavior and its documented performance limits are unchanged.
+
 ## 0.9.0 — 2026-10-21
 
 - Expanded literal Arabic/Unicode search to cached project descriptions, with separate opt-ins for personal notes and proposal drafts and labels showing the matching fields.

@@ -1,6 +1,6 @@
 import type { SourceId } from './sources.js'
 
-export const TELEMETRY_DISCLOSURE = '2026-10-19-v2'
+export const TELEMETRY_DISCLOSURE = '2026-10-21-v3'
 export const ANALYTICS_SUPPORT = 'https://wa.me/201201780258'
 export const TELEMETRY_SOURCES = ['mostaql', 'khamsat', 'nafezly', 'kaf'] as const
 export type TelemetryOutcome = 'success' | 'failed' | 'cancelled'

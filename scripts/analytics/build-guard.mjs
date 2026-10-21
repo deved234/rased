@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { reviewedDestinations } from './destinations.mjs'
 
-// Production stays empty until requested-person cloud deletion is verified.
-// QA may be packaged for isolated preflight; ordinary builds still strip it.
-export const approvedTokenHashes = { production: [], qa: [reviewedDestinations.qa.sha256] }
+// Owner authorized production opt-in on 2026-10-21 while deferring cloud-event
+// deletion verification. This approval is not evidence of completed deletion.
+// Ordinary builds still strip tokens; configured releases pin the destination.
+export const approvedTokenHashes = { production: [reviewedDestinations.production.sha256], qa: [reviewedDestinations.qa.sha256] }
 export function analyticsBuildDefines(env = process.env, approved = approvedTokenHashes) {
   const ready = env.RASED_ANALYTICS_BUILD_READY === 'true'
   const token = env.RASED_ANALYTICS_BUILD_TOKEN ?? ''

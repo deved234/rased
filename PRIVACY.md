@@ -1,6 +1,6 @@
 # الخصوصية
 
-2026-10-19 · RASED · david atef
+2026-10-21 · RASED · david atef
 
 ## إحصائيات الاستخدام الاختيارية
 
@@ -9,6 +9,10 @@
 ## الاحتفاظ وإيقاف الإحصائيات وطلب الحذف
 
 لا يحدد راصد مدة انتهاء أو حذفًا دوريًا لبيانات الإحصائيات التي سبق إرسالها؛ تُحتفظ إلى أن يطلب المستخدم حذفها، مع مراعاة سياسات التخزين والحذف لدى PostHog ومتطلبات القانون المطبقة. هذا لا يضمن تخزينًا أبديًا أو إتاحة دائمة، ولا يلغي حقوق المستخدم أو التزامات الحذف القانونية. تُراجع طلبات الحذف وتُنفذ إداريًا ويُتحقق من اكتمال المعالجة غير اللحظية لدى المزود. الصف المحلي مستقل ومحدود بسبعة أيام و1000 حدث أو 2 MiB من المحتوى، وقد تسقط بيانات عند الانقطاع أو تجاوز الحصة؛ هذا حد للمؤجل محليًا ولا يحدد مدة الاحتفاظ البعيد. إيقاف المشاركة يلغي النقل ويمسح المؤجل، ولا ينفذ تلقائيًا طلب حذف لما وصل للخادم سابقًا. المعرّف يبقى محليًا لدعم طلب الحذف ولا يدخل النسخ المحمولة أو تصدير الإعدادات. انسخ مرجعك من الإعدادات وتواصل بنفسك عبر واتساب 01201780258 / https://wa.me/201201780258 لطلب حذف بياناتك السابقة؛ لا يرسل فتح الرابط مرجعك تلقائيًا ولا يثبت اكتمال الحذف. احفظ المعرّف وأوقف المشاركة قبل طلب الحذف لتجنب إرسال أحداث جديدة أثناء معالجته؛ وبعد اكتماله انسَ المعرّف محليًا قبل أي مشاركة جديدة. نسيان المعرّف محليًا مختلف عن حذف الخادم. عدادات تنزيل GitHub بيانات مجمعة عامة، ولا تثبت أسماء أو عدد مستخدمين فريدًا.
+
+## حالة التحقق من حذف الإحصائيات
+
+التحقق النهائي من اكتمال حذف الأحداث لدى PostHog لم يكتمل بعد. يمكنك طلب الحذف؛ لن نؤكد اكتماله قبل التحقق من المزود، وقد تتأخر المعالجة. تظل المشاركة اختيارية ويمكن إيقافها في أي وقت.
 
 ## اتصالات كاف
 
@@ -62,7 +66,7 @@
 
 # Privacy
 
-2026-10-19 · RASED · david atef
+2026-10-21 · RASED · david atef
 
 ## Optional usage analytics
 
@@ -71,6 +75,10 @@ Only a configured build can send limited usage analytics to PostHog US Cloud aft
 ## Analytics retention, withdrawal and deletion requests
 
 RASED sets no scheduled expiry or periodic deletion for previously sent analytics; they are retained until the user requests deletion, subject to PostHog storage/deletion policies and applicable legal requirements. This does not guarantee perpetual storage or availability, waive user rights, or remove legal deletion obligations. Deletion requests are reviewed and performed administratively, with verification of asynchronous provider completion. The separate local queue is limited to seven days and 1000 events or 2 MiB of content; offline periods and quota limits can cause losses. These local pending-data limits do not set server retention. Stopping sharing cancels sending and clears pending data, but does not automatically request deletion of previously received server events. The local reference remains available for deletion requests and is excluded from portable backups/settings. Copy it in Settings and contact the developer yourself on WhatsApp +20 120 178 0258 / https://wa.me/201201780258 to request deletion. Opening WhatsApp does not transmit the reference automatically or prove deletion completion. Save the reference and stop sharing before requesting deletion to avoid new events while it is processed; after completion, forget the local reference before enrolling again. Forgetting the local reference is distinct from server deletion. GitHub download counters are aggregate public data, not user identities or unique-user counts.
+
+## Analytics deletion verification status
+
+End-to-end verification of completed event deletion at PostHog is still pending. You can request deletion; completion will not be confirmed before provider verification, and processing may be delayed. Sharing remains optional and can be stopped at any time.
 
 ## KAF connections
 

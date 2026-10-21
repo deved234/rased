@@ -17,7 +17,7 @@ import { TelemetryService } from '../src/main/telemetry/service.js'
 import type { Worker } from 'node:worker_threads'
 import { vi } from 'vitest'
 const buildPath = '../scripts/analytics/build-guard.mjs'
-const { analyticsBuildDefines } = await import(buildPath)
+const { analyticsBuildDefines, approvedTokenHashes } = await import(buildPath)
 const adminPath = '../scripts/analytics/admin.mjs'
 const { installDashboards } = await import(adminPath)
 const dashboardsPath = '../scripts/analytics/dashboards.mjs'
@@ -196,6 +196,17 @@ it('prioritizes safe-stop phases and restricts their error categories to Quick A
     expect(validTelemetryProperties('quick_apply_result',{ source:'mostaql',outcome:'failed',error:expected,duration:'under_100ms' })).toBe(true)
     expect(validTelemetryProperties('proposal_result',{ provider:'gemini',outcome:'failed',error:expected,duration:'under_100ms' })).toBe(false)
   }
+})
+
+it('approves only reviewed release destinations while keeping ordinary builds unconfigured', async () => {
+  const destinationsPath = '../scripts/analytics/destinations.mjs'
+  const { reviewedDestinations } = await import(destinationsPath)
+  expect(approvedTokenHashes.production).toEqual([reviewedDestinations.production.sha256])
+  expect(approvedTokenHashes.qa).toEqual([reviewedDestinations.qa.sha256])
+  const ordinary = analyticsBuildDefines({ CI: 'true', RASED_ANALYTICS_BUILD_TOKEN: 'phc_synthetic_fixture_never_usable' })
+  expect(ordinary['process.env.RASED_ANALYTICS_BUILD_READY']).toBe('"false"')
+  expect(ordinary['process.env.RASED_ANALYTICS_BUILD_TOKEN']).toBe('""')
+  expect(() => analyticsBuildDefines({ CI: 'true', RASED_ANALYTICS_BUILD_READY: 'true', RASED_ANALYTICS_BUILD_TOKEN: 'phc_synthetic_fixture_never_usable', RASED_ANALYTICS_BUILD_ENVIRONMENT: 'production' })).toThrow('refused')
 })
 
 it('guards both build entry points and dashboard writes against environment mismatch', async () => {

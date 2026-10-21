@@ -40,6 +40,7 @@ async function stop() {
 async function flush() { writeFileSync(fixture, '{"flush":true}'); await status(); writeFileSync(fixture, '{"flush":false}') }
 try {
   await boot()
+  const currentDisclosure = (await status()).disclosure
   check('fresh consent is unknown and no identity exists', (await status()).state === 'unknown' && !(await status()).reference)
   await ev('window.rased.openProjectExternal(1)'); await flush()
   check('normal app actions before consent send no analytics', events().length === 0)
@@ -99,6 +100,7 @@ try {
     await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)},ui:{theme:${JSON.stringify(theme)}}})`)
     await eventually(() => ev(`document.body.innerText.includes(${JSON.stringify(lang === 'ar' ? 'لا يحدد راصد موعد حذف دوري' : 'no scheduled expiry')})`))
     check(`${lang} settings disclose no scheduled expiry and the provider storage limitation`, await ev(lang === 'ar' ? 'document.body.innerText.includes("لا يحدد راصد موعد حذف دوري") && document.body.innerText.includes("لا نضمن بقاء البيانات للأبد")' : 'document.body.innerText.includes("no scheduled expiry") && document.body.innerText.includes("Permanent availability is not guaranteed")'))
+    check(`${lang} settings disclose pending cloud-event deletion verification before consent`, await ev(lang === 'ar' ? 'document.body.innerText.includes("التحقق النهائي من اكتمال حذف الأحداث") && document.body.innerText.includes("لم يكتمل بعد")' : 'document.body.innerText.includes("verification of completed event deletion") && document.body.innerText.includes("still pending")'))
     await call(ws, 'Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false })
     const shot = await call(ws, 'Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
     writeFileSync(join(out, `analytics-${lang}-${theme}.png`), Buffer.from(shot.data, 'base64'))
@@ -113,7 +115,7 @@ try {
   await ev('window.rased.openProjectExternal(1)'); await flush()
   check('no new activity is captured before renewed policy consent', events().length === beforePolicyConsent && (await status()).queued === 0)
   await ev('window.rased.analyticsConsent("enable")')
-  check('renewed consent preserves the installation reference under the new disclosure', (await status()).state === 'enabled' && (await status()).reference === retainedReference && (await status()).disclosure === '2026-10-19-v2')
+  check('renewed consent preserves the installation reference under the new disclosure', (await status()).state === 'enabled' && (await status()).reference === retainedReference && (await status()).disclosure === currentDisclosure)
   const diagnostics = new DatabaseSync(join(profile, 'rased.db'))
   check('no uncaught errors through real IPC/worker flows', diagnostics.prepare("SELECT COUNT(*) AS n FROM diagnostics WHERE status='uncaught'").get().n === 0)
   diagnostics.close()
