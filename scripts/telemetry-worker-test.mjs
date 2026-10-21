@@ -48,8 +48,8 @@ const mode = value=>worker.postMessage({type:'fixture-mode',mode:value})
 const advance = ms=>{timeOffset+=ms;worker.postMessage({type:'fixture-advance',ms})}
 const latest=()=>messages.filter(m=>m.type==='status').at(-1)
 const calls=()=>messages.filter(m=>m.type==='fixture-http')
-function rows() { const d=new DatabaseSync(join(directory,'queue.sqlite')); try{return d.prepare('SELECT body FROM queue').all().map(r=>JSON.parse(r.body))}finally{d.close()} }
-function meta(key) { const d=new DatabaseSync(join(directory,'queue.sqlite'));try{return d.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value}finally{d.close()} }
+function rows() { const d=new DatabaseSync(join(directory,'queue.sqlite'),{timeout:5000}); try{return d.prepare('SELECT body FROM queue').all().map(r=>JSON.parse(r.body))}finally{d.close()} }
+function meta(key) { const d=new DatabaseSync(join(directory,'queue.sqlite'),{timeout:5000});try{return d.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value}finally{d.close()} }
 async function close() {const w=worker; worker.postMessage({type:'close'}); await new Promise(r=>w.once('exit',r)); worker=null}
 try {
   boot(consent('unknown')); await until(latest)

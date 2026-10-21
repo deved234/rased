@@ -19,7 +19,8 @@ rss([990001])
 let child,ws,passed=0
 const check=(name,value)=>{assert.ok(value,name);passed++;console.log('PASS '+name)}
 const ev=x=>evaluate(ws,x)
-const rows=()=>{const d=new DatabaseSync(join(profile,'telemetry/queue.sqlite'));try{return d.prepare('SELECT body FROM queue UNION ALL SELECT body FROM buckets').all().map(r=>JSON.parse(r.body))}finally{d.close()}}
+// The app's worker briefly holds the queue exclusively (e.g. truncating checkpoint on restore); wait instead of failing.
+const rows=()=>{const d=new DatabaseSync(join(profile,'telemetry/queue.sqlite'),{timeout:5000});try{return d.prepare('SELECT body FROM queue UNION ALL SELECT body FROM buckets').all().map(r=>JSON.parse(r.body))}finally{d.close()}}
 const counters=()=>rows().filter(e=>e.name==='monitoring_hourly').reduce((n,e)=>({success:n.success+(e.properties.mostaql_success??0),failure:n.failure+(e.properties.mostaql_failure??0)}),{success:0,failure:0})
 const sink=()=>{const file=join(profile,'telemetry-fixture-sink/fixture-events.jsonl');return existsSync(file)?readFileSync(file,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[]}
 async function boot(){child=startApp({exe,app,profile,port});ws=await pageWs(port);await eventually(()=>ev('!!window.rased'));await ev('document.querySelector(".splash-enter")?.click()')}
@@ -46,7 +47,7 @@ try{
  const notices=rows().filter(e=>e.name==='notification_summary')
  check('project notification records requested and OS-fixture shown outcomes',notices.reduce((n,e)=>n+(e.properties.mostaql_requested??0),0)===1&&notices.reduce((n,e)=>n+(e.properties.mostaql_shown??0),0)===1)
  await graceful()
- const state=new DatabaseSync(join(profile,'telemetry/queue.sqlite'))
+ const state=new DatabaseSync(join(profile,'telemetry/queue.sqlite'),{timeout:5000})
  check('graceful application shutdown seals current-hour buckets',state.prepare('SELECT count(*) n FROM buckets').get().n===0&&state.prepare('SELECT count(*) n FROM queue').get().n>0);state.close()
  await boot();await ev('window.rased.updateSettings({mostaqlEnabled:false})')
  const archive=join(profile,'synthetic.rased-backup')
