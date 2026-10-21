@@ -319,7 +319,11 @@ try {
   const khamsatOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"khamsat"},50,0)})()')
   check('source filter returns only Khamsat requests', khamsatOnly.total === 3 && khamsatOnly.rows.every(p => p.source === 'khamsat'))
   // Real process restart, not Page.reload.
+  viewportSession?.close(); viewportSession = undefined
   await ev('window.rased.confirmClose(true)').catch(()=>{}); await sleep(500); await stopApp(child)
+  // As in telemetry-e2e, an exited root can briefly retain its old CDP endpoint.
+  // Wait for it to disappear before reusing the port for the restarted process.
+  await eventually(async () => { try { await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) }); return false } catch { return true } })
   child = startApp({exe,app,profile,port}); ws=await pageWs(port)
   await call(ws, 'Page.reload')
   await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
@@ -389,4 +393,7 @@ try {
 } catch(err) {
   try { console.error('Renderer failure state:', await ev('({phase:document.querySelector(".splash")?.dataset.phase,text:document.querySelector(".splash")?.textContent,rows:document.querySelectorAll("[data-row]").length})')) } catch { /* process may already have exited */ }
   console.error(`E2E FAILED after ${passed} assertions:`,err.stack); console.error('Profile retained:',profile); process.exitCode=1
+  console.error('Child exit state:', { exitCode: child?.exitCode, signalCode: child?.signalCode })
+  const startupLog = join(profile, 'startup-failure.log')
+  if (existsSync(startupLog)) console.error('Sanitized startup failures:', readFileSync(startupLog, 'utf8').slice(-8192))
 } finally { viewportSession?.close(); db.close(); if(child) await stopApp(child) }

@@ -158,9 +158,9 @@ try {
   // Recovery from a failed purge is also automatic at the next app startup.
   await ev('window.rased.analyticsConsent("enable")'); writeFileSync(fixture,'{"purgeFail":true}')
   await ev('window.rased.analyticsConsent("forget")'); await stop()
-  writeFileSync(fixture,'{}'); await boot()
+  writeFileSync(fixture,'{"purgeAckDelay":1400}'); await boot()
   await eventually(async()=>!(await status()).purgePending,Boolean,15000)
-  check('pending purge resumes after real process restart without enabling collection',(await status()).state==='disabled' && !(await status()).reference)
+  check('pending purge resumes after real restart and delayed worker acknowledgement without enabling collection',(await status()).state==='disabled' && !(await status()).reference)
   console.log(`TELEMETRY E2E PASSED (${passed} assertions). TEMP profile: ${profile}`)
 } catch (error) { console.error(error); console.error('Retained TEMP profile:', profile); process.exitCode = 1 }
 finally { if (child) await stopApp(child) }

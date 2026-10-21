@@ -97,7 +97,9 @@ export class TelemetryService {
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(Error('forget-incomplete')), 30000)
-        const ackTimer = setTimeout(() => reject(Error('forget-incomplete')), 1000)
+        // Cold worker imports and SQLite opening can exceed one second on
+        // Windows. Keep the overall 30s bound, with a bounded startup budget.
+        const ackTimer = setTimeout(() => reject(Error('forget-incomplete')), 5000)
         worker.on('message', value => {
           if (value.type === 'ack') clearTimeout(ackTimer)
           if (value.type === 'purged') done = true

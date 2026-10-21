@@ -7,6 +7,7 @@
 - Enabled optional usage analytics in the official configured build, only after explicit user consent; ordinary development and fork builds remain unconfigured.
 - Added a bilingual pre-consent disclosure that completed cloud-event deletion is still awaiting end-to-end verification. The owner explicitly accepted deferring that check; no deletion-completion claim is made. Updated disclosure version preserves prior declines and requires renewed approval from earlier participants.
 - Added a manual GitHub build using the existing reviewed ingest secret, package destination/isolation verification and artifact-only upload. Administrative tokens remain excluded.
+- Allowed a bounded cold-start budget for the local identity-cleanup worker while retaining the overall deadline and verified purge requirement. Added a delayed-start/restart regression and waited for the previous test debugging endpoint to close before reusing its port.
 - Activated the separately gated public GitHub installer-counter workflow as part of launch verification. Local search behavior and its documented performance limits are unchanged.
 
 ## 0.9.0 — 2026-10-21

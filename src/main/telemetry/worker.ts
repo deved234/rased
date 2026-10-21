@@ -13,7 +13,7 @@ const store = new TelemetryStore(join(options.directory, 'queue.sqlite'))
 let consent = options.consent, suspended = false, closed = false, controller: AbortController | null = null
 let flight: Promise<void> | null = null
 const fixtureControl = join(options.directory, '../telemetry-fixture.json')
-function fixture(): { purgeFail?: boolean; purgeDelay?: number } {
+function fixture(): { purgeFail?: boolean; purgeDelay?: number; purgeAckDelay?: number } {
   if (!options.fixture || !existsSync(fixtureControl)) return {}
   try { return JSON.parse(readFileSync(fixtureControl, 'utf8')) } catch { return {} }
 }
@@ -24,8 +24,13 @@ async function purge(): Promise<void> {
   store.purge()
 }
 if (options.purgeOnly) {
-  parentPort?.postMessage({ type: 'ack' })
-  void purge().then(() => { store.close(); parentPort?.postMessage({ type: 'purged' }); parentPort?.close() }).catch(() => { store.close(); parentPort?.postMessage({ type: 'purge-failed' }); parentPort?.close() })
+  const run = async (): Promise<void> => {
+    const delay = fixture().purgeAckDelay
+    if (delay) await new Promise(resolve => setTimeout(resolve, Math.min(delay, 6000)))
+    parentPort?.postMessage({ type: 'ack' })
+    await purge()
+  }
+  void run().then(() => { store.close(); parentPort?.postMessage({ type: 'purged' }); parentPort?.close() }).catch(() => { store.close(); parentPort?.postMessage({ type: 'purge-failed' }); parentPort?.close() })
 } else {
   store.bind(consent.identity, enabled())
   let delivery = new TelemetryDelivery(store, options.config, options.context.appVersion + ':1')
