@@ -2,15 +2,17 @@
 
 ## Unreleased
 
-- Save up to ten freelancer profiles with optional Quick Apply templates and choose one default for buttons, notifications and generation under standing consent.
-- Select another profile for an individual manual Assistant request, with a refreshed preview and renewed per-request approval. Saved drafts remain unchanged.
-- Transfer every profile with settings v3 and portable backups; preserve legacy mirrors and older-version edits without a schema change. Version 0.10.0 cannot import v3 files or profile-set backups.
-- Keep unreadable sets intact until explicit recovery, and explain empty default templates without opening Chrome.
-- Added a bilingual What's New dialog after upgrades, after startup and analytics acceptance, with keyboard dismissal, local version tracking and manual review from About settings.
-- Quick Apply prepares the template in one click; a separate Mostaql Assistant action reuses a saved draft or generates under optional, revocable provider/model/key-bound consent. Writing has progress/cancel, and notifications remain template-based. No preview dialog or per-time overrides; review and submit manually in Chrome.
-- Preparing from the Assistant saves and verifies the displayed text while the editor is locked. Concurrent drafts are preserved, failed Chrome preparation keeps generated drafts, and standing consent is excluded from exports/backups and cleared on key/selection changes, import and restore. Updated bilingual legal wording dated 2026-10-23; analytics disclosure v4 is unchanged.
-- Clearer Quick Apply error messages with bilingual table covering `blocked`, `not-ready`, `disabled`, `busy`, `unsupported-source`, `invalid-project`, `text-missing`, `text-changed`, `text-empty`, `text-too-long`, `message-too-large`, `chrome-unavailable`, `login-required`, `form-unavailable`, `draft-exists`, `template-too-long`, `client-timeout`, `form-timeout`, `connection-lost`, `tab-closed`, `navigation-changed`, `user-cancelled`, `app-restarted`.
-- Proposal Assistant now drafts for Nafezly and KAF from already stored project data, without extra fetching or cooldown changes. KAF offers copy and open only; Quick Apply and Quick Apply with Assistant remain Mostaql/Nafezly. Updated legal, KAF, Assistant and Quick Apply guides with a complete phase/error reference and Chrome 120 compatibility notes.
+## 0.11.0 — 2026-10-23
+
+- Save up to ten freelancer profiles, each with an optional Quick Apply template. Choose a default for Quick Apply buttons, notifications and Assistant generation under standing consent, or select another profile for a manual request with a refreshed preview and renewed approval. Existing drafts stay unchanged.
+- Transfer all profiles through settings format v3 and portable backups, without a database schema change. Version 0.10.0 cannot import v3 settings or backups containing profile sets; downgrading shows only the default profile. If Quick Apply is enabled with an empty default template, 0.10.0 resets all Quick Apply preferences. Unreadable profile sets stay intact until explicit recovery.
+- Prepare the saved Quick Apply template in one click, using saved price and duration preferences. Notifications remain template-based. There is no preview dialog or one-time override; review and submit yourself in Chrome. An empty default template shows guidance without opening Chrome.
+- Quick Apply with Assistant reuses a saved draft or, when none exists, generates with optional, revocable consent tied to the provider, model and key. Follow or cancel writing; generated drafts remain saved if Chrome preparation fails. Standing consent is cleared on key or provider/model changes, settings import and backup restore, and is excluded from exports and backups.
+- Prepare directly from the Assistant after saving edits. The editor stays locked during preparation, the displayed text is checked against the saved draft, and concurrent draft changes are preserved.
+- Proposal Assistant now supports Nafezly and KAF using already stored project data, without extra fetching or cooldown changes. KAF offers copy and open only. Quick Apply, Quick Apply with Assistant and Chrome preparation support Mostaql/Nafezly only; Khamsat remains excluded.
+- Added a bilingual What's New screen after upgrades, shown after startup and required analytics acceptance, with keyboard dismissal, local version tracking and manual review from About settings.
+- Clearer Quick Apply errors and an expanded bilingual extension guide explain setup, preparation phases, recovery and Chrome 120 compatibility. Only Google Chrome is supported.
+- Updated Terms and Privacy dated 2026-10-23. Analytics disclosure `2026-10-21-v4` is unchanged; no new analytics fields are added.
 
 ## 0.10.0 — 2026-10-21
 

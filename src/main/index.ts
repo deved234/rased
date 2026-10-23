@@ -2159,6 +2159,7 @@ async function boot(): Promise<void> {
   dataBackup = new DataBackupManager(db, app.getPath('userData'), APP_VERSION, Date.now, finalizeBackupInWorker)
   dataBackup.start()
   settings = loadSettings()
+  testHarness?.initializeSettings(settings, testHarness.appVersion ?? APP_VERSION, saveSettings)
   startupStage = 'later'
   if (testHarness && existsSync(join(app.getPath('userData'), 'startup-failure.json'))) throw Error('synthetic startup failure')
   telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, windowsFamily: Number(osRelease().split('.')[2]) >= 22000 ? '11' : process.platform === 'win32' ? '10' : 'other', config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) { syncAnalyticsAccess(); broadcast(IPC.analyticsChanged, telemetry.status()) } } })

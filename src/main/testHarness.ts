@@ -6,12 +6,15 @@ import type { UpdaterPort } from './updates.js'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { isReleaseVersion } from '../shared/whatsNew.js'
+import type { AppSettings } from '../shared/types.js'
 
 export function isolatedTestHarness(profile: string, argv: string[]): null | {
   fetchImpl: typeof fetch
   aiFetchImpl: typeof fetch
   record: (kind: string, data: unknown) => void
   appVersion?: string
+  suppressWhatsNew: boolean
+  initializeSettings: (settings: AppSettings, currentVersion: string, save: (settings: AppSettings) => void) => void
 } {
   const rel = relative(resolve(tmpdir()), resolve(profile))
   if (!argv.includes('--rased-test') || rel.startsWith('..') || isAbsolute(rel) || rel === '' || !basename(profile).startsWith('rased-test-')) return null
@@ -96,12 +99,18 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
     return new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   const whatsNewFixture = join(profile, 'whats-new-fixture.json')
+  // Unrelated integration suites seed legacy settings; only explicit fixtures exercise upgrade dialogs.
+  const suppressWhatsNew = !existsSync(whatsNewFixture)
   let appVersion: string | undefined
-  if (existsSync(whatsNewFixture)) {
+  if (!suppressWhatsNew) {
     const fixture = JSON.parse(readFileSync(whatsNewFixture, 'utf8')) as { version?: unknown }
     if (isReleaseVersion(fixture.version)) appVersion = fixture.version
   }
-  return { fetchImpl, aiFetchImpl, record, appVersion }
+  const initializeSettings = (settings: AppSettings, currentVersion: string, save: (settings: AppSettings) => void): void => {
+    // Persist before renderer startup so later database reads/merges cannot restore an unseen marker.
+    if (suppressWhatsNew && settings.whatsNewSeen !== currentVersion) save({ ...settings, whatsNewSeen: currentVersion })
+  }
+  return { fetchImpl, aiFetchImpl, record, appVersion, suppressWhatsNew, initializeSettings }
 }
 
 /** Only constructed after isolatedTestHarness validated the opt-in TEMP marker. */

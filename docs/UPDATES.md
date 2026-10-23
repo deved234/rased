@@ -2,6 +2,8 @@
 
 ## User flow
 
+Version **0.11.0** adds one-click Quick Apply, optional Assistant generation or saved-draft reuse, multiple freelancer profiles with a default, Nafezly/KAF Assistant support and a What's New screen. Chrome preparation stays Mostaql/Nafezly only; KAF offers copy and open only, and Khamsat is excluded. Terms and Privacy are dated 2026-10-23; analytics disclosure v4 and analytics fields are unchanged. See the [0.11.0 release notes](RELEASE_0.11.0.md) for details and downgrade limits: 0.10.0 cannot import settings v3 or backups containing profile sets, shows only the default profile, and resets all Quick Apply preferences if Quick Apply is enabled with an empty default template. The installer is **RASED-Setup-0.11.0.exe**.
+
 0.2.5 is the first updater-capable release. Install it manually once if you are coming from 0.2.4 or earlier. Future stable versions can be downloaded and installed from Settings → RASED updates. Check runs about 10 seconds after launch and every 6 hours while the process is running. Manual check is also available. No forced download or install; ordinary tray quit does not install a downloaded update.
 
 The page displays current/new versions, plain-text release notes, progress, last check time and retry states. The banner can be dismissed for the session. A downloaded update remains pending until requested. On restart, the updater can reuse its validated cache after checking the release again; the application does not pretend a previous session is still downloaded.

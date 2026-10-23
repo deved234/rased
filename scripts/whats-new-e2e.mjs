@@ -24,6 +24,7 @@ export async function testWhatsNew() {
   }
   const fixtureProfile = (legacy, installedVersion = version) => {
     const profile = newProfile()
+    // Every scenario, including fresh installs and their restarts, must retain the real upgrade behavior.
     writeFileSync(join(profile, 'whats-new-fixture.json'), JSON.stringify({ version: installedVersion }))
     writeFileSync(join(profile, 'telemetry-fixture.json'), '{"flush":false}')
     if (legacy) {
