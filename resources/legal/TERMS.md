@@ -1,6 +1,6 @@
 # شروط الاستخدام
 
-2026-10-21 · RASED · david atef
+2026-10-23 · RASED · david atef
 
 ## شرط إحصائيات النسخة المهيأة
 
@@ -12,7 +12,7 @@
 
 ## قالب التقديم السريع
 
-يمكنك حفظ نص العرض وموضع السعر داخل الميزانية والأيام الإضافية محليًا. تعمل التعبئة الاختيارية عبر إضافة Chrome محلية مرتبطة براصد لمستقل ونفذلي فقط. تحتاج تثبيت الإضافة يدويًا وربط بروفايل برمز مطابق. تجهز النص والسعر والمدة وتترك زر تقديم العرض لك؛ راجع المعلومات بنفسك. خمسات غير مشمول. حفظ القالب لا يقدم عرضًا ولا يرسل النص لأي موفر ذكاء اصطناعي. شروط المنصات تظل واجبة.
+يمكنك حفظ نص العرض وموضع السعر داخل الميزانية والأيام الإضافية محليًا. تعمل التعبئة الاختيارية عبر إضافة Chrome محلية مرتبطة براصد لمستقل ونفذلي فقط. تحتاج تثبيت الإضافة يدويًا وربط بروفايل برمز مطابق. تجهز القالب أو المسودة المحفوظة والسعر والمدة وتترك زر تقديم العرض لك؛ راجع المعلومات بنفسك. خمسات غير مشمول. حفظ القالب لا يقدم عرضًا ولا يرسل النص لأي موفر ذكاء اصطناعي. شروط المنصات تظل واجبة.
 
 ## وظيفة البرنامج
 
@@ -32,7 +32,7 @@
 
 ## مساعد العروض
 
-يمكنك طلب مسودة لمشروع مستقل من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموفر والموافقة لكل طلب. راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms .
+يمكنك طلب مسودة لمشروع مستقل من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموافقة لكل طلب يدوي، أو بنقرة التقديم السريع بمساعد العروض بعد تفعيل موافقة دائمة اختيارية للمزوّد والموديل والمفتاح الحاليين يمكن سحبها من الإعدادات. تُعاد استخدام مسودة المشروع المحفوظة دون توليد؛ راجعها في Chrome وقدّمها بنفسك. راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms .
 
 ## الترخيص والمسؤولية
 
@@ -46,7 +46,7 @@
 
 # Terms of use
 
-2026-10-21 · RASED · david atef
+2026-10-23 · RASED · david atef
 
 ## Configured distribution analytics requirement
 
@@ -58,7 +58,7 @@ RASED reads the public kafiil.com project listing without an account and fetches
 
 ## Saved quick-apply template
 
-You can save a proposal template, budget position and extra days locally. Optional form filling uses a locally paired Chrome extension for Mostaql and Nafezly only; Khamsat is excluded. Install the unpacked extension manually, match the pairing code, and select a profile. It fills the template and available price/duration, leaving submission to you. Review every value yourself. Saving a template submits nothing and sends no text to an AI provider. Platform rules still apply.
+You can save a proposal template, budget position and extra days locally. Optional form filling uses a locally paired Chrome extension for Mostaql and Nafezly only; Khamsat is excluded. Install the unpacked extension manually, match the pairing code, and select a profile. It fills the template or saved draft and available price/duration, leaving submission to you. Review every value yourself. Saving a template submits nothing and sends no text to an AI provider. Platform rules still apply.
 
 ## Purpose
 
@@ -78,7 +78,7 @@ Information may be incomplete or stale and alerts may be delayed or missed. Chec
 
 ## Proposal Assistant
 
-Request a Mostaql draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each request. Review and submit it yourself; output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
+Request a Mostaql draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each manual request, or by clicking Quick Apply with Assistant using optional standing consent for the current provider, model and key. Withdraw this consent in Settings. A saved project draft is reused without generation; review it in Chrome and submit it yourself. Output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
 
 ## License and liability
 

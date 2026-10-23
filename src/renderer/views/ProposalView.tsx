@@ -7,6 +7,7 @@ import type { ProposalDraft, ProposalPreview } from '@shared/proposals.js'
 
 import { AI_NAMES, aiErrorText, defaultAiSettings, sanitizeSelection, type AiSelection, type AiSetup } from '@shared/ai.js'
 import { AiModelPicker } from '../components/AiModelPicker.js'
+import { activePhase, quickErrorText, useExtensionStatus } from '../components/extensionStatus.js'
 
 export function ProposalView({ lang, projectId }: { lang: Lang; projectId: number }): React.ReactElement {
   const ar = lang === 'ar'
@@ -25,6 +26,11 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState('')
   const [copied, setCopied] = React.useState(false)
+  const [preparing, setPreparing] = React.useState(false)
+  const preparingRef = React.useRef(false)
+  const extension = useExtensionStatus()
+  const quickActive = !!extension?.assistant || !!extension?.lastJob && activePhase(extension.lastJob.phase)
+  const reason = new URLSearchParams(window.location.hash.split('?')[1]).get('reason')
   const dirtyRef = React.useRef(false)
   const draftRef = React.useRef<ProposalDraft | null>(null)
   draftRef.current = draft
@@ -52,7 +58,7 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
     catch { setError(ar ? 'تعذرت المعاينة.' : 'Preview failed.') }
   }
   const generate = async (): Promise<void> => {
-    if (!preview || !consent || !hasKey || busy) return
+    if (!preview || !consent || !hasKey || busy || saving || preparingRef.current) return
     if (dirtyRef.current && !window.confirm(ar ? 'سيستبدل التوليد الجديد تعديلاتك غير المحفوظة. متابعة؟' : 'New generation will replace your unsaved draft edits. Continue?')) return
     const seq = previewSequence.current
     setBusy(true); setConsent(false); setError('')
@@ -86,13 +92,25 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
     try { result = await rased.openProjectExternal(projectId) } catch { setError(ar ? 'تعذر فتح المتصفح.' : 'Could not open browser.'); return }
     if (!result.ok) setError(ar ? 'تعذر فتح المشروع في المتصفح.' : 'Could not open project in browser.')
   }
+  const prepareQuick = async (): Promise<void> => {
+    if (!draft || busy || saving || preparingRef.current || quickActive) return
+    const expectedText = draft.proposal
+    preparingRef.current = true; setPreparing(true); setError('')
+    try {
+      if (draft.proposal !== saved && !(await save())) return
+      const result = await rased.quickApplyProject(projectId, 'draft', expectedText)
+      if (!result.ok) setError(quickErrorText(result.error, ar))
+    } catch { setError(quickErrorText('not-ready', ar)) }
+    finally { preparingRef.current = false; setPreparing(false) }
+  }
 
   return <div className="proposal-page">
     <button className="btn ghost sm" onClick={() => go({ name: 'project', id: projectId })}>{ar ? 'المشروع →' : '← Project'}</button>
     <div className="proposal-hero"><span className="tag" dir="ltr">{AI_NAMES[selection.provider]}</span><h2>{ar ? 'مساعد العروض' : 'Proposal Assistant'}</h2><p className="muted">{ar ? 'مسودة قابلة للتعديل. راجعها ثم قدمها بنفسك على مستقل.' : 'An editable draft. Review it, then submit it yourself on Mostaql.'}</p></div>
+    {reason && ['consent-required','no-key'].includes(reason) && <p className="banner warn" role="status">{quickErrorText(reason, ar)}</p>}
     {!hasKey && <div className="banner warn">{ar ? 'أضف مفتاح الموفر المختار من الإعدادات.' : 'Add this provider’s API key in Settings.'} <button className="btn sm" onClick={() => go({ name: 'settings', section: 'ai' })}>{ar ? 'إعدادات المساعد' : 'Assistant settings'}</button></div>}
     <section className="proposal-card"><h3>{ar ? 'الموفر والموديل لهذا العرض' : 'Provider and model for this proposal'}</h3>
-      <AiModelPicker ar={ar} setup={setup} selection={selection} disabled={busy} onSetup={next => { setSetup(next); setPreview(null); setConsent(false); previewSequence.current++ }} onChange={next => { setSelection(next); setPreview(null); setConsent(false); setError(''); previewSequence.current++ }} />
+      <AiModelPicker ar={ar} setup={setup} selection={selection} disabled={preparing || busy || saving} onSetup={next => { setSetup(next); setPreview(null); setConsent(false); previewSequence.current++ }} onChange={next => { setSelection(next); setPreview(null); setConsent(false); setError(''); previewSequence.current++ }} />
       <p className="hint">{ar ? 'هذا اختيار مؤقت؛ الافتراضي في الإعدادات لا يتغير.' : 'This is a temporary selection; your saved default stays unchanged.'}</p>
     </section>
     <section className="proposal-card"><h3>{ar ? 'البيانات التي ستُرسل' : 'Data to be sent'}</h3>
@@ -108,18 +126,19 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
         </details>
       </> : <p className="muted">{previewLoaded ? (ar ? 'المعاينة غير متاحة أو تحتاج تحديثًا بعد تعديل التفاصيل.' : 'Preview unavailable or needs refreshing after editing notes.') : (ar ? 'جارٍ تحميل المشروع…' : 'Loading project…')}</p>}
       <label htmlFor="proposal-notes">{ar ? 'تفاصيل إضافية لهذا العرض فقط (اختياري)' : 'Notes for this proposal only (optional)'}</label>
-      <textarea id="proposal-notes" className="textarea" dir="auto" maxLength={2000} value={notes} disabled={busy} onChange={e => { previewSequence.current++; setNotes(e.target.value); setPreview(null); setConsent(false) }} />
-      <button className="btn sm" disabled={busy || !sanitizeSelection(selection)} onClick={() => void refresh()}>{ar ? 'تحديث المعاينة' : 'Refresh preview'}</button>
+      <textarea id="proposal-notes" className="textarea" dir="auto" maxLength={2000} value={notes} disabled={preparing || busy || saving} onChange={e => { previewSequence.current++; setNotes(e.target.value); setPreview(null); setConsent(false) }} />
+      <button className="btn sm" disabled={preparing || busy || !sanitizeSelection(selection)} onClick={() => void refresh()}>{ar ? 'تحديث المعاينة' : 'Refresh preview'}</button>
       <p className="muted small">{ar ? 'تخضع البيانات لسياسات API للشركة المختارة؛ قد تُحفظ أو تُراجع حسب حسابك وخطتك. لا ترسل بيانات سرية دون إذن. قد تنطبق رسوم وحصص.' : 'Input is subject to the selected provider’s API policies; retention and review depend on your account and plan. Do not send confidential data without permission. Charges and quotas may apply.'}{selection.provider === 'gemini' && (ar ? ' خدمة Gemini المجانية قد تستخدم المدخلات والمخرجات للتحسين والمراجعة البشرية.' : ' Unpaid Gemini input and output may be used for improvement and human review.')} <button className="btn ghost sm" onClick={() => go({ name: 'settings', section: 'legal' })}>{ar ? 'الخصوصية والشروط' : 'Privacy and terms'}</button></p>
-      <label className="proposal-consent"><input type="checkbox" checked={consent} disabled={!preview || busy} onChange={e => setConsent(e.target.checked)} /> {ar ? `راجعت البيانات وأوافق على إرسالها إلى ${AI_NAMES[selection.provider]} باستخدام ${selection.model} لهذا الطلب` : `I reviewed the data and agree to send it to ${AI_NAMES[selection.provider]} using ${selection.model} for this request`}</label>
-      <div className="row-actions"><button className="btn primary" disabled={!preview || !consent || !hasKey || busy} onClick={() => void generate()}>{busy ? (ar ? 'جارٍ التوليد…' : 'Generating…') : (ar ? 'توليد المسودة' : 'Generate draft')}</button>{busy && <button className="btn" onClick={() => void rased.cancelProposal()}>{ar ? 'إلغاء' : 'Cancel'}</button>}</div>
+      <label className="proposal-consent"><input type="checkbox" checked={consent} disabled={!preview || busy || saving || preparing} onChange={e => setConsent(e.target.checked)} /> {ar ? `راجعت البيانات وأوافق على إرسالها إلى ${AI_NAMES[selection.provider]} باستخدام ${selection.model} لهذا الطلب` : `I reviewed the data and agree to send it to ${AI_NAMES[selection.provider]} using ${selection.model} for this request`}</label>
+      <div className="row-actions"><button className="btn primary" disabled={!preview || !consent || !hasKey || busy || saving || preparing} onClick={() => void generate()}>{busy ? (ar ? 'جارٍ التوليد…' : 'Generating…') : (ar ? 'توليد المسودة' : 'Generate draft')}</button>{busy && <button className="btn" onClick={() => void rased.cancelProposal()}>{ar ? 'إلغاء' : 'Cancel'}</button>}</div>
     </section>
-    {draft && <section className="proposal-card"><h3>{ar ? 'مسودتك' : 'Your draft'}</h3><p className="muted small" dir="auto">{draft.provider && draft.model ? `${AI_NAMES[draft.provider]} · ${draft.model}` : (ar ? 'مسودة سابقة — المصدر غير مسجل' : 'Earlier draft — source not recorded')}</p><textarea aria-label={ar ? 'نص مسودة العرض' : 'Proposal draft text'} className="textarea proposal-editor" dir="auto" maxLength={12000} value={draft.proposal} disabled={busy} onChange={e => setDraft({ ...draft, proposal: e.target.value })} />
-      <div className="row-actions"><button className="btn" disabled={busy || draft.proposal === saved} onClick={() => void save()}>{ar ? 'حفظ محليًا' : 'Save locally'}</button><button className="btn" onClick={() => void copy()}>{copied ? (ar ? 'تم النسخ' : 'Copied') : (ar ? 'نسخ العرض' : 'Copy proposal')}</button><button className="btn primary" onClick={() => void open()}>{ar ? 'فتح المشروع في المتصفح' : 'Open project in browser'}</button><button className="btn danger" disabled={busy} onClick={() => { if (window.confirm(ar ? 'حذف المسودة المحفوظة؟' : 'Delete saved draft?')) void rased.deleteProposalDraft(projectId).then(() => { setDraft(null); setSaved('') }).catch(() => setError(ar ? 'تعذر حذف المسودة.' : 'Could not delete the draft.')) }}>{ar ? 'حذف المسودة' : 'Delete draft'}</button></div>
+    {draft && <section className="proposal-card"><h3>{ar ? 'مسودتك' : 'Your draft'}</h3><p className="muted small" dir="auto">{draft.provider && draft.model ? `${AI_NAMES[draft.provider]} · ${draft.model}` : (ar ? 'مسودة سابقة — المصدر غير مسجل' : 'Earlier draft — source not recorded')}</p><textarea aria-label={ar ? 'نص مسودة العرض' : 'Proposal draft text'} className="textarea proposal-editor" dir="auto" maxLength={12000} value={draft.proposal} disabled={preparing || busy || saving} onChange={e => setDraft({ ...draft, proposal: e.target.value })} />
+      <div className="row-actions"><button className="btn" disabled={preparing || busy || saving || draft.proposal === saved} onClick={() => void save()}>{ar ? 'حفظ محليًا' : 'Save locally'}</button><button className="btn" onClick={() => void copy()}>{copied ? (ar ? 'تم النسخ' : 'Copied') : (ar ? 'نسخ العرض' : 'Copy proposal')}</button><button className="btn" disabled={preparing || busy || saving || quickActive} onClick={() => void prepareQuick()}>{ar ? 'تجهيز بهذا العرض في Chrome' : 'Prepare in Chrome with this proposal'}</button><button className="btn primary" onClick={() => void open()}>{ar ? 'فتح المشروع في المتصفح' : 'Open project in browser'}</button><button className="btn danger" disabled={preparing || busy || saving} onClick={() => { if (window.confirm(ar ? 'حذف المسودة المحفوظة؟' : 'Delete saved draft?')) void rased.deleteProposalDraft(projectId).then(() => { setDraft(null); setSaved('') }).catch(() => setError(ar ? 'تعذر حذف المسودة.' : 'Could not delete the draft.')) }}>{ar ? 'حذف المسودة' : 'Delete draft'}</button></div>
       {draft.assumptions.length > 0 && <><h4>{ar ? 'افتراضات تحتاج مراجعة' : 'Assumptions to review'}</h4><ul>{draft.assumptions.map((x, i) => <li key={i} dir="auto">{x}</li>)}</ul></>}
       {draft.questions.length > 0 && <><h4>{ar ? 'أسئلة مقترحة' : 'Suggested questions'}</h4><ul>{draft.questions.map((x, i) => <li key={i} dir="auto">{x}</li>)}</ul></>}
     </section>}
     {error && <p className="field-err" role="alert">{error}{!setup && <button className="btn sm" onClick={() => setLoadEpoch(e => e + 1)}>{ar ? 'إعادة المحاولة' : 'Retry'}</button>}</p>}
     {unsavedDialog}
+
   </div>
 }

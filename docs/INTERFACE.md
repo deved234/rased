@@ -12,6 +12,8 @@ Settings are grouped by monitoring, appearance, proposals, data and updates, and
 
 ## Compact window and local data
 
+After an upgrade, What's New highlights up to three unseen releases, newest first. It appears after the splash and analytics acceptance, only in the main window. Escape or **Start using RASED / ابدأ الاستخدام** saves the current version locally; fresh installs skip it. When notes exist for your installed version, reopen the latest eligible highlights from **Settings → About → What's new / ما الجديد**. **View changelog** opens the fixed GitHub releases page. This local seen marker is excluded from settings exports.
+
 The compact window shows the latest eight opportunities across sources by default. Enable **Use list filter** to follow the main list's current display filter; this does not start another collector or change notification rules. Its pin setting is independent.
 
 Settings export contains settings, saved filters and the Quick Apply template. It is not a full backup of projects, notes or proposal drafts. API keys and browser sessions are excluded. History cleanup requires a count preview and confirmation and protects retained user work according to the existing cleanup rules.

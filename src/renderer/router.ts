@@ -6,7 +6,7 @@ export type Route =
   | { name: 'saved' }
   | { name: 'filters' }
   | { name: 'project'; id: number }
-  | { name: 'proposal'; id: number }
+  | { name: 'proposal'; id: number; reason?: string }
   | { name: 'settings'; section: string | null }
   | { name: 'compact' }
 
@@ -32,7 +32,7 @@ export function routeHash(r: Route): string {
     case 'filters': return '#/filters'
     case 'compact': return '#/compact'
     case 'project': return `#/project/${r.id}`
-    case 'proposal': return `#/proposal/${r.id}`
+    case 'proposal': return `#/proposal/${r.id}${r.reason ? '?reason='+encodeURIComponent(r.reason) : ''}`
     case 'settings': return r.section ? `#/settings/${r.section}` : '#/settings'
   }
 }

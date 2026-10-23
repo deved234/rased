@@ -1,3 +1,4 @@
+import { clearQuickConsent } from './quickConsent.js'
 import { backup, DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -150,6 +151,7 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
         const columns = (db.prepare(`PRAGMA main.table_info(${table})`).all() as unknown as { name: string }[]).map(row => `"${row.name}"`).join(',')
         db.exec(`INSERT INTO main.${table} (${columns}) SELECT ${columns} FROM restore_data.${table}`)
       }
+      clearQuickConsent(db)
       for (const key of PORTABLE_KEYS) db.prepare('DELETE FROM settings WHERE key=?').run(key)
       db.exec('INSERT INTO main.settings SELECT * FROM restore_data.settings')
       const restored = sanitizeSettings(JSON.parse(getSettingRaw(db, 'app')!))
@@ -157,6 +159,7 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
       restored.quickApply.enabled = false
       restored.doNotDisturbUntil = current.doNotDisturbUntil
       restored.compactBounds = current.compactBounds
+      restored.whatsNewSeen = current.whatsNewSeen
       setSettingRaw(db, 'app', JSON.stringify(restored))
       db.exec("UPDATE notification_events SET status='suppressed' WHERE status IN ('pending','dispatching','uncertain'); DELETE FROM pending_classifications;")
       for (const old of cooldowns) if (old.backoff_until && Date.parse(old.backoff_until) > Date.now()) {

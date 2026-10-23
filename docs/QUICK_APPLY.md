@@ -20,6 +20,32 @@ Price = minimum + (maximum − minimum) × percentage / 100, adjusted to the for
 
 An existing draft is preserved. Clear/edit it yourself before starting another fill. Repeated clicks focus a known open project tab rather than refill it. Disabling the feature or revoking/changing the destination cancels pending work.
 
+## Direct preparation and Assistant
+
+**Quick Apply** on cards and details prepares the saved global template in one click. Windows notifications also use the template. Budget position and extra days always come from Settings; there is no preview dialog or one-time override.
+
+On **Mostaql only**, **Quick Apply with Assistant** uses the latest saved project draft at activation. If none exists, optional standing consent and a readable key allow generation, local saving and Chrome preparation as one operation. Without consent or a key, the Assistant page explains what is missing and retains manual per-request approval. Writing progress offers Cancel; both actions are disabled while generation or preparation is active. Hiding to the tray continues the operation; exiting cancels it.
+
+The Assistant page's **Prepare in Chrome with this proposal** saves edits and prepares directly. Editing is locked during save/preparation, and main verifies the exact displayed text against the saved draft. A concurrent draft change returns `text-changed`. Unsaved-note navigation guards remain active.
+
+Drafts above **10,000 characters** stay saved but cannot be prepared; shorten them in the Assistant. Provider output above 12,000 characters is rejected without saving. Failed Chrome preparation keeps a successfully generated draft. Missing, empty or changed drafts never fall back to the template. Review every field in Chrome and submit yourself. The extension and native protocol are unchanged; no extension reload is needed for this feature.
+
+### Error codes and what to do
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| `blocked` | Quick Apply not available from this window (e.g., before analytics acceptance) | Accept usage analytics on the RASED start screen (or use the main RASED window), then retry |
+| `not-ready` | Extension not prepared or paired | Complete extension setup and pairing in Settings → Quick Apply |
+| `disabled` | Quick Apply is turned off | Enable it in Settings → Quick Apply |
+| `busy` | Another preparation is already running | Wait for it to finish or cancel it in Settings |
+| `unsupported-source` | Source is not Mostaql or Nafezly | Quick Apply only supports Mostaql and Nafezly |
+| `invalid-project` | Project could not be identified | Reopen the project and retry |
+| `text-missing` | No draft or template text available | Save a draft for this project or write a template in Settings |
+| `text-changed` | The saved text changed during preparation | Reopen the draft and retry |
+| `text-empty` | The chosen text is empty | Write a draft or template, then retry |
+| `text-too-long` | Text exceeds 10,000 characters | Shorten the text and retry |
+| `message-too-large` | Text too large for the native messaging bridge | Shorten the text and retry |
+
 ## Troubleshooting and updates
 
 - Keep RASED running and use the selected paired Chrome profile. If Chrome opens another profile, switch to the paired one and retry explicitly. Automatic selection of a closed profile is not guaranteed.

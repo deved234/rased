@@ -1,0 +1,42 @@
+.whats-new-overlay {
+  position: fixed; inset: 36px 0 0; z-index: 50; display: grid; place-items: center;
+  padding: 20px; background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.whats-new-dialog {
+  inline-size: min(680px, 100%); max-block-size: 100%; min-block-size: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.whats-new-header {
+  flex: none; padding: 22px 24px 18px; text-align: center;
+  background: linear-gradient(125deg, var(--accent-bg), var(--panel-2), var(--panel));
+  border-block-end: 1px solid var(--border);
+}
+.whats-new-header img { display: block; margin: 0 auto 10px; }
+.whats-new-header h2 { font-size: 1.55rem; line-height: 1.6; margin: 0; text-wrap: balance; }
+.whats-new-header p { margin: 4px 0 0; color: var(--muted); }
+.whats-new-content { overflow-y: auto; min-block-size: 0; padding: 16px 24px; }
+.whats-new-content section + section { margin-block-start: 20px; }
+.whats-new-release { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; font-size: .85rem; color: var(--muted); margin-block-end: 10px; }
+.whats-new-cards { display: grid; gap: 8px; }
+.whats-new-card { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--panel-2); animation: whats-new-enter 220ms ease-out both; }
+.whats-new-card > div { min-inline-size: 0; overflow-wrap: anywhere; }
+.whats-new-card h3 { margin: 0 0 3px; font-size: 1rem; line-height: 1.6; }
+.whats-new-card p { margin: 0; font-size: .9rem; line-height: 1.7; color: var(--muted); }
+.whats-new-icon { flex: none; color: var(--accent-strong); padding-block-start: 3px; }
+.whats-new-card-1 { animation-delay: 40ms; }
+.whats-new-card-2 { animation-delay: 80ms; }
+.whats-new-card-3 { animation-delay: 120ms; }
+.whats-new-card-4 { animation-delay: 160ms; }
+.whats-new-footer { flex: none; padding: 16px 24px; border-block-start: 1px solid var(--border); }
+.whats-new-footer .row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.whats-new-footer .btn { min-block-size: 44px; white-space: normal; max-inline-size: 100%; }
+@keyframes whats-new-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .whats-new-card { animation: none; } }
+@media (max-height: 650px) {
+  .whats-new-overlay { padding: 12px; }
+  .whats-new-header { padding: 12px 20px; }
+  .whats-new-header img { inline-size: 36px; block-size: 36px; margin-block-end: 4px; }
+  .whats-new-header h2 { font-size: 1.3rem; }
+}

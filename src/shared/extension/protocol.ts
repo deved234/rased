@@ -1,4 +1,4 @@
-import { validQuickApply, type QuickApplySettings, type QuickSource } from '../quickApply.js'
+import { validQuickApply, type QuickApplySettings, type QuickSource, type QuickTextSource } from '../quickApply.js'
 export { EXTENSION_ID, EXTENSION_VERSION, HOST_NAME, PROTOCOL_VERSION } from './identity.js'
 export const MAX_FRAME = 65536
 export const nonce = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{32}$/.test(v)
@@ -22,8 +22,8 @@ export function validPrepare(v: unknown): v is PrepareJob {
 }
 export interface ExtensionClient { id:string; label:string; version:string; connected:boolean; selected:boolean }
 export interface PairRequest { id:string; code:string; expiresAt:number }
-export interface JobStatus { requestId:string; projectId:number; phase:JobPhase; error?:string; price?:number; days?:number }
-export interface ExtensionStatus { installed:boolean; registered:boolean; folder:string; extensionVersion:string; clients:ExtensionClient[]; pairing:PairRequest[]; selectedId:string|null; lastJob:JobStatus|null; protocolReady:boolean; error?:string }
+export interface JobStatus { requestId:string; projectId:number; phase:JobPhase; error?:string; price?:number; days?:number; text?:QuickTextSource }
+export interface ExtensionStatus { assistant?: { operationId:string; projectId:number; phase:'writing'|'opening' } | null; installed:boolean; registered:boolean; folder:string; extensionVersion:string; clients:ExtensionClient[]; pairing:PairRequest[]; selectedId:string|null; lastJob:JobStatus|null; protocolReady:boolean; error?:string }
 export function parseExtensionTicket(raw: string): string | null {
   if (raw.length > 200) return null
   try { const u=new URL(raw),ticket=u.searchParams.get('ticket');return u.protocol==='rased:' && u.hostname==='quick-apply-v2' && (!u.pathname || u.pathname==='/') && !u.username && !u.password && !u.port && !u.hash && [...u.searchParams.keys()].length===1 && nonce(ticket)?ticket:null } catch { return null }

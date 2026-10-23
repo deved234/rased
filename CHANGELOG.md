@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added a bilingual What's New dialog after upgrades, after startup and analytics acceptance, with keyboard dismissal, local version tracking and manual review from About settings.
+- Quick Apply prepares the template in one click; a separate Mostaql Assistant action reuses a saved draft or generates under optional, revocable provider/model/key-bound consent. Writing has progress/cancel, and notifications remain template-based. No preview dialog or per-time overrides; review and submit manually in Chrome.
+- Preparing from the Assistant saves and verifies the displayed text while the editor is locked. Concurrent drafts are preserved, failed Chrome preparation keeps generated drafts, and standing consent is excluded from exports/backups and cleared on key/selection changes, import and restore. Updated bilingual legal wording dated 2026-10-23; analytics disclosure v4 is unchanged.
+- Clearer Quick Apply error messages with bilingual table covering `blocked`, `not-ready`, `disabled`, `busy`, `unsupported-source`, `invalid-project`, `text-missing`, `text-changed`, `text-empty`, `text-too-long`, `message-too-large`, `chrome-unavailable`, `login-required`, `form-unavailable`, `draft-exists`, `template-too-long`, `client-timeout`, `form-timeout`, `connection-lost`, `tab-closed`, `navigation-changed`, `user-cancelled`, `app-restarted`.
+
 ## 0.10.0 — 2026-10-21
 
 - **Usage analytics acceptance is now required in the official build.** A bilingual **Agree & use RASED / Exit** screen appears before any feature or monitoring. Nothing is collected and no platform is checked until you accept. Disclosure `2026-10-21-v4`: 0.9.1 participants must accept again, and earlier declines stay declined behind the same screen. Withdrawing stops monitoring and returns to this screen without deleting local data. Development/unconfigured builds remain exempt and send nothing. This distribution policy does not change MIT or certify legal compliance; cloud-event deletion verification remains pending.

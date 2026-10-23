@@ -1,3 +1,4 @@
+import { clearQuickConsent } from './quickConsent.js'
 import type { Db } from './db.js'
 import { getSettingRaw, listSavedFilters, runInTransaction, saveSavedFilterRow, setSettingRaw } from './repositories.js'
 import { defaultSettings, sanitizeSavedFilter, sanitizeSettings, type AppSettings, type SavedFilter } from '../shared/types.js'
@@ -43,6 +44,7 @@ export function parseSettingsTransfer(value: unknown): SettingsTransfer {
   const v = value as Record<string, unknown>
   if (v.format !== 'rased-settings' || (v.version !== 1 && v.version !== 2) || !Array.isArray(v.savedFilters) || v.savedFilters.length > 1000 || !v.settings || typeof v.settings !== 'object' || Array.isArray(v.settings)) throw Error('bad-schema')
   const raw = v.settings as Record<string, unknown>
+  if (['ai-quick-consent', 'aiQuickConsent', 'quickConsent'].some(key => Object.hasOwn(v, key) || Object.hasOwn(raw, key))) throw Error('bad-schema')
   const defaults = defaultSettings()
   for (const key of TRANSFER_SETTINGS_KEYS) {
     if (!(key in raw)) continue
@@ -92,6 +94,7 @@ export function importSettings(db: Db, current: AppSettings, payload: SettingsTr
   if (next.linkDisplayAndNotifyFilters && next.displayQuery.source === 'mostaql') next.notifyFilter = next.displayQuery.categoryFilter
   next.displayFilter = next.displayQuery.categoryFilter
   runInTransaction(db, () => {
+    clearQuickConsent(db)
     setSettingRaw(db, 'app', JSON.stringify(next))
     if (mode === 'replace') db.exec('DELETE FROM saved_filters')
     for (const filter of payload.savedFilters) saveSavedFilterRow(db, filter)

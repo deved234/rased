@@ -41,7 +41,16 @@ describe('Portable settings', () => {
     expect(imported.displayQuery.searchInNotes).toBe(false); expect(imported.displayQuery.searchInDrafts).toBe(false)
   })
   it('accounts for every current setting and intentionally excludes only session/device state', () => {
-    expect(Object.keys(defaultSettings()).filter(key => !TRANSFER_SETTINGS_KEYS.includes(key as typeof TRANSFER_SETTINGS_KEYS[number])).sort()).toEqual(['compactBounds', 'doNotDisturbUntil'])
+    expect(Object.keys(defaultSettings()).filter(key => !TRANSFER_SETTINGS_KEYS.includes(key as typeof TRANSFER_SETTINGS_KEYS[number])).sort()).toEqual(['compactBounds', 'doNotDisturbUntil', 'whatsNewSeen'])
+  })
+  it('keeps the local release marker through merge and replace imports', () => {
+    const db = database()
+    const current = { ...defaultSettings(), whatsNewSeen: '1.2.0' }
+    const payload = parseSettingsTransfer({ format: 'rased-settings', version: 2, settings: { language: 'en', whatsNewSeen: '9.9.9' }, savedFilters: [] })
+    expect(settingsPayload(db, current).settings).not.toHaveProperty('whatsNewSeen')
+    for (const mode of ['merge', 'replace'] as const) {
+      expect(importSettings(db, current, payload, mode, false).whatsNewSeen).toBe('1.2.0')
+    }
   })
   it('round trips all source preferences, the professional profile and provider/model choices', () => {
     const source = database(), destination = database(); seed(source)
@@ -177,11 +186,13 @@ describe('Complete portable backups', () => {
     const target = database(); seed(target)
     setSettingRaw(target, 'data-backup-preferences', '{"schedule":"daily","keep":3}')
     setSettingRaw(target, 'local-only-key-metadata', 'stay-on-device')
+    setSettingRaw(target, 'app', JSON.stringify({ ...defaultSettings(), whatsNewSeen: '1.2.0' }))
     const cooldown = new Date(Date.now() + 3600000).toISOString()
     target.prepare("INSERT INTO source_state(source,backoff_until,consecutive_failures,last_error) VALUES('nafezly',?,4,'http-429')").run(cooldown)
     restoreDatabase(target, file, true, 'restore-id', 'rollback.rased-backup')
     expect(getSettingRaw(target, 'data-backup-preferences')).toBe('{"schedule":"daily","keep":3}')
     expect(getSettingRaw(target, 'local-only-key-metadata')).toBe('stay-on-device')
+    expect(JSON.parse(getSettingRaw(target, 'app')!).whatsNewSeen).toBe('1.2.0')
     expect(target.prepare("SELECT backoff_until FROM source_state WHERE source='nafezly'").get()).toEqual({ backoff_until: cooldown })
     expect(JSON.parse(getSettingRaw(target, 'app')!).runAtStartup).toBe(true)
     target.exec("CREATE TRIGGER reject_restore BEFORE INSERT ON saved_filters BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
@@ -191,3 +202,39 @@ describe('Complete portable backups', () => {
   })
 })
 import { removeSearchSchema } from './helpers/oldSchema.js'
+
+describe('device-local standing consent portability', () => {
+  const consent = JSON.stringify({ version: 1, provider: 'openai', model: 'example-model', keyRevision: 'local-revision', grantedAt: '2026-10-23T00:00:00.000Z' })
+  it('omits consent from exports and clears an existing grant on v1/v2 import', () => {
+    const db = database(); seed(db)
+    for (const version of [1, 2] as const) {
+      setSettingRaw(db, 'ai-quick-consent', consent)
+      const payload = settingsPayload(db)
+      expect(JSON.stringify(payload)).not.toContain('local-revision')
+      importSettings(db, defaultSettings(), parseSettingsTransfer({ ...payload, version }), 'merge', false)
+      expect(getSettingRaw(db, 'ai-quick-consent')).toBeNull()
+    }
+    expect(() => parseSettingsTransfer({ ...settingsPayload(db), 'ai-quick-consent': JSON.parse(consent) })).toThrow('bad-schema')
+  })
+  it('exports a 0.10.0-compatible archive, clears destination consent transactionally and rejects injected grants', async () => {
+    const folder = profile(), source = database(folder); seed(source)
+    setSettingRaw(source, 'ai-quick-consent', consent)
+    const file = join(folder, 'standing.rased-backup')
+    await createPortableBackup(source, file, '0.10.0')
+    const backup = openDatabase(file); databases.push(backup)
+    expect(getSettingRaw(backup, 'ai-quick-consent')).toBeNull()
+    backup.close()
+    expect(inspectBackup(file).manifest.appVersion).toBe('0.10.0')
+    const target = database(); seed(target)
+    setSettingRaw(target, 'ai-quick-consent', consent)
+    target.exec("CREATE TRIGGER reject_restore BEFORE INSERT ON projects BEGIN SELECT RAISE(ABORT,'fixture failure'); END")
+    expect(() => restoreDatabase(target, file, false, 'failed', 'rollback')).toThrow()
+    expect(getSettingRaw(target, 'ai-quick-consent')).toBe(consent)
+    target.exec('DROP TRIGGER reject_restore')
+    restoreDatabase(target, file, false, 'success', 'rollback')
+    expect(getSettingRaw(target, 'ai-quick-consent')).toBeNull()
+    const injected = openDatabase(file); databases.push(injected)
+    setSettingRaw(injected, 'ai-quick-consent', consent); injected.close()
+    expect(() => inspectBackup(file)).toThrow('bad-schema')
+  })
+})

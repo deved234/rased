@@ -49,7 +49,6 @@ import {
   defaultSettings,
   defaultFilterDefinition,
   sanitizeFilterDefinition,
-  sanitizeSettings,
   sanitizeUserStatePatch,
   type AppSettings,
   type MutationResult,
@@ -125,11 +124,12 @@ import { notificationActivationArguments, notificationScheme, parseNotificationA
 import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation } from '../storage/notificationActivations.js'
 import { getProposalProfile, saveProposalProfile } from './proposals.js'
 import { AiService } from './ai/service.js'
-import { saveAiSettings } from './ai/settings.js'
+import { QuickAssistant } from './extension/quickAssistant.js'
+import { loadAppSettings } from '../storage/appSettings.js'
 import { isAiProvider, sanitizeSelection } from '../shared/ai.js'
 import { deleteProposalDraft, getProposalDraft, saveProposalDraft } from '../storage/proposalDrafts.js'
 import type { ProposalDraft } from '../shared/proposals.js'
-import { validQuickApply } from '../shared/quickApply.js'
+import { validQuickApply, validQuickMode } from '../shared/quickApply.js'
 import { retireQuickBrowser } from './retireQuickBrowser.js'
 import { ExtensionBroker } from './extension/broker.js'
 import { parseExtensionTicket, nonce, record, EXTENSION_VERSION, type ExtensionStatus } from '../shared/extension/protocol.js'
@@ -137,10 +137,11 @@ import { clipboard } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
+let quickAssistant:QuickAssistant|null=null
 let extension:ExtensionBroker|null=null
 let extensionReady=false
 const pendingExtensionUrls=new Set<string>()
-function extensionSnapshot():ExtensionStatus{return extension?.status()??{installed:false,registered:false,folder:join(app.getPath('userData'),'chrome-link','extension'),extensionVersion:EXTENSION_VERSION,clients:[],pairing:[],selectedId:null,lastJob:null,protocolReady:false,error:'bridge-unavailable'}}
+function extensionSnapshot():ExtensionStatus{return extension ? {...extension.status(),assistant:quickAssistant?.status()??null} : {installed:false,registered:false,folder:join(app.getPath('userData'),'chrome-link','extension'),extensionVersion:EXTENSION_VERSION,clients:[],pairing:[],selectedId:null,lastJob:null,protocolReady:false,error:'bridge-unavailable'}}
 const execChrome=promisify(execFile)
 async function launchChrome(url='about:blank'):Promise<void> {
   const candidates=[join(process.env['PROGRAMFILES']??'C:\\Program Files','Google','Chrome','Application','chrome.exe'),join(process.env['PROGRAMFILES(X86)']??'C:\\Program Files (x86)','Google','Chrome','Application','chrome.exe'),join(process.env['LOCALAPPDATA']??'','Google','Chrome','Application','chrome.exe')]
@@ -154,7 +155,8 @@ async function activateExtensionUrl(raw:string):Promise<void> {
   const ticket=parseExtensionTicket(raw);if(!ticket)return
   if(!extensionReady){if(pendingExtensionUrls.size<10)pendingExtensionUrls.add(raw);return}
   if (!applicationAccessAllowed()) { win?.show(); return }
-  if(!extension||!await extension.activate(ticket)){
+  const result=await extension?.activate(ticket)
+  if(!result||!result.ok){
     win?.show();win?.webContents.send(IPC.openSettings)
     if(!testHarness)void dialog.showMessageBox({type:'info',message:settings.language==='ar'?'تعذر بدء التقديم السريع. راجع ربط Chrome وإعدادات القالب، أو ابدأ من بطاقة المشروع.':'Quick Apply could not start. Check Chrome pairing and your template, or start from the project card.'})
   }
@@ -328,7 +330,7 @@ function syncAnalyticsAccess(): void {
   if (!allowed) {
     activeRss?.abort(); khamsatAbort?.abort(); nafezlyAbort?.abort()
     enrichQueue.abortActive(); detailsFetcher.abortActive(); nafezlyFacts.abortActive()
-    aiService?.cancel(); extension?.cancel()
+    quickAssistant?.cancel(); aiService?.cancel(); extension?.cancel()
     compactWin?.close()
   }
   // The access gate is separate from per-source pauses/settings/backoff.
@@ -358,14 +360,7 @@ if(singleInstance){
 // ---------------------------------------------------------------- settings
 
 function loadSettings(): AppSettings {
-  if (!db) return defaultSettings()
-  const raw = getSettingRaw(db, 'app')
-  if (!raw) return defaultSettings()
-  try {
-    return sanitizeSettings(JSON.parse(raw) as unknown)
-  } catch {
-    return defaultSettings()
-  }
+  return db ? loadAppSettings(db, testHarness?.appVersion ?? APP_VERSION) : defaultSettings()
 }
 
 function saveSettings(s: AppSettings): void {
@@ -377,7 +372,7 @@ function saveSettings(s: AppSettings): void {
   telemetry?.language(s.language)
   applyMonitoringSettings(previous, s)
   kaf?.settingsChanged()
-  if(!s.quickApply.enabled)extension?.cancel()
+  if(!s.quickApply.enabled){quickAssistant?.cancel();extension?.cancel()}
   applyAutoStart()
   broadcast(IPC.settingsChanged, s)
   updateTray()
@@ -1475,6 +1470,7 @@ async function shutdown(): Promise<void> {
   nafezlyAbort?.abort()
   const closingKaf = kaf?.close()
   const closingFacts = nafezlyFacts.close()
+  quickAssistant?.dispose()
   const closingAi = aiService?.close()
   const closingBackup = dataBackup?.close()
   const closingSearchCache = searchCache?.close()
@@ -1562,7 +1558,23 @@ function registerIpc(): void {
   const proposalId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0
   const proposalNotes = (value: unknown): value is string => typeof value === 'string' && value.length <= 2000
   ipcMain.handle(IPC.getExtensionStatus,event=>mainSender(event)?extensionSnapshot():null)
-  ipcMain.handle(IPC.quickApplyProject,async(event,v:{id?:unknown})=>({ok:!!(mainSender(event)&&proposalId(v?.id)&&await extension?.quick(v.id))}))
+  ipcMain.handle(IPC.quickApplyProject,async(event,v)=>{
+    if(!mainSender(event))return{ok:false,error:'blocked'}
+    if(!proposalId(v?.id)|| (v.mode!==undefined&&!validQuickMode(v.mode)) || (v.expectedText!==undefined&&(v.mode!=='draft'||typeof v.expectedText!=='string'||v.expectedText.length>12000)))return{ok:false,error:'invalid-project'}
+    if(!extension)return{ok:false,error:'not-ready'}
+    return extension.quick(v.id,v.mode,v.expectedText)
+  })
+  ipcMain.handle(IPC.quickApplyAssistant,(event,v)=>{
+    if(!mainSender(event))return{ok:false,error:'blocked'}
+    if(!proposalId(v?.id))return{ok:false,error:'invalid-project'}
+    return quickAssistant?.quick(v.id)??{ok:false,error:'not-ready'}
+  })
+  ipcMain.handle(IPC.cancelQuickAssistant,(event,v)=>{if(mainSender(event)&&typeof v?.operationId==='string')quickAssistant?.cancel(v.operationId)})
+  ipcMain.handle(IPC.setQuickConsent,(event,v)=>{
+    if(!mainSender(event)||typeof v?.enabled!=='boolean'||!aiService)return{ok:false}
+    if(!v.enabled)quickAssistant?.cancel()
+    return{ok:aiService.setStandingConsent(v.enabled,sanitizeSelection(v.selection)??undefined)}
+  })
   ipcMain.handle(IPC.extensionAction,async(event,v:unknown)=>{
     if(!mainSender(event)||!extension||!record(v))return {ok:false,error:'bad-request'}
     try{
@@ -1572,8 +1584,8 @@ function registerIpc(): void {
       if(v.action==='chrome-extensions'){await launchChrome('chrome://extensions/');return {ok:true}}
       if(v.action==='cancel'){extension.cancel();return {ok:true}}
       if(v.action==='approve'&&nonce(v.id)&&typeof v.code==='string'&&typeof v.label==='string')return {ok:extension.approve(v.id,v.code,v.label)}
-      if(v.action==='select'&&nonce(v.id))return {ok:extension.select(v.id)}
-      if(v.action==='revoke'&&nonce(v.id)){const ok=extension.revoke(v.id);if(!extension.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}});return {ok}}
+      if(v.action==='select'&&nonce(v.id)){quickAssistant?.cancel();return {ok:extension.select(v.id)}}
+      if(v.action==='revoke'&&nonce(v.id)){quickAssistant?.cancel();const ok=extension.revoke(v.id);if(!extension.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}});return {ok}}
       return {ok:false,error:'bad-request'}
     }catch{return {ok:false,error:'extension-action-failed'}}
   })
@@ -1583,13 +1595,19 @@ function registerIpc(): void {
     return { hasKey: setup.providers[setup.settings.activeProvider].hasKey, profile: getProposalProfile(db) }
   })
   ipcMain.handle(IPC.getAiSetup, event => mainSender(event) ? aiService?.setup() : null)
-  ipcMain.handle(IPC.saveAiSettings, (event, v) => ({ ok: !!(mainSender(event) && db && saveAiSettings(db, v?.settings)) }))
+  ipcMain.handle(IPC.saveAiSettings, (event, v) => {
+    const ok = !!(mainSender(event) && aiService?.saveSettings(v?.settings))
+    if (ok && !aiService?.standingAllowed()) quickAssistant?.cancel()
+    return { ok }
+  })
   ipcMain.handle(IPC.saveAiKey, (event, v) => {
     const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.saveKey(v.provider, v?.key))
+    if (ok) quickAssistant?.cancel()
     return { ok, error: ok ? undefined : 'key-save-failed' }
   })
   ipcMain.handle(IPC.deleteAiKey, (event, v) => {
     const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.deleteKey(v.provider))
+    if (ok) quickAssistant?.cancel()
     return { ok, error: ok ? undefined : 'key-save-failed' }
   })
   ipcMain.handle(IPC.listAiModels, (event, v) => mainSender(event) && isAiProvider(v?.provider) && aiService ? aiService.listModels(v.provider) : { ok: false, error: 'bad-request' })
@@ -1614,7 +1632,7 @@ function registerIpc(): void {
     if (result.ok) emitProjects([], [v.id])
     return result
   })
-  ipcMain.handle(IPC.cancelProposal, event => { if (mainSender(event)) aiService?.cancel() })
+  ipcMain.handle(IPC.cancelProposal, event => { if (mainSender(event)) aiService?.cancelManual() })
   ipcMain.handle(IPC.getProposalDraft, (event, v: { id?: unknown }) => mainSender(event) && db && proposalId(v?.id) ? getProposalDraft(db, v.id) : null)
   ipcMain.handle(IPC.saveProposalDraft, (event, v: { draft?: ProposalDraft }) => {
     const draft = v?.draft
@@ -2027,7 +2045,7 @@ function registerIpc(): void {
       return { ok: true }
     } catch { return { ok: false, error: 'open-failed' } }
   })
-  ipcMain.handle(IPC.getAppInfo, () => ({ version: APP_VERSION, platform: process.platform, arch: process.arch }))
+  ipcMain.handle(IPC.getAppInfo, () => ({ version: testHarness?.appVersion ?? APP_VERSION, platform: process.platform, arch: process.arch }))
   ipcMain.handle(IPC.openCompact, () => {
     openCompact()
   })
@@ -2154,6 +2172,7 @@ async function boot(): Promise<void> {
     extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>applicationAccessAllowed() ? settings : { ...settings, quickApply: { ...settings.quickApply, enabled: false } },extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
     await extension.start()
   }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
+  if(extension&&aiService)quickAssistant=new QuickAssistant(db,aiService,extension,applicationAccessAllowed,extensionChanged)
   if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
   if(!testHarness){
     const protocolReady=IS_PACKAGED?app.setAsDefaultProtocolClient(activationScheme):app.setAsDefaultProtocolClient(activationScheme,process.execPath,[app.getAppPath()])
@@ -2385,6 +2404,7 @@ function applySettingsImport(mode: unknown, applyStartup: boolean): ImportSummar
   const transfer = { ...cached, settings: { ...cached.settings } }
   if (transfer.settings.quickApply?.enabled && !extension?.available()) transfer.settings.quickApply = { ...transfer.settings.quickApply, enabled: false }
   let next: AppSettings
+  quickAssistant?.cancel()
   try { next = importSettings(d, settings, transfer, mode, applyStartup) } catch { return { ok: false, error: 'write-failed' } }
   pendingImport = null
   // Publish side effects only after the entire import committed successfully.

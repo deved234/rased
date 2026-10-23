@@ -1,3 +1,5 @@
+import { QuickAssistant } from '../src/main/extension/quickAssistant.js'
+import type { ExtensionBroker } from '../src/main/extension/broker.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -5,7 +7,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { openDatabase, type Db } from '../src/storage/db.js'
 import { getSettingRaw, setSettingRaw, upsertProjectsBatch } from '../src/storage/repositories.js'
-import { getProposalDraft } from '../src/storage/proposalDrafts.js'
+import { getProposalDraft, saveProposalDraft } from '../src/storage/proposalDrafts.js'
 import { AiService } from '../src/main/ai/service.js'
 import { aiKeyPath, deleteAiKey, keyStatus, migrateGeminiKey, readAiKey, saveAiKey } from '../src/main/ai/keyStore.js'
 import { getAiSettings, saveAiSettings } from '../src/main/ai/settings.js'
@@ -168,4 +170,117 @@ describe('proposal AI service consent and lifecycle', () => {
     expect(getAiSettings(db).activeProvider).toBe('anthropic')
     expect(getSettingRaw(db, 'proposal-profile')).toBe('keep-this-profile')
   })
+})
+
+function standingService(fetchImpl: typeof fetch, measured = vi.fn()): AiService {
+  const ai = new AiService(db, dir, fetchImpl, () => {}, measured)
+  ai.saveKey('openai', 'fake-standing-key-123456')
+  ai.saveSettings({ ...defaultAiSettings(), activeProvider: 'openai', modelByProvider: { ...defaultAiSettings().modelByProvider, openai: selection.model } })
+  return ai
+}
+describe('standing Quick Apply consent', () => {
+  it('defaults off, rejects corrupt records and binds to provider, model and key with no A-B-A resurrection', () => {
+    const ai = standingService(vi.fn(async () => reply()) as typeof fetch)
+    expect(ai.standingAllowed()).toBe(false)
+    expect(ai.setStandingConsent(true, { ...selection, model: 'wrong-model' })).toBe(false)
+    for (const raw of ['oops', 'null', '{}', '{"version":1}', '[]']) {
+      setSettingRaw(db, 'ai-quick-consent', raw)
+      expect(ai.standingAllowed()).toBe(false)
+    }
+    expect(ai.setStandingConsent(true, selection)).toBe(true)
+    expect(ai.standingAllowed()).toBe(true)
+    const original = ai.setup().settings
+    ai.saveSettings({ ...original, modelByProvider: { ...original.modelByProvider, openai: 'other-model' } })
+    ai.saveSettings(original)
+    expect(ai.standingAllowed()).toBe(false)
+    expect(getSettingRaw(db, 'ai-quick-consent')).toBeNull()
+    ai.setStandingConsent(true, selection)
+    ai.saveSettings({ ...original, activeProvider: 'gemini' })
+    ai.saveSettings(original)
+    expect(ai.standingAllowed()).toBe(false)
+    ai.setStandingConsent(true, selection)
+    ai.saveKey('gemini', 'fake-other-provider-123456')
+    expect(ai.standingAllowed()).toBe(false)
+    ai.setStandingConsent(true, selection)
+    ai.deleteKey('gemini')
+    expect(ai.standingAllowed()).toBe(false)
+  })
+  it('uses the normal prompt with empty notes and exactly one unchanged generation metric', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000)
+    const measured = vi.fn(), fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body)).input[0].content[0].text).toContain('PROJECT-SPECIFIC USER NOTES:\n""\n')
+      return reply()
+    }) as typeof fetch
+    const ai = standingService(fetchImpl, measured)
+    expect(await ai.generateStanding(id, 'operation')).toMatchObject({ error: 'consent-required' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    ai.setStandingConsent(true, selection)
+    expect(await ai.generateStanding(id, 'operation')).toMatchObject({ ok: true })
+    expect(getProposalDraft(db, id)?.proposal).toBe('A valid proposal')
+    expect(measured).toHaveBeenCalledTimes(1)
+    expect(measured.mock.calls[0]![0]).toEqual({ provider: 'openai', outcome: 'success', error: 'none', duration: 'under_100ms' })
+    await ai.close()
+  })
+  it.each(['cancel', 'revoke', 'delete-key', 'rotate-key', 'selection', 'close'])('discards late responses after %s without touching a concurrent saved draft', async action => {
+    let resolve!: (value: Response) => void
+    const measured = vi.fn()
+    const ai = standingService(vi.fn(() => new Promise<Response>(done => { resolve = done })) as typeof fetch, measured)
+    ai.setStandingConsent(true, selection)
+    const pending = ai.generateStanding(id, 'owned')
+    ai.cancelStanding('someone-else')
+    if (action === 'cancel') ai.cancelStanding('owned')
+    if (action === 'revoke') ai.setStandingConsent(false)
+    if (action === 'delete-key') ai.deleteKey('openai')
+    if (action === 'rotate-key') ai.saveKey('openai', 'fake-rotated-key-123456')
+    if (action === 'selection') ai.saveSettings(defaultAiSettings())
+    const closing = action === 'close' ? ai.close() : null
+    saveProposalDraft(db, { projectId: id, proposal: 'Concurrent manual text', assumptions: [], questions: [], updatedAt: 'now' })
+    resolve(reply())
+    expect(await pending).toMatchObject({ error: 'cancelled' })
+    await closing
+    expect(getProposalDraft(db, id)?.proposal).toBe('Concurrent manual text')
+    expect(measured).toHaveBeenCalledTimes(1)
+    expect(measured.mock.calls[0]![0].outcome).toBe('cancelled')
+    await ai.close()
+  })
+  it('preserves a draft saved during generation and reports text-changed', async () => {
+    let resolve!: (value: Response) => void
+    const ai = standingService(vi.fn(() => new Promise<Response>(done => { resolve = done })) as typeof fetch)
+    ai.setStandingConsent(true, selection)
+    const pending = ai.generateStanding(id, 'owned')
+    expect(await ai.test(selection)).toMatchObject({ error: 'busy' })
+    saveProposalDraft(db, { projectId: id, proposal: 'My edit', assumptions: [], questions: [], updatedAt: 'now' })
+    resolve(reply())
+    expect(await pending).toMatchObject({ error: 'text-changed' })
+    expect(getProposalDraft(db, id)?.proposal).toBe('My edit')
+    await ai.close()
+  })
+  it.each([10001, 12000, 12001])('validates generated text of length %s before conditional save', async length => {
+    const ai = standingService((async () => new Response(JSON.stringify({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ proposal: 'x'.repeat(length), assumptions: [], questions: [] }) }] }] }))) as typeof fetch)
+    ai.setStandingConsent(true, selection)
+    const result = await ai.generateStanding(id, 'owned')
+    expect(result.ok).toBe(length <= 12000)
+    if (length > 12000) { expect(result.error).toBe('invalid-response'); expect(getProposalDraft(db, id)).toBeNull() }
+    else expect(getProposalDraft(db, id)?.proposal.length).toBe(length)
+    await ai.close()
+  })
+})
+
+it('records exactly one generation event despite failed activation and saved-draft retries', async () => {
+  const measured = vi.fn(), fetchImpl = vi.fn(async () => reply()) as typeof fetch
+  const ai = standingService(fetchImpl, measured)
+  ai.setStandingConsent(true, selection)
+  const broker = {
+    preflight: () => ({ ok: true }), reserve: () => true, release: () => {}, status: () => ({ selectedId: 'client' }),
+    quick: vi.fn(async () => ({ ok: false, error: 'chrome-unavailable' })), cancelOwned: () => {}, ownsJob: () => false
+  }
+  const assistant = new QuickAssistant(db, ai, broker as unknown as ExtensionBroker, () => true, () => {})
+  expect(await assistant.quick(id)).toEqual({ ok: false, error: 'chrome-unavailable' })
+  expect(getProposalDraft(db, id)?.proposal).toBe('A valid proposal')
+  expect(await assistant.quick(id)).toEqual({ ok: false, error: 'chrome-unavailable' })
+  expect(fetchImpl).toHaveBeenCalledTimes(1)
+  expect(measured).toHaveBeenCalledTimes(1)
+  expect(Object.keys(measured.mock.calls[0]![0]).sort()).toEqual(['duration', 'error', 'outcome', 'provider'])
+  expect(broker.quick).toHaveBeenCalledTimes(2)
+  await ai.close()
 })

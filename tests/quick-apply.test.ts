@@ -1,10 +1,11 @@
 import { describe,expect,it } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../src/storage/migrations.js'
-import { quickPrice,validQuickApply,defaultQuickApply,parseQuickTicket } from '../src/shared/quickApply.js'
+import { quickPrice,validQuickApply,defaultQuickApply,parseQuickTicket,validQuickMode } from '../src/shared/quickApply.js'
 import { sanitizeSettings } from '../src/shared/types.js'
 import { issueQuickTicket,consumeQuickTicket } from '../src/storage/quickApply.js'
 import { browserToastXml } from '../src/main/toast.js'
+import { LEGAL_DOCUMENTS } from '../src/shared/legal.js'
 describe('quick apply values',()=>{
   it.each([[0,25],[50,37.5],[100,50]])('positions %s within the budget', (percent,price)=>expect(quickPrice(25,50,percent)).toBe(price))
   it('uses fixed budgets and rounds within valid integer limits',()=>{expect(quickPrice(25,25,100)).toBe(25);expect(quickPrice(25.2,50.2,0,1)).toBe(26);expect(quickPrice(25.2,25.8,0,1)).toBeNull()})
@@ -38,3 +39,13 @@ describe('notification activation tickets',()=>{
   })
 })
 import { removeSearchSchema } from './helpers/oldSchema.js'
+
+describe('strict quick mode',()=>{
+  it.each(['draft','template'])('accepts %s',mode=>expect(validQuickMode(mode)).toBe(true))
+  it.each([null,false,0,'','unknown',{},[]])('rejects %s',mode=>expect(validQuickMode(mode)).toBe(false))
+})
+it('discloses saved-draft transport in Arabic and English privacy text',()=>{
+  const transport=(lang:'ar'|'en')=>LEGAL_DOCUMENTS[lang].privacy.sections.find(([,body])=>body.includes('Native Messaging'))?.[1]
+  expect(transport('ar')).toContain('القالب أو المسودة المحفوظة')
+  expect(transport('en')).toContain('template or saved draft')
+})

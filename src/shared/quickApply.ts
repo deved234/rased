@@ -16,3 +16,10 @@ export function parseQuickTicket(raw: string): string | null {
   if (raw.length > 200) return null
   try { const u = new URL(raw); const t = u.searchParams.get('ticket'); return u.protocol === 'rased:' && u.hostname === 'quick-apply' && (u.pathname === '' || u.pathname === '/') && !u.username && !u.password && !u.port && !u.hash && [...u.searchParams.keys()].length === 1 && !!t && /^[a-f0-9]{32}$/.test(t) ? t : null } catch { return null }
 }
+
+export type QuickTextSource = 'draft' | 'template'
+export type QuickApplyError = 'blocked' | 'not-ready' | 'disabled' | 'busy' | 'unsupported-source' | 'invalid-project' | 'text-missing' | 'text-changed' | 'text-empty' | 'text-too-long' | 'message-too-large' | 'chrome-unavailable'
+export type QuickApplyResult = { ok: true } | { ok: false; error: QuickApplyError }
+export type QuickAssistantResult = { ok: true } | { ok: false; error: QuickApplyError | 'consent-required' | 'no-key' | 'generation-failed' | import('./ai.js').AiError }
+export const QUICK_TEXT_MAX = 10000
+export function validQuickMode(value: unknown): value is QuickTextSource { return value === 'template' || value === 'draft' }

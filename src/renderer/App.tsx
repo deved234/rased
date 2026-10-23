@@ -16,6 +16,7 @@ import { CompactView } from './views/CompactView.js'
 const SettingsView = React.lazy(() => import('./views/SettingsView.js').then(module => ({ default: module.SettingsView })))
 import { useUpdates, UpdateBanner } from './views/UpdatesView.js'
 import { AnalyticsAccess } from './views/AnalyticsAccess.js'
+import { WhatsNewAccess } from './components/WhatsNew.js'
 
 type Boot = 'loading' | 'slow' | 'error' | 'welcome' | 'ready'
 
@@ -173,6 +174,7 @@ export function App(): React.ReactElement {
   // global Ctrl+K (never inside editable fields)
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (document.querySelector('.app[inert]')) return
       const target = e.target as HTMLElement
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         if (target.matches('input, textarea, select, [contenteditable]')) return
@@ -211,7 +213,7 @@ export function App(): React.ReactElement {
   }
 
   return (
-    <div className="desktop-shell"><Titlebar lang={lang} /><AnalyticsAccess lang={lang}><div className="app">
+    <div className="desktop-shell"><Titlebar lang={lang} /><AnalyticsAccess lang={lang}><WhatsNewAccess settings={settings} patchSettings={patchSettings}>{(openWhatsNew, whatsNewOpen) => <div className="app" inert={whatsNewOpen}>
       <Sidebar
         lang={lang}
         route={route}
@@ -281,6 +283,7 @@ export function App(): React.ReactElement {
             patchSettings={patchSettings}
             section={route.section}
             onSection={(s) => go({ name: 'settings', section: s })}
+            onWhatsNew={openWhatsNew}
           /></React.Suspense></ScreenBoundary>
         ) : (
           <ProjectsView key="projects"
@@ -300,6 +303,6 @@ export function App(): React.ReactElement {
         )}
         <Statusbar lang={lang} health={health} khamsatHealth={khamsatHealth} nafezlyHealth={nafezlyHealth} kafHealth={kafHealth} settings={settings} />
       </div>
-    </div></AnalyticsAccess></div>
+    </div>}</WhatsNewAccess></AnalyticsAccess></div>
   )
 }

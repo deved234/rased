@@ -5,11 +5,13 @@ import { EventEmitter } from 'node:events'
 import type { UpdaterPort } from './updates.js'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { isReleaseVersion } from '../shared/whatsNew.js'
 
 export function isolatedTestHarness(profile: string, argv: string[]): null | {
   fetchImpl: typeof fetch
   aiFetchImpl: typeof fetch
   record: (kind: string, data: unknown) => void
+  appVersion?: string
 } {
   const rel = relative(resolve(tmpdir()), resolve(profile))
   if (!argv.includes('--rased-test') || rel.startsWith('..') || isAbsolute(rel) || rel === '' || !basename(profile).startsWith('rased-test-')) return null
@@ -93,7 +95,13 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
     const data = provider === 'gemini' ? { candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] } }] } : provider === 'openai' ? { status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text }] }] } : { stop_reason: 'end_turn', content: [{ type: 'text', text }] }
     return new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
-  return { fetchImpl, aiFetchImpl, record }
+  const whatsNewFixture = join(profile, 'whats-new-fixture.json')
+  let appVersion: string | undefined
+  if (existsSync(whatsNewFixture)) {
+    const fixture = JSON.parse(readFileSync(whatsNewFixture, 'utf8')) as { version?: unknown }
+    if (isReleaseVersion(fixture.version)) appVersion = fixture.version
+  }
+  return { fetchImpl, aiFetchImpl, record, appVersion }
 }
 
 /** Only constructed after isolatedTestHarness validated the opt-in TEMP marker. */

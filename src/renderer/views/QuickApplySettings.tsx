@@ -28,6 +28,7 @@ export function QuickApplySettings({settings}:{settings:AppSettings}):React.Reac
   const unsavedDialog=useUnsavedChanges(dirty,ar,save)
   return <section className="set-group">
     <h2>{ar?'التقديم السريع':'Quick Apply'}</h2>
+    {status?.assistant && <p role="status">{ar?'جارٍ كتابة وتجهيز العرض…':'Writing and preparing proposal…'} <button className="btn sm" onClick={()=>void rased.cancelQuickAssistant(status.assistant!.operationId)}>{ar?'إلغاء':'Cancel'}</button></p>}
     {conflict&&<p className="field-err" role="alert">{ar?'تغيرت الإعدادات المحفوظة أثناء التحرير. احتفظنا بنصك؛ الحفظ يستبدل القيم السابقة.':'Saved settings changed while editing. Your edits are retained; saving replaces the previous values.'}<button className="btn sm" onClick={()=>{setDraft({...settings.quickApply});setConflict(false)}}>{ar?'استخدام المحفوظ':'Use saved values'}</button></p>}
     {status?.error&&<p className="field-err" role="alert">{ar?'تعذر تجهيز الاتصال المحلي. جرّب إصلاح الملفات، ثم إعادة تشغيل راصد، وراجع صلاحيات مجلد بيانات التطبيق.':'Local bridge unavailable. Repair extension files, restart RASED, and check app data folder permissions.'}</p>}
     <p className="hint">{ar?'لمستقل ونفذلي فقط. تستخدم الإضافة حساباتك داخل Chrome، وتجهز مسودة دون الضغط على تقديم. خمسات غير مشمول.':'Mostaql and Nafezly only. The extension uses your normal Chrome sessions and prepares a draft without submitting. Khamsat is excluded.'}</p>
@@ -51,7 +52,7 @@ export function QuickApplySettings({settings}:{settings:AppSettings}):React.Reac
     {!validQuickApply(draft)&&<p className="field-err" role="status">{ar?'اكتب قالبًا، وحدد نسبة من 0 إلى 100 وأيامًا صحيحة من 0 إلى 365.':'Enter a template, a position from 0 to 100, and whole extra days from 0 to 365.'}</p>}
     <button className="btn primary" disabled={busy||!validQuickApply(draft)} onClick={()=>void save()}>{ar?'حفظ القالب والإعدادات':'Save template and settings'}</button>
     <p className="hint" role="status">{dirty?(ar?'تعديلات غير محفوظة':'Unsaved changes'):(ar?'القالب والإعدادات محفوظة':'Template and settings saved')}</p>
-    {status?.lastJob&&<p role="status">{phaseText(status.lastJob.phase,ar)} {activePhase(status.lastJob.phase)&&<button className="btn sm" disabled={busy} onClick={()=>void act({action:'cancel'})}>{ar?'إلغاء التجهيز':'Cancel preparation'}</button>}</p>}
+    {status?.lastJob&&<p role="status">{phaseText(status.lastJob.phase,ar,status.lastJob.error)} {activePhase(status.lastJob.phase)&&<button className="btn sm" disabled={busy} onClick={()=>void act({action:'cancel'})}>{ar?'إلغاء التجهيز':'Cancel preparation'}</button>}</p>}
     <p className="hint">{ar?'0% للحد الأدنى و100% للحد الأعلى. البيانات الناقصة تُدخل يدويًا؛ المسودة الموجودة لا تُستبدل. القالب يدخل في تصدير الإعدادات؛ مفاتيح الربط لا تدخل فيه.':'0% selects the minimum and 100% the maximum. Missing values require manual input; existing drafts are preserved. Settings exports include the template but exclude pairing keys.'}</p><p role="status">{message}</p>
     {unsavedDialog}
   </section>

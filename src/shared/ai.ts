@@ -8,6 +8,7 @@ export interface AiModel { id: string; displayName: string; compatibility: 'supp
 export interface AiCatalog { models: AiModel[]; fetchedAt: string }
 export interface AiVerification { model: string; testedAt: string; revision: string }
 export interface AiSetup {
+  quickConsent?: boolean
   settings: AiSettings
   providers: Record<AiProviderId, { hasKey: boolean; keyReadable: boolean; revision: string; catalog: AiCatalog | null; verification: AiVerification | null }>
 }
@@ -48,6 +49,7 @@ export function sanitizeAiSettings(value: unknown): AiSettings | null {
   return settings
 }
 export const AI_ERROR_CODES = ['bad-request', 'key-missing', 'key-unreadable', 'key-save-failed', 'auth-rejected', 'access-denied', 'model-unavailable', 'unsupported-model', 'invalid-request', 'quota-exceeded', 'rate-limited', 'provider-unavailable', 'network-error', 'timeout', 'cancelled', 'response-blocked', 'output-truncated', 'invalid-response', 'response-too-large', 'preview-changed', 'busy'] as const
+export type AiError = typeof AI_ERROR_CODES[number]
 export function safeAiError(error: unknown): string {
   return error instanceof Error && (AI_ERROR_CODES as readonly string[]).includes(error.message) ? error.message : 'network-error'
 }

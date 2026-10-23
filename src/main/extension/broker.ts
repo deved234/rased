@@ -11,6 +11,8 @@ import type { AppSettings } from '../../shared/types.js'
 import { FrameReader, encodeFrame } from './framing.js'
 import { ExtensionSetup } from './setup.js'
 import { protectExtensionDirectory } from './protect.js'
+import { getProposalDraft } from '../../storage/proposalDrafts.js'
+import { QUICK_TEXT_MAX, validQuickMode, type QuickApplyResult, type QuickTextSource } from '../../shared/quickApply.js'
 
 interface Paired { id:string; label:string; hash:string; version:string }
 interface Peer { socket:Socket; id?:string; approved:boolean }
@@ -23,8 +25,9 @@ export class ExtensionBroker {
   private paired:Paired[]=[]
   private selected:string|null=null
   private pending=new Map<string,{peer:Peer;code:string;expiresAt:number}>()
-  private job:{message:PrepareJob;projectId:number;clientId:string;sent:boolean;timer:NodeJS.Timeout}|null=null
+  private job:{message:PrepareJob;projectId:number;clientId:string;sent:boolean;timer:NodeJS.Timeout;textSource?:QuickTextSource;owner?:string}|null=null
   private last:ExtensionStatus['lastJob']=null
+  private reservation:string|null=null
   private closed=false
   private expiryTimer:NodeJS.Timeout|null=null
   protocolReady=false
@@ -104,26 +107,73 @@ export class ExtensionBroker {
   status():ExtensionStatus {return {installed:this.setup.installed,registered:this.setup.registered,folder:this.setup.folder,extensionVersion:EXTENSION_VERSION,clients:this.paired.map(p=>({id:p.id,label:p.label,version:p.version,selected:p.id===this.selected,connected:[...this.peers].some(x=>x.approved&&x.id===p.id)})),pairing:[...this.pending].map(([id,p])=>({id,code:p.code,expiresAt:p.expiresAt})),selectedId:this.selected,lastJob:this.last,protocolReady:this.protocolReady,error:this.setup.error}}
   async prepare():Promise<void>{if(this.job)throw Error('busy');await this.setup.prepare();this.changed()}
   ticket(id:number):string|null {return this.available()&&this.settings().quickApply.enabled&&sourceAllowed(getProjectById(this.db,id)?.source)?issueExtensionTicket(this.db,id):null}
-  async activate(ticket:string):Promise<boolean> {
-    if(this.closed||this.job||!this.available()||!this.settings().quickApply.enabled)return false
+  preflight(id:number, owner?:string):QuickApplyResult {
+    if(this.closed||!this.available())return {ok:false,error:'not-ready'}
+    if(this.job||(this.reservation!==null&&this.reservation!==owner))return {ok:false,error:'busy'}
+    if(!this.settings().quickApply.enabled)return {ok:false,error:'disabled'}
+    const project=getProjectById(this.db,id)
+    if(!project)return {ok:false,error:'invalid-project'}
+    if(!sourceAllowed(project.source))return {ok:false,error:'unsupported-source'}
+    if(!projectDestination(project.url,project.source,project.externalId))return {ok:false,error:'invalid-project'}
+    return {ok:true}
+  }
+  reserve(owner:string):boolean {if(this.closed||this.job||this.reservation)return false;this.reservation=owner;return true}
+  release(owner:string):void {if(this.reservation===owner)this.reservation=null}
+  ownsJob(owner:string):boolean {return this.job?.owner===owner}
+  cancelOwned(owner:string):void {if(this.job?.owner===owner)this.cancel();this.release(owner)}
+  async activate(ticket:string, mode:QuickTextSource='template', expectedText?:string, owner?:string):Promise<QuickApplyResult> {
+    if(!validQuickMode(mode))return {ok:false,error:'invalid-project'}
+    if(this.closed||!this.available())return {ok:false,error:'not-ready'}
+    if(this.job||(this.reservation!==null&&this.reservation!==owner))return {ok:false,error:'busy'}
+    if(!this.settings().quickApply.enabled)return {ok:false,error:'disabled'}
     const row=claimExtensionTicket(this.db,ticket)
     if(!row){
       const previous=storedExtensionTicket(this.db,ticket)
       if(previous&&previous.expires_at>Date.now()&&['ready','needs-input','draft-exists'].includes(previous.phase)&&previous.client_id===this.selected){
         const peer=[...this.peers].find(p=>p.approved&&p.id===previous.client_id)
-        if(peer){this.send(peer,{type:'focus',requestId:previous.request_id});return true}
+        if(peer){this.send(peer,{type:'focus',requestId:previous.request_id});return {ok:true}}
       }
-      return false
+      return {ok:false,error:'invalid-project'}
     }
-    const project=getProjectById(this.db,row.project_id),cfg=this.settings()
-    if(!project||!sourceAllowed(project.source)||!projectDestination(project.url,project.source,project.externalId)){updateExtensionJob(this.db,row.request_id,'failed',null,'invalid-project');return false}
-    const message:PrepareJob={type:'prepare',requestId:row.request_id,source:project.source,externalId:project.externalId,url:project.url,title:project.title.slice(0,500),language:cfg.language,settings:{...cfg.quickApply},expiresAt:Date.now()+20000}
-    this.job={message,projectId:project.id,clientId:this.selected!,sent:false,timer:setTimeout(()=>this.finish('expired','client-timeout'),20000)}
+    const project=getProjectById(this.db,row.project_id)
+    if(!project||!sourceAllowed(project.source)||!projectDestination(project.url,project.source,project.externalId)){
+      updateExtensionJob(this.db,row.request_id,'failed',null,'invalid-project')
+      return {ok:false,error:'invalid-project'}
+    }
+
+    const cfg=this.settings()
+    const chosenText=mode==='draft'?getProposalDraft(this.db,project.id)?.proposal:cfg.quickApply.template
+    const error=chosenText===undefined?'text-missing':!chosenText.trim()?'text-empty':mode==='draft'&&chosenText.length>QUICK_TEXT_MAX?'text-too-long':expectedText!==undefined&&chosenText!==expectedText?'text-changed':null
+    if(error){updateExtensionJob(this.db,row.request_id,'failed',null,error);return {ok:false,error}}
+    const message:PrepareJob={type:'prepare',requestId:row.request_id,source:project.source,externalId:project.externalId,url:project.url,title:project.title.slice(0,500),language:cfg.language,settings:{...cfg.quickApply,template:chosenText!},expiresAt:Date.now()+20000}
+
+    try { encodeFrame(message) } catch {
+      updateExtensionJob(this.db,row.request_id,'failed',null,'message-too-large')
+      return {ok:false,error:'message-too-large'}
+    }
+
+    this.job={message,projectId:project.id,clientId:this.selected!,sent:false,timer:setTimeout(()=>this.finish('expired','client-timeout'),20000),textSource:mode,owner}
     this.setPhase('waiting-client');this.deliver()
-    if(!this.job?.sent){try{await this.launch()}catch{this.finish('failed','chrome-unavailable')}}
-    return true
+    const job=this.job
+    if(job&&!job.sent){
+      try{await this.launch()}catch{
+        // A slow launch failure must not cancel a job started after this call.
+        if(this.job===job)this.finish('failed','chrome-unavailable')
+        return {ok:false,error:'chrome-unavailable'}
+      }
+    }
+    if(owner&&this.reservation!==owner)return {ok:false,error:'blocked'}
+    if(this.last?.requestId===row.request_id&&this.last.phase==='cancelled')return {ok:false,error:'blocked'}
+    return {ok:true}
   }
-  async quick(id:number):Promise<boolean>{const url=this.ticket(id);return !!url&&this.activate(new URL(url).searchParams.get('ticket')!)}
+  async quick(id:number, mode:QuickTextSource='template', expectedText?:string, owner?:string):Promise<QuickApplyResult> {
+    if(!validQuickMode(mode))return {ok:false,error:'invalid-project'}
+    const ready=this.preflight(id,owner)
+    if(!ready.ok)return ready
+    const url=this.ticket(id)
+    if(!url)return {ok:false,error:'invalid-project'}
+    return this.activate(new URL(url).searchParams.get('ticket')!,mode,expectedText,owner)
+  }
   private deliver():void {
     if(!this.job||this.job.sent||this.job.message.expiresAt<=Date.now())return
     const peer=[...this.peers].find(p=>p.approved&&p.id===this.job!.clientId)
@@ -131,11 +181,11 @@ export class ExtensionBroker {
     this.job.sent=true;clearTimeout(this.job.timer);this.job.message.expiresAt=Date.now()+30000;this.job.timer=setTimeout(()=>this.finish('expired','form-timeout'),30000)
     this.setPhase('opening');this.send(peer,this.job.message)
   }
-  private setPhase(phase:JobPhase):void {if(!this.job)return;this.last={requestId:this.job.message.requestId,projectId:this.job.projectId,phase};updateExtensionJob(this.db,this.job.message.requestId,phase,this.job.clientId);this.changed()}
+  private setPhase(phase:JobPhase):void {if(!this.job)return;this.last={requestId:this.job.message.requestId,projectId:this.job.projectId,phase,text:this.job.textSource};updateExtensionJob(this.db,this.job.message.requestId,phase,this.job.clientId);this.changed()}
   private finish(phase:JobPhase,error?:string,price?:number,days?:number):void {
     if(!this.job)return
     const job=this.job;clearTimeout(job.timer)
-    this.last={requestId:job.message.requestId,projectId:job.projectId,phase,error,price,days}
+    this.last={requestId:job.message.requestId,projectId:job.projectId,phase,error,price,days,text:job.textSource}
     updateExtensionJob(this.db,job.message.requestId,phase,job.clientId,error)
     if(!job.sent)this.db.prepare("UPDATE extension_jobs SET activated_at=NULL,phase='issued' WHERE request_id=?").run(job.message.requestId)
     for(const p of this.peers)if(p.approved&&p.id===job.clientId)this.send(p,{type:'cancel',requestId:job.message.requestId})

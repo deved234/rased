@@ -8,6 +8,7 @@ import type { AiOperationResult, AiProviderId, AiSelection, AiSettings, AiSetup 
 import type { BackupPreferences, DataStatus, RestorePreview } from './data.js'
 import type { SourceId } from './sources.js'
 import type { ProjectFacts } from './projectFacts.js'
+import { type QuickTextSource, type QuickApplyResult, type QuickAssistantResult } from './quickApply.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
@@ -70,7 +71,10 @@ export interface RasedApi {
   onAnalyticsChanged(cb: (status: AnalyticsStatus) => void): () => void
   getExtensionStatus():Promise<ExtensionStatus>
   extensionAction(action:ExtensionAction):Promise<MutationResult>
-  quickApplyProject(id:number):Promise<MutationResult>
+  quickApplyProject(id:number, mode?:QuickTextSource, expectedText?:string):Promise<QuickApplyResult>
+  quickApplyAssistant(id:number):Promise<QuickAssistantResult>
+  cancelQuickAssistant(operationId:string):Promise<void>
+  setQuickConsent(enabled:boolean, selection?:AiSelection):Promise<MutationResult>
   onExtensionStatus(cb:(status:ExtensionStatus)=>void):()=>void
   getProposalSetup(): Promise<{ hasKey: boolean; profile: ProposalProfile }>
   getAiSetup(): Promise<AiSetup>

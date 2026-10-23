@@ -1,6 +1,6 @@
 # الخصوصية
 
-2026-10-21 · RASED · david atef
+2026-10-23 · RASED · david atef
 
 ## شرط إحصائيات الاستخدام
 
@@ -20,7 +20,7 @@
 
 ## قالب التقديم السريع وإزالة الجلسات القديمة
 
-نص العرض ونسبة السعر والأيام الإضافية محفوظة محليًا، والتصدير الاختياري يحتوي النص. أُزيل المتصفح الداخلي وتسجيل الدخول داخله. عند بدء هذه النسخة يحاول راصد حذف مجلدي جلسات المتصفح الداخلي السابقين فقط وإبطال تذاكر تقديمه القديمة؛ يسجل التشخيص إذا فشل الحذف لإعادة المحاولة عند تشغيل لاحق. لا يحذف جلسات Chrome أو مشاريعك أو إعداداتك. تقرأ إضافة Chrome نموذج المشروع المطلوب في بروفايل تختاره وتعبئه بناءً على قالبك، دون إرسال العرض. يرسل راصد عنوان المشروع ومعرّفه والقالب وإعدادات السعر والمدة إلى الإضافة عبر Native Messaging وملف ربط محلي مستقل. رموز الربط محفوظة في جهازك: الرمز في تخزين الإضافة المحلي وبصمته في قاعدة راصد؛ سر النقل في مجلد محمي للمستخدم. لا تُصدّر مفاتيح الربط مع الإعدادات. الإلغاء لا يزيل تسجيل دخول Chrome. السجل المحلي يتضمن معرّفات حالات التجهيز، دون نص القالب أو كلمات المرور.
+نص العرض ونسبة السعر والأيام الإضافية محفوظة محليًا، والتصدير الاختياري يحتوي النص. أُزيل المتصفح الداخلي وتسجيل الدخول داخله. عند بدء هذه النسخة يحاول راصد حذف مجلدي جلسات المتصفح الداخلي السابقين فقط وإبطال تذاكر تقديمه القديمة؛ يسجل التشخيص إذا فشل الحذف لإعادة المحاولة عند تشغيل لاحق. لا يحذف جلسات Chrome أو مشاريعك أو إعداداتك. تقرأ إضافة Chrome نموذج المشروع المطلوب في بروفايل تختاره وتعبئه بناءً على قالبك، دون إرسال العرض. يرسل راصد عنوان المشروع ومعرّفه والقالب أو المسودة المحفوظة وإعدادات السعر والمدة إلى الإضافة عبر Native Messaging وملف ربط محلي مستقل. رموز الربط محفوظة في جهازك: الرمز في تخزين الإضافة المحلي وبصمته في قاعدة راصد؛ سر النقل في مجلد محمي للمستخدم. لا تُصدّر مفاتيح الربط مع الإعدادات. الإلغاء لا يزيل تسجيل دخول Chrome. السجل المحلي يتضمن معرّفات حالات التجهيز، دون نص القالب أو كلمات المرور.
 
 ## ما يبقى على جهازك
 
@@ -32,7 +32,7 @@
 
 ## مساعد العروض وGemini وOpenAI وClaude
 
-الاختيار يشمل Gemini من Google وOpenAI وClaude من Anthropic مباشرة. بعد معاينة وموافقة وضغط توليد فقط، يرسل جهازك للشركة المختارة عنوان مشروع مستقل ووصفه المتاح وتصنيفه ومهاراته وميزانيته، مع تعليمات توضح اكتمال الوصف، وملفك المهني وملاحظات هذا العرض الاختيارية. لا تُرسل ملاحظتك الشخصية على المشروع أو مشاريع أخرى أو مسودات سابقة تلقائيًا. تعود مسودة وافتراضات وأسئلة، وتُحفظ محليًا في SQLite مع اسم الموفر والموديل ويمكن تعديلها وحذفها. لا تبديل تلقائي للشركة عند الفشل. لا توليد أثناء الرصد أو التشغيل أو فتح المشروع. قد تستقبل الشركة IP وبيانات الاتصال والمدخلات والمخرجات؛ شارك ما أنت مخول بمشاركته فقط.
+الاختيار يشمل Gemini من Google وOpenAI وClaude من Anthropic مباشرة. في المسار اليدوي بعد المعاينة والموافقة وضغط توليد، يرسل جهازك للشركة المختارة عنوان مشروع مستقل ووصفه المتاح وتصنيفه ومهاراته وميزانيته، مع تعليمات توضح اكتمال الوصف، وملفك المهني وملاحظات هذا العرض الاختيارية. وبموافقة دائمة اختيارية قابلة للسحب للمزوّد والموديل والمفتاح الحاليين، ترسل نقرة التقديم السريع بمساعد العروض البيانات العامة نفسها والملف المهني بلا معاينة وبلا ملاحظات إذا لم توجد مسودة محفوظة. تُعاد استخدام المسودة المحفوظة دون طلب AI؛ المراجعة والتقديم بيدك في Chrome. تُلغى الموافقة عند تغيير المزوّد أو الموديل النشط أو حفظ/حذف مفتاح أو استيراد الإعدادات أو استعادة نسخة؛ ولا تدخل في التصدير أو النسخ الاحتياطي. لا تُرسل ملاحظتك الشخصية على المشروع أو مشاريع أخرى أو مسودات سابقة تلقائيًا. تعود مسودة وافتراضات وأسئلة، وتُحفظ محليًا في SQLite مع اسم الموفر والموديل ويمكن تعديلها وحذفها. لا تبديل تلقائي للشركة عند الفشل. لا توليد أثناء الرصد أو التشغيل أو فتح المشروع. قد تستقبل الشركة IP وبيانات الاتصال والمدخلات والمخرجات؛ شارك ما أنت مخول بمشاركته فقط.
 
 ## كيفية تعامل Google مع بيانات Gemini
 
@@ -66,7 +66,7 @@
 
 # Privacy
 
-2026-10-21 · RASED · david atef
+2026-10-23 · RASED · david atef
 
 ## Required usage analytics acceptance
 
@@ -86,7 +86,7 @@ When enabled, your device contacts kafiil.com directly for public project listin
 
 ## Template and retired browser sessions
 
-Your template, budget position and extra days remain local; optional settings exports include the text. Embedded browsing and sign-in have been removed. On startup this build attempts to delete only the two retired embedded-browser profiles and invalidate their activation tickets. Cleanup failures are diagnosed and retried on a later launch. It does not delete Chrome sessions, projects or settings. The Chrome extension reads and fills the requested project form in your selected profile without submitting it. RASED sends the project URL/ID, template and price/duration settings through Native Messaging and a standalone local helper. Pairing tokens stay on your device: the extension stores its token locally, RASED stores its hash, and a transport secret lives in a user-protected directory. Settings exports exclude pairing keys. Unpairing does not remove Chrome sign-ins. Local preparation history contains state identifiers, never passwords or proposal text.
+Your template, budget position and extra days remain local; optional settings exports include the text. Embedded browsing and sign-in have been removed. On startup this build attempts to delete only the two retired embedded-browser profiles and invalidate their activation tickets. Cleanup failures are diagnosed and retried on a later launch. It does not delete Chrome sessions, projects or settings. The Chrome extension reads and fills the requested project form in your selected profile without submitting it. RASED sends the project URL/ID, template or saved draft and price/duration settings through Native Messaging and a standalone local helper. Pairing tokens stay on your device: the extension stores its token locally, RASED stores its hash, and a transport secret lives in a user-protected directory. Settings exports exclude pairing keys. Unpairing does not remove Chrome sign-ins. Local preparation history contains state identifiers, never passwords or proposal text.
 
 ## Local data
 
@@ -98,7 +98,7 @@ Your device contacts Mostaql directly for RSS and detail pages as needed, the pu
 
 ## Proposal Assistant: Gemini, OpenAI and Claude
 
-Choose Google Gemini, OpenAI or Anthropic Claude directly. After previewing, approving and pressing Generate, your device sends only the selected Mostaql title, available description, category, skills, budget, instructions indicating description completeness, freelancer profile and optional proposal-specific notes to the selected company. Private project notes, other projects and previous drafts are excluded. Drafts, assumptions and questions are stored locally in SQLite with provider/model metadata and can be edited or deleted. No automatic provider fallback or generation during monitoring, startup or project opening. The company may receive your IP, connection data, inputs and outputs. Send only content you are authorized to share.
+Choose Google Gemini, OpenAI or Anthropic Claude directly. For manual requests, after previewing, approving and pressing Generate, your device sends only the selected Mostaql title, available description, category, skills, budget, instructions indicating description completeness, freelancer profile and optional proposal-specific notes to the selected company. Optional, revocable standing consent for the current provider, model and key allows a Quick Apply with Assistant click to send the same public data and profile without preview or notes when no saved draft exists. Saved drafts are reused without an AI request; review and submission remain yours in Chrome. Changing the active provider/model, saving/deleting a key, importing settings or restoring a backup clears this consent; exports and backups exclude it. Private project notes, other projects and previous drafts are excluded. Drafts, assumptions and questions are stored locally in SQLite with provider/model metadata and can be edited or deleted. No automatic provider fallback or generation during monitoring, startup or project opening. The company may receive your IP, connection data, inputs and outputs. Send only content you are authorized to share.
 
 ## How Google handles Gemini data
 

@@ -95,7 +95,8 @@ export function SettingsView({
   kafHealth,
   patchSettings: writeSettings,
   section,
-  onSection
+  onSection,
+  onWhatsNew
 }: {
   lang: Lang
   settings: AppSettings
@@ -106,6 +107,7 @@ export function SettingsView({
   patchSettings: (p: Partial<AppSettings>) => Promise<void>
   section: string | null
   onSection: (s: Section) => void
+  onWhatsNew: (() => void) | null
 }): React.ReactElement {
   const [dataBusy, setDataBusy] = React.useState(false)
   const [saveError, setSaveError] = React.useState(false)
@@ -600,6 +602,7 @@ export function SettingsView({
                 <h2 dir="ltr">RASED <span className="about-arabic" lang="ar">راصد</span></h2>
                 <p className="muted">{t.aboutDescription}</p>
                 <div className="meta about-version"><span>{t.aboutVersion}</span><strong className="tag num" dir="ltr">{appInfo?.version ?? '…'}</strong></div>
+                {onWhatsNew && <button className="btn" onClick={onWhatsNew}>{lang === 'ar' ? 'ما الجديد' : "What's new"}</button>}
               </div>
             </section>
             <section className="set-group about-developer" aria-labelledby="developer-name">

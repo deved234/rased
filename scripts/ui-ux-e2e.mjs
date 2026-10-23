@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { call, evaluate, eventually, newProfile, pageWs, sleep, startApp, stopApp, persistentSession } from './cdp-tools.mjs'
+import { testWhatsNew } from './whats-new-e2e.mjs'
 const output=resolve('.local/ui-ux-implementation-2026-10-09'),profile=newProfile(),port=9392
 mkdirSync(join(output,'screenshots'),{recursive:true})
 const db=new DatabaseSync(join(profile,'rased.db')),schema=readFileSync('src/storage/migrations.ts','utf8'),migrations=[...schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
@@ -101,3 +102,4 @@ try{
  await nav('#/proposal/1');await wait('!!document.querySelector(".proposal-editor")');results.checks.draftAccessibleName=await ev('(()=>{const e=document.querySelector(".proposal-editor");return {labels:e.labels.length,ariaLabel:e.getAttribute("aria-label")}})()')
  assert.equal(results.checks.draftAccessibleName.ariaLabel,'Proposal draft text');assert.ok(results.screens.every(s=>s.unnamedFields.length===0),'all visible fields have programmatic names');assert.ok(results.screens.filter(s=>s.name.includes('900')).every(s=>s.outsideHorizontal.length===0),'narrow layouts keep controls within viewport');assert.ok(results.screens.every(s=>s.nestedControls===0),'opportunity articles no longer nest controls inside buttons');writeFileSync(join(output,'results.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results.checks,null,2))
 }finally{writeFileSync(join(output,'results.json'),JSON.stringify(results,null,2));session?.close();await stopApp(child)}
+await testWhatsNew()

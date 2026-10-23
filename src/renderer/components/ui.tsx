@@ -2,15 +2,30 @@ import React from 'react'
 import { Icon } from './Icon.js'
 import { STRINGS, type Lang } from '../i18n.js'
 
+// Nested modals: only the topmost panel keeps the Tab trap and owns Escape.
+const dialogStack: HTMLElement[] = []
+export function isTopDialog(panel: HTMLElement | null): boolean {
+  return !!panel && dialogStack.findLast(candidate => !candidate.closest('[inert]')) === panel
+}
+const focusableIn = (panel: HTMLElement): HTMLElement[] => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]')).filter(e => e.getClientRects().length > 0)
+export function focusFirstIn(panel: HTMLElement | null): void {
+  if (!panel) return
+  const first = focusableIn(panel)[0]
+  if (first) first.focus()
+  else panel.focus()
+}
+
 export function useDialogFocus(ref: React.RefObject<HTMLElement | null>, enabled = true): void {
   React.useEffect(() => {
     const panel = ref.current
     if (!enabled || !panel) return
+    dialogStack.push(panel)
     const previous = document.activeElement as HTMLElement | null
-    const focusable = (): HTMLElement[] => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]')).filter(e => e.getClientRects().length > 0)
-    focusable()[0]?.focus()
+    if (!panel.closest('[inert]')) focusFirstIn(panel)
+    const focusable = (): HTMLElement[] => focusableIn(panel)
     const key = (e: KeyboardEvent): void => {
       if (e.key !== 'Tab') return
+      if (!isTopDialog(panel)) return
       const items = focusable()
       if (!items.length) { e.preventDefault(); panel.focus(); return }
       const index = items.indexOf(document.activeElement as HTMLElement)
@@ -18,7 +33,12 @@ export function useDialogFocus(ref: React.RefObject<HTMLElement | null>, enabled
       else if (!e.shiftKey && (index === -1 || index === items.length - 1)) { e.preventDefault(); items[0]?.focus() }
     }
     document.addEventListener('keydown', key)
-    return () => { document.removeEventListener('keydown', key); if (previous?.isConnected) previous.focus() }
+    return () => {
+      document.removeEventListener('keydown', key)
+      const at = dialogStack.lastIndexOf(panel)
+      if (at !== -1) dialogStack.splice(at, 1)
+      if (previous?.isConnected && !previous.closest('[inert]')) previous.focus()
+    }
   }, [ref, enabled])
 }
 
