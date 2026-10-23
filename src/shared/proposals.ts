@@ -1,6 +1,14 @@
 import type { AiProviderId } from './ai.js'
 export const GEMINI_MODEL = 'gemini-2.5-flash'
 
+/** Sources that expose the proposal assistant. Khamsat is deliberately excluded. */
+export const AI_PROPOSAL_SOURCES = ['mostaql', 'nafezly', 'kaf'] as const
+export type AiProposalSource = typeof AI_PROPOSAL_SOURCES[number]
+export function isAiProposalSource(value: unknown): value is AiProposalSource {
+  return (AI_PROPOSAL_SOURCES as readonly unknown[]).includes(value)
+}
+export const AI_PROPOSAL_PLATFORM: Record<AiProposalSource, string> = { mostaql: 'Mostaql', nafezly: 'Nafezly', kaf: 'KAF' }
+
 export interface ProposalProfile {
   skills: string
   experience: string
@@ -13,6 +21,7 @@ export const emptyProposalProfile = (): ProposalProfile => ({ skills: '', experi
 
 export interface ProposalPreview {
   projectId: number
+  source: AiProposalSource
   title: string
   description: string
   provenance: 'full' | 'truncated' | 'excerpt'

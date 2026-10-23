@@ -10,6 +10,7 @@
 - Quick Apply prepares the template in one click; a separate Mostaql Assistant action reuses a saved draft or generates under optional, revocable provider/model/key-bound consent. Writing has progress/cancel, and notifications remain template-based. No preview dialog or per-time overrides; review and submit manually in Chrome.
 - Preparing from the Assistant saves and verifies the displayed text while the editor is locked. Concurrent drafts are preserved, failed Chrome preparation keeps generated drafts, and standing consent is excluded from exports/backups and cleared on key/selection changes, import and restore. Updated bilingual legal wording dated 2026-10-23; analytics disclosure v4 is unchanged.
 - Clearer Quick Apply error messages with bilingual table covering `blocked`, `not-ready`, `disabled`, `busy`, `unsupported-source`, `invalid-project`, `text-missing`, `text-changed`, `text-empty`, `text-too-long`, `message-too-large`, `chrome-unavailable`, `login-required`, `form-unavailable`, `draft-exists`, `template-too-long`, `client-timeout`, `form-timeout`, `connection-lost`, `tab-closed`, `navigation-changed`, `user-cancelled`, `app-restarted`.
+- Proposal Assistant now drafts for Nafezly and KAF from already stored project data, without extra fetching or cooldown changes. KAF offers copy and open only; Quick Apply and Quick Apply with Assistant remain Mostaql/Nafezly. Updated legal, KAF, Assistant and Quick Apply guides with a complete phase/error reference and Chrome 120 compatibility notes.
 
 ## 0.10.0 — 2026-10-21
 

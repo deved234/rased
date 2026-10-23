@@ -8,7 +8,7 @@
 
 ## رصد كاف (كفيل سابقًا)
 
-يقرأ راصد قائمة المشاريع العامة على kafiil.com دون حساب، ويجلب تفاصيل المشروع عند فتحها. أول رصد صامت والتنبيهات للمشاريع المفتوحة المكتشفة حديثًا؛ المكتمل يبقى في السجل. الظهور في القائمة ليس إثباتًا لوقت النشر، والمنطقة الزمنية لوقت كاف غير مؤكدة. كاف وعلاماته ومحتوى المستخدمين تخص أصحابها؛ وصول القراءة لا يمنح إذن إعادة نشر أو جلب غير محدود. مساعد العروض والتقديم السريع لا يدعمان كاف حاليًا.
+يقرأ راصد قائمة المشاريع العامة على kafiil.com دون حساب، ويجلب تفاصيل المشروع عند فتحها. أول رصد صامت والتنبيهات للمشاريع المفتوحة المكتشفة حديثًا؛ المكتمل يبقى في السجل. الظهور في القائمة ليس إثباتًا لوقت النشر، والمنطقة الزمنية لوقت كاف غير مؤكدة. كاف وعلاماته ومحتوى المستخدمين تخص أصحابها؛ وصول القراءة لا يمنح إذن إعادة نشر أو جلب غير محدود. مساعد العروض اليدوي يدعم مشاريع مستقل ونفذلي وكاف؛ التقديم السريع والتقديم السريع بمساعد العروض لمستقل ونفذلي فقط.
 
 ## قالب التقديم السريع
 
@@ -32,7 +32,7 @@
 
 ## مساعد العروض
 
-يمكنك طلب مسودة لمشروع مستقل من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموافقة لكل طلب يدوي، أو بنقرة التقديم السريع بمساعد العروض بعد تفعيل موافقة دائمة اختيارية للمزوّد والموديل والمفتاح الحاليين يمكن سحبها من الإعدادات. تُعاد استخدام مسودة المشروع المحفوظة دون توليد؛ راجعها في Chrome وقدّمها بنفسك. راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms . يستخدم التوليد اليدوي الملف المهني الذي تختاره، ويستخدم التوليد بالموافقة الدائمة ملفك الافتراضي.
+يمكنك طلب مسودة لمشروع مستقل أو نفذلي أو كاف من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموافقة لكل طلب يدوي، أو بنقرة التقديم السريع بمساعد العروض بعد تفعيل موافقة دائمة اختيارية للمزوّد والموديل والمفتاح الحاليين يمكن سحبها من الإعدادات. تُعاد استخدام مسودة المشروع المحفوظة دون توليد؛ راجعها وقدّمها بنفسك على المنصة (التجهيز في Chrome لمستقل ونفذلي فقط). راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms . يستخدم التوليد اليدوي الملف المهني الذي تختاره، ويستخدم التوليد بالموافقة الدائمة ملفك الافتراضي.
 
 ## الترخيص والمسؤولية
 
@@ -54,7 +54,7 @@ The officially configured distribution requires explicit acceptance of the limit
 
 ## KAF monitoring (formerly Kafiil)
 
-RASED reads the public kafiil.com project listing without an account and fetches project details on demand. Initial monitoring is silent; newly detected open projects may trigger alerts, while completed projects stay in history. Listing visibility does not prove publication time; KAF timestamps have an unverified timezone. KAF marks and user content belong to their owners; public access does not authorize republication or unlimited fetching. Proposal Assistant and Quick Apply do not support KAF currently.
+RASED reads the public kafiil.com project listing without an account and fetches project details on demand. Initial monitoring is silent; newly detected open projects may trigger alerts, while completed projects stay in history. Listing visibility does not prove publication time; KAF timestamps have an unverified timezone. KAF marks and user content belong to their owners; public access does not authorize republication or unlimited fetching. The manual Proposal Assistant covers Mostaql, Nafezly and KAF projects. Quick Apply and Quick Apply with Assistant cover Mostaql and Nafezly only.
 
 ## Saved quick-apply template
 
@@ -78,7 +78,7 @@ Information may be incomplete or stale and alerts may be delayed or missed. Chec
 
 ## Proposal Assistant
 
-Request a Mostaql draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each manual request, or by clicking Quick Apply with Assistant using optional standing consent for the current provider, model and key. Withdraw this consent in Settings. Manual generation uses your selected freelancer profile; generation under standing consent uses your default profile. A saved project draft is reused without generation; review it in Chrome and submit it yourself. Output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
+Request a Mostaql, Nafezly or KAF draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each manual request, or by clicking Quick Apply with Assistant using optional standing consent for the current provider, model and key. Withdraw this consent in Settings. Manual generation uses your selected freelancer profile; generation under standing consent uses your default profile. A saved project draft is reused without generation; review it and submit it yourself on the platform (Chrome preparation is Mostaql/Nafezly only). Output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
 
 ## License and liability
 

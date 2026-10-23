@@ -2,6 +2,7 @@ import React from 'react'
 import { QuickApplyButton } from '../components/QuickApplyButton.js'
 import { rased } from '../api.js'
 import { categoryDisplay } from '@shared/categories.js'
+import { isAiProposalSource } from '@shared/proposals.js'
 import type { PersonalStatus, ProjectDetails, ProjectFull } from '@shared/types.js'
 import { STRINGS, type Lang } from '../i18n.js'
 import { fullDate, timeAgo } from '../format.js'
@@ -281,7 +282,7 @@ export function ProjectDetailView({
           <button className="btn primary" onClick={() => void openExternal()}>
             <Icon name="external" size={16} /> {openOnSource(project.source, lang)}
           </button>
-          {project.source === 'mostaql' && <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
+          {isAiProposalSource(project.source) && <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
             {lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant'}
           </button>}
           <div className="row-actions">

@@ -47,6 +47,27 @@ export function QuickApplySettings({settings}:{settings:AppSettings}):React.Reac
       </li>
     </ol></details>
     <p className="hint">{ar?'إذا كان Chrome مغلقًا نحاول فتحه وننتظر البروفايل المختار 20 ثانية. قد يفتح Chrome بروفايلًا مختلفًا؛ افتح المختار وأعد المحاولة بعد انتهاء المهلة. بعد تحديث الإضافة اضغط إعادة تحميل في صفحة إضافات Chrome.':'If Chrome is closed, RASED opens it and waits 20 seconds for the selected profile. Chrome may open a different profile; open yours and retry after a timeout. Reload the extension in Chrome after extension updates.'}</p>
+    <details className="setup-disclosure"><summary>{ar?'دليل الإضافة':'Extension guide'}</summary>
+      <h3>{ar?'المتطلبات':'Requirements'}</h3><p className="hint">{ar?'يحتاج التقديم السريع Chrome إصدار 120 أو أحدث. براوزر Edge وBrave وغيرها غير مختبرة وقد لا تعمل.':'Quick Apply requires Chrome 120 or newer. Edge, Brave and other browsers are untested and may not work.'}</p>
+      <h3>{ar?'الخطوات باختصار':'Steps in short'}</h3>
+      <ol>
+        <li>{ar?'اضغط «تجهيز / إصلاح ملفات الإضافة» في خطوات الإعداد أعلاه.':'Press “Prepare / repair extension files” in the setup steps above.'}</li>
+        <li>{ar?'ثبّت الإضافة في بروفايل Chrome الذي تستخدمه للمواقع عبر زر «فتح إضافات Chrome»، فعّل وضع المطوّر و«تحميل غير مضغوطة» واختر المسار المعروض.':'Install the extension in your everyday Chrome profile via “Open Chrome extensions”: enable Developer mode, use “Load unpacked”, and pick the shown path.'}</li>
+        <li>{ar?'افتح أيقونة راصد داخل الإضافة واطلب الربط، ثم طابق الرمز هنا للموافقة، واختر البروفايل المستخدم للتقديم.':'Open the RASED icon inside the extension, request pairing, then match the code here to approve, and select the profile used for Quick Apply.'}</li>
+        <li>{ar?'بعد كل تحديث جديد للإضافة اضغط «إعادة تحميل» في صفحة إضافات Chrome ثم أعد المحاولة.':'After every new extension update, press “Reload” on the Chrome extensions page, then retry.'}</li>
+      </ol>
+      <h3>{ar?'المواقع المدعومة':'Supported sites'}</h3><p className="hint">{ar?'مستقل ونفذلي فقط. خمسات وكاف غير مشمولين أبدًا: لا أزرار تقديم سريع ولا تجهيز في Chrome لهما.':'Mostaql and Nafezly only. Khamsat and KAF are never included: no Quick Apply buttons and no Chrome preparation for them.'}</p>
+      <h3>{ar?'أكثر 7 مشاكل شائعة وحلّها':'Seven most common problems and fixes'}</h3>
+      <ul>
+        <li><strong>{ar?'لم تسجّل الدخول:':'Not signed in:'}</strong> {ar?'سجّل دخولك إلى الموقع في بروفايل Chrome المختار ثم أعد المحاولة.':'Sign in to the website in your selected Chrome profile, then retry.'}</li>
+        <li><strong>{ar?'مسودة موجودة في النموذج:':'Existing draft in the form:'}</strong> {ar?'راجع المسودة الموجودة في الموقع وقدّمها أو احذفها ثم أعد المحاولة؛ لا نستبدل مسودتك أبدًا.':'Review the existing draft on the site, submit or delete it, then retry; your draft is never overwritten.'}</li>
+        <li><strong>{ar?'البروفايل غير متصل أو انتهت المهلة:':'Profile not connected or timed out:'}</strong> {ar?'افتح بروفايل Chrome المختار بنفسك وانتظر حتى يصبح متصلًا ثم أعد المحاولة.':'Open the selected Chrome profile yourself, wait until it connects, then retry.'}</li>
+        <li><strong>{ar?'النص أطول من حقل العرض في الموقع:':'Text longer than the site field:'}</strong> {ar?'اختصر نص القالب أو العرض ليكون داخل حدود الحقل ثم أعد المحاولة.':'Shorten the template or proposal text within the site field limit, then retry.'}</li>
+        <li><strong>{ar?'الإضافة لم تُعاد تهيئتها بعد التحديث:':'Extension not reloaded after update:'}</strong> {ar?'اضغط «إعادة تحميل» في صفحة إضافات Chrome بعد كل تحديث ثم أعد المحاولة.':'Press “Reload” on the Chrome extensions page after every update, then retry.'}</li>
+        <li><strong>{ar?'قالب افتراضي فارغ:':'Empty default template:'}</strong> {ar?'أضف قالبًا للبروفايل الافتراضي من الإعدادات أو استخدم «التقديم السريع بمساعد العروض».':'Add a template to the default profile in Settings, or use “Quick Apply with Assistant”.'}</li>
+        <li><strong>{ar?'مسودة محفوظة فارغة:':'Empty saved draft:'}</strong> {ar?'حرّر المسودة الفارغة أو احذفها في مساعد العروض؛ «التقديم السريع بمساعد العروض» يعيد استخدامها.':'Edit or delete the empty draft in the Proposal Assistant; “Quick Apply with Assistant” reuses it.'}</li>
+      </ul>
+    </details>
     <label className="set-row"><span>{ar?'تفعيل التقديم السريع':'Enable Quick Apply'}</span><input type="checkbox" checked={draft.enabled} disabled={busy||!ready} onChange={e=>setDraft({...draft,enabled:e.target.checked})}/></label>
     <p id="quick-template-source" className="hint">{ar?`القالب من البروفايل الافتراضي: ${profileName}`:`Template from default profile: ${profileName}`} <button className="btn sm" onClick={()=>go({name:'settings',section:'ai'})}>{ar?'تعديل':'Edit'}</button></p>
     <label className="set-row"><span>{ar?'موضع السعر داخل الميزانية (%)':'Position within budget (%)'}</span><input className="input" type="number" disabled={busy} min={0} max={100} step={1} value={Number.isFinite(draft.budgetPositionPercent)?draft.budgetPositionPercent:''} onChange={e=>setDraft({...draft,budgetPositionPercent:e.target.valueAsNumber})}/></label>

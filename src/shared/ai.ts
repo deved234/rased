@@ -1,7 +1,7 @@
 export const AI_PROVIDERS = ['gemini', 'openai', 'anthropic'] as const
 export type AiProviderId = typeof AI_PROVIDERS[number]
 export const AI_NAMES: Record<AiProviderId, string> = { gemini: 'Gemini · Google', openai: 'OpenAI', anthropic: 'Claude · Anthropic' }
-export const PROMPT_VERSION = 'proposal-v2'
+export const PROMPT_VERSION = 'proposal-v3'
 export interface AiSelection { provider: AiProviderId; model: string }
 export interface AiSettings { schemaVersion: 1; activeProvider: AiProviderId; modelByProvider: Record<AiProviderId, string> }
 export interface AiModel { id: string; displayName: string; compatibility: 'supported' | 'unsupported' | 'unknown'; structured?: boolean }

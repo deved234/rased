@@ -30,7 +30,7 @@ export function QuickApplyButton({id,source,lang}:{id:number;source:string;lang:
   const hint=job?phaseText(job.phase,ar,job.error)+(job.text==='draft'?(ar?' · بعرض المشروع':" · using this project's proposal"):''):''
   return <span className="quick-action" onClick={e=>e.stopPropagation()}>
     <button className="btn sm quick-template-action" title={ar?'يجهز مسودة في Chrome دون تقديمها':'Prepares a draft in Chrome without submitting'} disabled={active} onClick={()=>requestAction(()=>void run(false))}>{status&&!status.selectedId?(ar?'إعداد التقديم السريع':'Set up Quick Apply'):enabled===false?(ar?'التقديم السريع متوقف':'Quick Apply is off'):(ar?'تقديم سريع':'Quick Apply')}</button>
-    {source==='mostaql'&&<button className="btn sm quick-assistant-action" disabled={active} onClick={()=>requestAction(()=>void run(true))}>{ar?'تقديم سريع بمساعد العروض':'Quick Apply with Assistant'}</button>}
+    {(source==='mostaql'||source==='nafezly')&&<button className="btn sm quick-assistant-action" disabled={active} onClick={()=>requestAction(()=>void run(true))}>{ar?'تقديم سريع بمساعد العروض':'Quick Apply with Assistant'}</button>}
     {assistant?.projectId===id&&<span role="status">{assistant.phase==='writing'?(ar?'جارٍ كتابة العرض…':'Writing proposal…'):(ar?'جارٍ التجهيز…':'Preparing…')} <button className="btn sm" onClick={()=>void rased.cancelQuickAssistant(assistant.operationId)}>{ar?'إلغاء':'Cancel'}</button></span>}
     {job&&<span className="hint" role="status">{hint}</span>}{error&&<span className="field-err" role="alert">{error}</span>}
   </span>

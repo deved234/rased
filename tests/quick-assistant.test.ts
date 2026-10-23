@@ -14,6 +14,9 @@ beforeEach(() => {
   id = upsertProjectsBatch(db, [{ source: 'mostaql', externalId: '1', url: 'https://mostaql.com/project/1', title: 'Fixture', descriptionExcerpt: 'Public', publishedAt: null, publishedRaw: null }], { now: 'now', discoveryKind: 'initial' }).insertedIds[0]!
 })
 afterEach(() => db.close())
+function project(source: string, externalId: string): number {
+  return upsertProjectsBatch(db, [{ source, externalId, url: `https://example.test/${source}/${externalId}`, title: 'Fixture', descriptionExcerpt: 'Public', publishedAt: null, publishedRaw: null }], { now: 'now', discoveryKind: 'initial' }).insertedIds[0]!
+}
 function fixture() {
   let allowed = true, consent = true, selected = 'client', reserved: string | null = null
   let resolve!: (result: ProposalResult) => void
@@ -88,4 +91,39 @@ it('cancels only its owned job during Chrome launch and preserves a generated dr
   finish({ ok: false, error: 'chrome-unavailable' })
   expect(await pending).toMatchObject({ error: 'cancelled' })
   expect(getProposalDraft(db, id)?.proposal).toBe('Generated')
+})
+it('reuses an old v2 Nafezly draft without consent, a key or regeneration', async () => {
+  const nafezly = project('nafezly', 'reuse'), f = fixture(); f.revoke()
+  saveProposalDraft(db, { projectId: nafezly, proposal: 'Earlier v2 text', assumptions: ['Old'], questions: [], updatedAt: '2026-01-01', provider: 'openai', model: 'gpt-example', promptVersion: 'proposal-v2', generatedAt: '2026-01-01' })
+  const before = getProposalDraft(db, nafezly)
+  expect(await f.assistant.quick(nafezly)).toEqual({ ok: true })
+  expect(f.ai.generateStanding).not.toHaveBeenCalled()
+  expect(f.ai.standingPreflight).not.toHaveBeenCalled()
+  expect(f.broker.quick).toHaveBeenCalledWith(nafezly, 'draft', undefined, expect.any(String))
+  expect(getProposalDraft(db, nafezly)).toEqual(before)
+  saveProposalDraft(db, { ...before!, proposal: 'Edited v2 text', updatedAt: '2026-01-02' })
+  expect(getProposalDraft(db, nafezly)).toMatchObject({ proposal: 'Edited v2 text', promptVersion: 'proposal-v2', provider: 'openai', model: 'gpt-example' })
+})
+it('generates a missing Nafezly draft and hands exactly that project to the broker', async () => {
+  const nafezly = project('nafezly', 'generate'), f = fixture()
+  const pending = f.assistant.quick(nafezly)
+  const owner = f.assistant.status()!.operationId
+  saveProposalDraft(db, { projectId: nafezly, proposal: 'Generated for Nafezly', assumptions: [], questions: [], updatedAt: 'now', promptVersion: 'proposal-v3' })
+  f.resolve({ ok: true })
+  expect(await pending).toEqual({ ok: true })
+  expect(f.ai.generateStanding).toHaveBeenCalledTimes(1)
+  expect(f.ai.generateStanding).toHaveBeenCalledWith(nafezly, owner)
+  expect(f.broker.quick).toHaveBeenCalledTimes(1)
+  expect(f.broker.quick).toHaveBeenCalledWith(nafezly, 'draft', undefined, owner)
+  expect(getProposalDraft(db, nafezly)?.proposal).toBe('Generated for Nafezly')
+})
+it.each(['kaf', 'khamsat'])('rejects %s before reservation even with a seeded draft', async source => {
+  const rejected = project(source, 'rejected'), f = fixture()
+  saveProposalDraft(db, { projectId: rejected, proposal: 'Saved', assumptions: [], questions: [], updatedAt: 'now' })
+  expect(await f.assistant.quick(rejected)).toEqual({ ok: false, error: 'unsupported-source' })
+  expect(f.ai.generateStanding).not.toHaveBeenCalled()
+  expect(f.broker.preflight).not.toHaveBeenCalled()
+  expect(f.broker.reserve).not.toHaveBeenCalled()
+  expect(f.broker.quick).not.toHaveBeenCalled()
+  expect(f.assistant.status()).toBeNull()
 })

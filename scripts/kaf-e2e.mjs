@@ -48,10 +48,17 @@ try {
   await ev(`location.hash='#/project/${p.id}'`); await wait('!!document.querySelector(".detail-rail")')
   await wait(`window.rased.getProjectDetails(${p.id}).then(d=>d.status==='ready')`)
   check('on-demand details expose actual category/duration and keep timestamp raw', await ev(`window.rased.getProject(${p.id}).then(p=>p.durationDays===5 && p.publishedAt===null && p.publishedRaw==='2026-10-14 09:37:20')`))
-  check('KAF has no Quick Apply or AI action', await ev('!document.querySelector(".detail-rail .quick-apply-button") && !Array.from(document.querySelectorAll(".detail-rail button")).some(b=>/مساعد العروض|تقديم سريع/.test(b.textContent))'))
+  check('KAF detail offers the Assistant but no Quick Apply buttons', await ev('!document.querySelector(".detail-rail .quick-template-action") && !document.querySelector(".detail-rail .quick-assistant-action") && [...document.querySelectorAll(".detail-rail button")].some(b=>/مساعد العروض|Proposal Assistant/.test(b.textContent))'))
+  check('synthetic Assistant key saves for manual KAF generation', await ev("window.rased.saveAiKey('gemini','SYNTHETIC_KAF_ASSISTANT_KEY')"))
+  const fetchesBeforePreview = sourceFetches().length
+  const cooldownBeforePreview = storage.prepare("SELECT backoff_until FROM source_state WHERE source='kaf'").get()?.backoff_until ?? null
   const preview = await ev(`window.rased.getProposalPreview(${p.id},'')`)
-  check('AI main service refuses KAF even through direct IPC', preview === null)
-  check('Quick Apply main service rejects KAF', !(await ev(`window.rased.quickApplyProject(${p.id})`)).ok)
+  check('KAF preview uses cached detail data without another fetch or cooldown change', preview?.source === 'kaf' && preview.provenance === 'full' && preview.description.includes('مطلوب تطوير واجهة React') && sourceFetches().length === fetchesBeforePreview && (storage.prepare("SELECT backoff_until FROM source_state WHERE source='kaf'").get()?.backoff_until ?? null) === cooldownBeforePreview)
+  const generated = await ev(`window.rased.generateProposal(${p.id},'',${JSON.stringify(preview.fingerprint)})`)
+  check('KAF generation with the synthetic provider saves the approved draft', generated.ok && storage.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=?').get(p.id)?.proposal === 'A focused proposal for the review project.' && sourceFetches().length === fetchesBeforePreview)
+  await ev(`location.hash='#/proposal/${p.id}'`); await wait('!!document.querySelector(".proposal-editor")')
+  check('KAF proposal page offers copy/open but no Quick Apply or Chrome preparation', await ev("!document.querySelector('.quick-template-action') && !document.querySelector('.quick-assistant-action') && ![...document.querySelectorAll('.proposal-card button')].some(b=>/Prepare in Chrome|تجهيز بهذا العرض في Chrome/.test(b.textContent)) && [...document.querySelectorAll('.proposal-card button')].some(b=>/Copy proposal|نسخ العرض/.test(b.textContent))"))
+  check('Quick Apply main service still refuses KAF', !(await ev(`window.rased.quickApplyProject(${p.id})`)).ok && !(await ev(`window.rased.quickApplyAssistant(${p.id})`)).ok)
   const toast = traces().find(t => t.kind === 'toast')?.data?.toastXml
   check('KAF toast uses a persistent HTTPS destination with no Quick Apply action', notificationDestination(storage,toast) === p.url && !toast.includes('quick-apply') && !toast.includes('<actions>'))
   await ev('window.rased.pauseKaf()'); const count = sourceFetches().length

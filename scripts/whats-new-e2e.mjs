@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, persistentSession, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
 
 export async function testWhatsNew() {
   const version = '0.11.0' // Injected through the marked TEMP harness, independent of package.json.
@@ -13,6 +13,9 @@ export async function testWhatsNew() {
   const check = (label, condition) => { assert.ok(condition, label); passed++; console.log('PASS what’s new: ' + label) }
   const ev = expression => evaluate(ws, expression)
   const wait = expression => eventually(() => ev(expression))
+  // Frames stop being produced when the harness window is not really visible, so never wait on rAF alone:
+  // resolve after two frames, or after 150 ms when the compositor is frozen.
+  const paint = () => ev('new Promise(resolve=>{const t=setTimeout(resolve,150);requestAnimationFrame(()=>requestAnimationFrame(()=>{clearTimeout(t);resolve()}))})')
   const key = async (key, code, windowsVirtualKeyCode, modifiers = 0) => {
     const params = { key, code, windowsVirtualKeyCode, modifiers }
     const text = key === 'Enter' ? { text: '\r', unmodifiedText: '\r' } : {}
@@ -57,7 +60,7 @@ export async function testWhatsNew() {
     // Wait for the asynchronous version read before asserting absence.
     await wait('!!document.querySelector(".about-version")')
     await ev('window.rased.getAppInfo()')
-    await ev('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+    await paint()
   }
   try {
     const legacy = fixtureProfile(true)
@@ -74,6 +77,14 @@ export async function testWhatsNew() {
     await eventually(() => evaluate(compact, '!!document.querySelector(".compact")'))
     check('compact window never mounts the dialog', await evaluate(compact, '!document.querySelector(".whats-new-dialog")'))
     await ev('window.rased.closeCompact()')
+    // The harness spawns Electron with windowsHide, so the main window may never have been really
+    // visible; closing the compact window then makes Chromium mark the page hidden and freeze rAF.
+    // windowControl('maximize') is the only existing preload action that surfaces the main window
+    // without navigating (showProjectInMain also sends a #/project/:id navigate). The test window is
+    // disposable and its viewport is pinned later by Emulation.setDeviceMetricsOverride.
+    await ev('window.rased.windowControl("maximize")')
+    await sleep(600)
+    await wait('document.visibilityState === "visible"')
     await key('Escape', 'Escape', 27)
     await wait('!document.querySelector(".whats-new-dialog")')
     check('Escape persists the fixture current version', (await ev('window.rased.getSettings()')).whatsNewSeen === version)
@@ -93,7 +104,7 @@ export async function testWhatsNew() {
     check('focus starts at the primary action', await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
     const modalRoute = await ev('location.hash')
     await key('k', 'KeyK', 75, 2)
-    await ev('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+    await paint()
     check('Ctrl+K cannot navigate or move focus into the inert workspace', await ev('location.hash') === modalRoute && await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
     await key('Tab', 'Tab', 9, 8)
     check('Shift+Tab wraps to the secondary action', await ev('document.activeElement === document.querySelector(".whats-new-footer button:last-child")'))
@@ -165,7 +176,7 @@ export async function testWhatsNew() {
     await wait('!!document.querySelector(".sidebar")')
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
     await ev('window.rased.getAppInfo()')
-    await ev('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+    await paint()
     check('About hides manual review when all authored notes are newer than the installed version', await ev('!document.querySelector(".about-hero button") && !document.querySelector(".whats-new-dialog")'))
     console.log(`WHAT’S NEW E2E PASSED (${passed} assertions).`)
   } finally { await stop() }

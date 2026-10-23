@@ -105,7 +105,7 @@ export class AiService {
   }
   test(selection: AiSelection): Promise<AiOperationResult> {
     const preview: ProposalPreview = {
-      projectId: 0, title: 'Synthetic test: small dashboard', description: 'Create a small dashboard. This is fictional test data.', provenance: 'full', category: 'Development', skills: ['React'], budget: null,
+      projectId: 0, source: 'mostaql', title: 'Synthetic test: small dashboard', description: 'Create a small dashboard. This is fictional test data.', provenance: 'full', category: 'Development', skills: ['React'], budget: null,
       profile: { skills: 'React', experience: 'Synthetic test profile only', portfolio: '', tone: 'concise', language: 'en' }, projectNotes: '', fingerprint: 'synthetic', ...selection, promptVersion: PROMPT_VERSION
     }
     return this.run(preview, true)

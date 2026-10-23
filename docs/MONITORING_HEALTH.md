@@ -39,7 +39,7 @@ The overall indicator excludes disabled sources. It reports partial monitoring w
 
 ## Capabilities and support
 
-Each platform card explains whether in-app details, verified category filters, AI proposals and Quick Apply are supported. Quick Apply supports Mostaql and Nafezly only. The AI assistant currently supports Mostaql only. Khamsat filtering uses request titles; its full request body is read on the website.
+Each platform card explains whether in-app details, verified category filters, AI proposals and Quick Apply are supported. Quick Apply supports Mostaql and Nafezly only. The AI assistant supports Mostaql, Nafezly and KAF. Khamsat filtering uses request titles; its full request body is read on the website.
 
 **Copy monitoring report** copies a local JSON report with platform IDs, states, timestamps, timing/count information, issue categories and coverage warnings. It excludes raw error bodies, project text, API keys, notes, account data and device paths. Review it before sharing; RASED does not upload or send it automatically. About diagnostics lists all four public collector endpoints from the shared registry.
 

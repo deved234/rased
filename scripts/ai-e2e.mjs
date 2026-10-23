@@ -18,7 +18,7 @@ const db = new DatabaseSync(join(profile, 'rased.db'))
 const schema = readFileSync('src/storage/migrations.ts', 'utf8')
 for (const match of schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)) db.exec(match[1])
 db.exec(`PRAGMA user_version=${[...schema.matchAll(/\/\* \d+ \*\/ `/g)].length};`)
-db.exec("INSERT INTO projects(id,source,external_id,url,title,description_excerpt,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at) VALUES(1,'mostaql','900001','https://mostaql.com/go/900001','Synthetic integration project','Synthetic test description','2020','2020','initial','2020','2020'); INSERT INTO project_details VALUES(1,'Synthetic full description','full','2020','ready',NULL);")
+db.exec("INSERT INTO projects(id,source,external_id,url,title,description_excerpt,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at) VALUES(1,'mostaql','900001','https://mostaql.com/go/900001','Synthetic integration project','Synthetic test description','2020','2020','initial','2020','2020'),(4,'nafezly','900004','https://nafezly.com/project/900004','Synthetic Nafezly project','Stored Nafezly RSS description for integration','2020','2020','initial','2020','2020'),(5,'khamsat','900005','https://khamsat.com/community/requests/900005','Synthetic Khamsat request','Khamsat has no assistant','2020','2020','initial','2020','2020'); INSERT INTO project_details VALUES(1,'Synthetic full description','full','2020','ready',NULL);")
 db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({ khamsatEnabled: false, nafezlyEnabled: false }))
 writeFileSync(join(profile, 'rss-fixture.xml'), '<?xml version="1.0"?><rss version="2.0"><channel><title>Test</title></channel></rss>')
 let child, ws, bridgeSocket, passed = 0
@@ -146,6 +146,15 @@ try {
   // The key rotation above intentionally invalidated the revision-bound catalog; restore the original key and refresh the catalog.
   await ev('window.rased.saveAiKey("anthropic","fake-integration-anthropic-key")')
   check('Claude catalog refreshes after intentional key rotation', (await ev('window.rased.listAiModels("anthropic")')).ok)
+
+  const nafezlyPreview = await ev("window.rased.getProposalPreview(4,'')")
+  check('Nafezly preview uses the stored text with declared provenance', nafezlyPreview?.source === 'nafezly' && nafezlyPreview.provenance === 'excerpt' && nafezlyPreview.description.includes('Stored Nafezly RSS description') && nafezlyPreview.category === null)
+  const fetchCountBefore = traces().filter(t => t.kind === 'fetch').length
+  const nafezlyGeneration = await ev(`window.rased.generateProposal(4,'',${JSON.stringify(nafezlyPreview.fingerprint)})`)
+  check('Nafezly generation uses the synthetic provider without a project fetch', nafezlyGeneration.ok && db.prepare('SELECT provider FROM proposal_drafts WHERE project_id=4').get()?.provider === 'anthropic' && traces().filter(t => t.kind === 'fetch').length === fetchCountBefore)
+  check('Khamsat preview IPC rejects its source', (await ev("window.rased.getProposalPreview(5,'')")) === null)
+  await nav('#/project/5'); await wait('!!document.querySelector(".detail-rail")')
+  check('Khamsat detail has no Assistant or Quick Apply buttons', await ev("![...document.querySelectorAll('.detail-rail button')].some(b=>/مساعد العروض|Proposal Assistant/.test(b.textContent)) && !document.querySelector('.quick-template-action') && !document.querySelector('.quick-assistant-action')"))
 
   await nav('#/settings/ai'); await wait('!!document.querySelector("#ai-key")')
   mkdirSync('.local/qa/screenshots/ai-providers', { recursive: true })

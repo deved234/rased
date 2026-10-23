@@ -41,7 +41,7 @@ describe('Monitoring state and source capabilities', () => {
   it('uses actual collector endpoints and keeps unsupported actions explicit', () => {
     expect(SOURCES.map(source => source.endpoint).slice(0, 3)).toEqual([RSS_URL, KHAMSAT_REQUESTS_URL, NAFEZLY_FEED_URL])
     expect(SOURCES.filter(source => source.capabilities.quickApply).map(source => source.id)).toEqual(['mostaql', 'nafezly'])
-    expect(SOURCES.filter(source => source.capabilities.ai).map(source => source.id)).toEqual(['mostaql'])
+    expect(SOURCES.filter(source => source.capabilities.ai).map(source => source.id)).toEqual(['mostaql', 'nafezly', 'kaf'])
     expect(isSourceId('__proto__')).toBe(false)
     expect(isSourceId('kaf')).toBe(true)
     expect(sourceEnabled({ ...defaultSettings(), mostaqlEnabled: false }, 'mostaql')).toBe(false)

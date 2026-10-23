@@ -1,17 +1,19 @@
 import { QuickAssistant } from '../src/main/extension/quickAssistant.js'
 import type { ExtensionBroker } from '../src/main/extension/broker.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { openDatabase, type Db } from '../src/storage/db.js'
-import { getSettingRaw, setSettingRaw, upsertProjectsBatch } from '../src/storage/repositories.js'
+import { getSettingRaw, setSettingRaw, upsertProjectDetails, upsertProjectsBatch } from '../src/storage/repositories.js'
 import { getProposalDraft, saveProposalDraft } from '../src/storage/proposalDrafts.js'
 import { AiService } from '../src/main/ai/service.js'
 import { aiKeyPath, deleteAiKey, keyStatus, migrateGeminiKey, readAiKey, saveAiKey } from '../src/main/ai/keyStore.js'
-import { getAiSettings, saveAiSettings } from '../src/main/ai/settings.js'
+import { getAiSettings, getCapabilities, saveAiSettings } from '../src/main/ai/settings.js'
 import { defaultAiSettings, type AiSelection } from '../src/shared/ai.js'
+import { LEGACY_PROFILE_ID } from '../src/shared/proposalProfiles.js'
 
 const encryption = vi.hoisted(() => ({ available: true, fail: false }))
 vi.mock('electron', () => ({ safeStorage: {
@@ -29,6 +31,8 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); db.close(); fs.rmSync(dir, { recursive: true, force: true }) })
 const selection: AiSelection = { provider: 'openai', model: 'gpt-4.1-mini' }
 const reply = (): Response => new Response(JSON.stringify({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ proposal: 'A valid proposal', assumptions: [], questions: [] }) }] }] }))
+const addProject = (source: string, externalId: string, excerpt: string): number =>
+  upsertProjectsBatch(db, [{ source, externalId, url: `https://example.test/${source}/${externalId}`, title: `${source} project`, descriptionExcerpt: excerpt, publishedAt: null, publishedRaw: null }], { now: new Date().toISOString(), discoveryKind: 'live' }).insertedIds[0]!
 describe('encrypted provider keys and migrations', () => {
   it('keeps separate keys, hides plaintext, changes revision on rotation and deletes only one provider', () => {
     expect(saveAiKey(dir, 'openai', 'fake-openai-key-123456')).toBe(true)
@@ -100,6 +104,48 @@ describe('proposal AI service consent and lifecycle', () => {
     ai.saveKey('openai', 'fake-test-key-654321')
     expect(await ai.generate(id, '', original.fingerprint, selection)).toMatchObject({ ok: false, error: 'preview-changed' })
     expect(fetchImpl).not.toHaveBeenCalled()
+  })
+  it('rejects Khamsat generation before any provider request', async () => {
+    const khamsat = addProject('khamsat', 'khamsat-1', 'Khamsat excerpt')
+    const fetchImpl = vi.fn(async () => reply()) as typeof fetch
+    const ai = new AiService(db, dir, fetchImpl)
+    ai.saveKey('openai', 'fake-test-key-123456')
+    expect(ai.preview(khamsat, '', selection)).toBeNull()
+    expect(await ai.generate(khamsat, '', 'a'.repeat(64), selection)).toMatchObject({ ok: false, error: 'bad-request' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+  it('rejects a KAF preview approved from the excerpt after late details arrive, then allows a refreshed preview', async () => {
+    const kaf = addProject('kaf', 'kaf-late-details', 'KAF list excerpt')
+    const fetchImpl = vi.fn(async () => reply()) as typeof fetch
+    const ai = new AiService(db, dir, fetchImpl)
+    ai.saveKey('openai', 'fake-test-key-123456')
+    const excerptPreview = ai.preview(kaf, '', selection)!
+    expect(excerptPreview).toMatchObject({ source: 'kaf', description: 'KAF list excerpt', provenance: 'excerpt' })
+    upsertProjectDetails(db, kaf, { text: 'KAF detail brief arrived later', provenance: 'full', fetchedAt: new Date().toISOString(), status: 'ready', errorCode: null })
+    expect(await ai.generate(kaf, '', excerptPreview.fingerprint, selection)).toMatchObject({ ok: false, error: 'preview-changed' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    const refreshed = ai.preview(kaf, '', selection)!
+    expect(refreshed).toMatchObject({ description: 'KAF detail brief arrived later', provenance: 'full' })
+    expect(refreshed.fingerprint).not.toBe(excerptPreview.fingerprint)
+    expect(await ai.generate(kaf, '', refreshed.fingerprint, selection)).toMatchObject({ ok: true })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+  it('rejects a legacy v2 fingerprint without a request and saves new drafts as v3', async () => {
+    const fetchImpl = vi.fn(async () => reply()) as typeof fetch
+    const ai = new AiService(db, dir, fetchImpl)
+    ai.saveKey('openai', 'fake-test-key-123456')
+    const preview = ai.preview(id, '', selection)!
+    expect(preview.source).toBe('mostaql')
+    expect(preview.promptVersion).toBe('proposal-v3')
+    const legacyBase: Record<string, unknown> = { ...preview }
+    delete legacyBase.source
+    delete legacyBase.fingerprint
+    const legacy = createHash('sha256').update(JSON.stringify({ ...legacyBase, promptVersion: 'proposal-v2', profileId: LEGACY_PROFILE_ID, revision: keyStatus(dir, 'openai').revision, capabilities: getCapabilities(db, dir, selection) })).digest('hex')
+    expect(await ai.generate(id, '', legacy, selection)).toMatchObject({ ok: false, error: 'preview-changed' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(await ai.generate(id, '', preview.fingerprint, selection)).toMatchObject({ ok: true })
+    expect(getProposalDraft(db, id)?.promptVersion).toBe('proposal-v3')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
   it('sends only the selected key and records draft provenance', async () => {
     const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
@@ -278,6 +324,28 @@ it('records exactly one generation event despite failed activation and saved-dra
   expect(await assistant.quick(id)).toEqual({ ok: false, error: 'chrome-unavailable' })
   expect(getProposalDraft(db, id)?.proposal).toBe('A valid proposal')
   expect(await assistant.quick(id)).toEqual({ ok: false, error: 'chrome-unavailable' })
+  expect(fetchImpl).toHaveBeenCalledTimes(1)
+  expect(measured).toHaveBeenCalledTimes(1)
+  expect(Object.keys(measured.mock.calls[0]![0]).sort()).toEqual(['duration', 'error', 'outcome', 'provider'])
+  expect(broker.quick).toHaveBeenCalledTimes(2)
+  await ai.close()
+})
+it('generates exactly one event for Nafezly and none when reusing its saved draft', async () => {
+  const nafezly = addProject('nafezly', 'nafezly-1', 'Nafezly public excerpt')
+  const measured = vi.fn(), fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    expect(JSON.parse(String(init?.body)).input[0].content[0].text).toContain('for a Nafezly project')
+    return reply()
+  }) as typeof fetch
+  const ai = standingService(fetchImpl, measured)
+  ai.setStandingConsent(true, selection)
+  const broker = {
+    preflight: () => ({ ok: true }), reserve: () => true, release: () => {}, status: () => ({ selectedId: 'client' }),
+    quick: vi.fn(async () => ({ ok: false, error: 'chrome-unavailable' })), cancelOwned: () => {}, ownsJob: () => false
+  }
+  const assistant = new QuickAssistant(db, ai, broker as unknown as ExtensionBroker, () => true, () => {})
+  expect(await assistant.quick(nafezly)).toEqual({ ok: false, error: 'chrome-unavailable' })
+  expect(getProposalDraft(db, nafezly)?.proposal).toBe('A valid proposal')
+  expect(await assistant.quick(nafezly)).toEqual({ ok: false, error: 'chrome-unavailable' })
   expect(fetchImpl).toHaveBeenCalledTimes(1)
   expect(measured).toHaveBeenCalledTimes(1)
   expect(Object.keys(measured.mock.calls[0]![0]).sort()).toEqual(['duration', 'error', 'outcome', 'provider'])

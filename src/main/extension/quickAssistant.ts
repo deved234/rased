@@ -31,7 +31,7 @@ export class QuickAssistant {
     if (this.active) return { ok: false, error: 'busy' }
     const project = getProjectById(this.db, projectId)
     if (!project) return { ok: false, error: 'invalid-project' }
-    if (project.source !== 'mostaql') return { ok: false, error: 'unsupported-source' }
+    if (project.source !== 'mostaql' && project.source !== 'nafezly') return { ok: false, error: 'unsupported-source' }
     const ready = this.broker.preflight(projectId)
     if (!ready.ok) return ready
     const existing = getProposalDraft(this.db, projectId)
