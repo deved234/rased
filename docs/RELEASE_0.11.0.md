@@ -54,8 +54,9 @@ Your existing projects, notes, settings and encrypted AI keys stay in the same p
 
 ## Validation and known limits
 
-- **Automated checks:** typecheck, lint, all 493 unit tests across 46 files, and the application build passed. No installer was built or tested for this version bump.
-- **Not established by these gates:** live AI provider access, live platform forms, physical Windows notification clicks or a production installer upgrade. The feature guides describe synthetic integration coverage and its limits.
+- **Automated tests:** before release, the source passed typecheck, lint, 499 unit tests and real Electron tests with synthetic profiles. They cover Quick Apply and the Chrome extension (no offer is ever submitted), the Proposal Assistant, profiles, backups and settings transfer, What's New, KAF, monitoring, search, notifications, startup and analytics. Windows CI passed, and the configured installer was built and checked on GitHub Actions, including the packaged-app suites.
+- **Manual check:** the configured installer upgraded a real 0.10.0 installation. What's New, profile migration, one-click Quick Apply, Quick Apply with Assistant and the KAF Assistant page were checked by hand.
+- **Not tested:** physical Windows notification clicks on every machine, live AI provider accounts across all providers, and every live platform form variation.
 - **Still pending:** cloud-event deletion completion is **unverified**.
 
 [Privacy](https://github.com/deved234/rased/blob/v0.11.0/PRIVACY.md) · [Terms](https://github.com/deved234/rased/blob/v0.11.0/TERMS.md) · [Update guide](https://github.com/deved234/rased/blob/v0.11.0/docs/UPDATES.md) · [Changelog](https://github.com/deved234/rased/blob/v0.11.0/CHANGELOG.md).
