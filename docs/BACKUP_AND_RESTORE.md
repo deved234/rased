@@ -4,7 +4,7 @@ Open **Settings → Data**. These operations are local; RASED uploads neither ex
 
 ## Transfer settings
 
-**Export settings** writes a JSON file containing all supported platform preferences, keywords/exclusions, filters, appearance, the Quick Apply template, the professional profile and AI provider/model choices.
+**Export settings** writes a JSON file containing all supported platform preferences, keywords/exclusions, filters, appearance, all freelancer profiles and their Quick Apply templates, and AI provider/model choices.
 
 **Import settings** previews the included preferences and filter changes before applying them. Merge keeps other saved filters; replace replaces the saved-filter collection. Included preferences are overwritten in either mode; preferences missing from an older file remain unchanged. Version 1 exports remain supported. Windows startup changes require a separate opt-in, including disabling startup.
 
@@ -38,3 +38,11 @@ Only the versioned RASED backup format is accepted, currently schema 8 and up to
 ## Verification for contributors
 
 Run `npm run typecheck`, `npm run lint`, `npm test`, then `npm run build` and `npm run test:data`. The integration script uses fresh TEMP profiles, synthetic keys, real Electron/preload/SQLite and scoped file-picker fixtures; it never substitutes a real profile. It tests transfer, legacy files, cancellation, damaged files, restore across restart, rollback freshness, key isolation and Arabic/English layouts. Use `node scripts/data-e2e.mjs --exe=<unpacked-executable> --app=` for a packaged build.
+
+## Profile sets and older versions
+
+Settings export uses format v3, carrying the entire profile set plus the default’s legacy mirror. Imports accept v1/v2/v3. A valid v3 set replaces all profiles and wins over conflicting legacy profile/template fields; Quick Apply enablement, price position and extra days still import. Without a set, only explicitly supplied legacy facts/template update the existing default; other profiles survive. Omitted fields differ from explicitly empty values. Invalid sets reject the whole import. Import clears standing consent.
+
+Complete backups contain a sanitized profile set and consistent default mirrors. Restore clears all portable settings before loading the archive, so an old backup without a set cannot leave destination profiles behind; it reads the restored legacy profile/template instead. Conflicting archive mirrors are normalized to the set. Restore clears standing consent, disables Quick Apply and preserves the device’s What’s New marker. Failed writes roll back the profiles, mirrors, consent, filters and AI settings together.
+
+Downgrading to 0.10.0 opens the same database and shows only the default profile and its template through legacy mirrors. Other profiles remain stored but hidden. Edits made there to either mirror are applied to the default when returning to this version, without changing the other profiles. If Quick Apply is enabled with an empty default template, 0.10.0 resets **all Quick Apply preferences** to its defaults. Version 0.10.0 rejects v3 settings exports and backups containing `proposal-profiles`; use a compatible pre-upgrade backup if restoring with that version. No database schema migration is involved.

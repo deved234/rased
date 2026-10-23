@@ -1,3 +1,5 @@
+import { defaultProfile, sanitizeProfileSet } from '../shared/proposalProfiles.js'
+import { writeProfileSetTx } from './proposalProfiles.js'
 import { clearQuickConsent } from './quickConsent.js'
 import { backup, DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
@@ -5,14 +7,14 @@ import { dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { openDatabase, type Db } from './db.js'
 import { SCHEMA_VERSION } from './migrations.js'
-import { getSettingRaw, runInTransaction, setSettingRaw } from './repositories.js'
+import { getSettingRaw, listSavedFilters, runInTransaction, setSettingRaw } from './repositories.js'
 import { parseSettingsTransfer, settingsPayload } from './settingsTransfer.js'
 import { sanitizeSettings } from '../shared/types.js'
 import type { BackupCounts } from '../shared/data.js'
 import { resetSearchCache } from './searchCache.js'
 
 export const MAX_BACKUP_BYTES = 512 * 1024 * 1024
-export const PORTABLE_KEYS = ['app', 'proposal-profile', 'ai-settings', 'kaf:last-list-ids', 'kaf:checkpoint']
+export const PORTABLE_KEYS = ['app', 'proposal-profile', 'proposal-profiles', 'ai-settings', 'kaf:last-list-ids', 'kaf:checkpoint']
 const TABLES = ['projects', 'project_user_state', 'project_details', 'saved_filters', 'proposal_drafts', 'tombstones', 'source_state', 'notification_events', 'notification_batches'] as const
 interface Manifest { format: 'rased-backup'; version: 1; schemaVersion: number; createdAt: string; appVersion: string }
 export interface InspectedBackup { manifest: Manifest; counts: BackupCounts; startupRequested: boolean }
@@ -24,10 +26,10 @@ export function backupCounts(db: Db): BackupCounts {
 
 function portableSettings(db: Db): void {
   const payload = settingsPayload(db)
-  const checkpoint = PORTABLE_KEYS.slice(3).map(key => [key, getSettingRaw(db, key)] as const)
+  const checkpoint = ['kaf:last-list-ids', 'kaf:checkpoint'].map(key => [key, getSettingRaw(db, key)] as const)
   db.exec('DELETE FROM settings')
   setSettingRaw(db, 'app', JSON.stringify(sanitizeSettings(payload.settings)))
-  setSettingRaw(db, 'proposal-profile', JSON.stringify(payload.proposalProfile))
+  writeProfileSetTx(db, payload.proposalProfiles!)
   setSettingRaw(db, 'ai-settings', JSON.stringify(payload.aiSettings))
   for (const [key, value] of checkpoint) if (value !== null) setSettingRaw(db, key, value)
 }
@@ -130,7 +132,10 @@ export function inspectBackup(file: string): InspectedBackup {
     if (db.prepare('SELECT 1 FROM extension_jobs LIMIT 1').get() || db.prepare('SELECT 1 FROM quick_apply_tickets LIMIT 1').get()) throw Error('bad-schema')
     if (version >= 9 && db.prepare('SELECT 1 FROM notification_activations LIMIT 1').get()) throw Error('bad-schema')
     const settings = JSON.parse(getSettingRaw(db, 'app') ?? 'null') as unknown
-    parseSettingsTransfer({ format: 'rased-settings', version: 2, settings, savedFilters: settingsPayload(db).savedFilters, proposalProfile: JSON.parse(getSettingRaw(db, 'proposal-profile') ?? 'null'), aiSettings: JSON.parse(getSettingRaw(db, 'ai-settings') ?? 'null') })
+    const rawProfiles = getSettingRaw(db, 'proposal-profiles')
+    const profiles = rawProfiles === null ? undefined : sanitizeProfileSet(JSON.parse(rawProfiles))
+    if (profiles === null) throw Error('bad-schema')
+    parseSettingsTransfer({ format: 'rased-settings', version: 3, ...(profiles ? { proposalProfiles: profiles } : { proposalProfile: JSON.parse(getSettingRaw(db, 'proposal-profile') ?? 'null') }), settings, savedFilters: listSavedFilters(db), aiSettings: JSON.parse(getSettingRaw(db, 'ai-settings') ?? 'null') })
     return { manifest, counts: backupCounts(db), startupRequested: sanitizeSettings(settings).runAtStartup }
   })
 }
@@ -154,13 +159,19 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
       clearQuickConsent(db)
       for (const key of PORTABLE_KEYS) db.prepare('DELETE FROM settings WHERE key=?').run(key)
       db.exec('INSERT INTO main.settings SELECT * FROM restore_data.settings')
-      const restored = sanitizeSettings(JSON.parse(getSettingRaw(db, 'app')!))
+      const archived = JSON.parse(getSettingRaw(db, 'app')!)
+      const rawProfiles = getSettingRaw(db, 'proposal-profiles')
+      const profiles = rawProfiles === null ? null : sanitizeProfileSet(JSON.parse(rawProfiles))!
+      // Replace the legacy mirror before validation can reset otherwise valid preferences.
+      if (profiles) archived.quickApply = { ...archived.quickApply, template: defaultProfile(profiles).quickTemplate }
+      const restored = sanitizeSettings(archived)
       restored.runAtStartup = applyStartup ? restored.runAtStartup : current.runAtStartup
       restored.quickApply.enabled = false
       restored.doNotDisturbUntil = current.doNotDisturbUntil
       restored.compactBounds = current.compactBounds
       restored.whatsNewSeen = current.whatsNewSeen
       setSettingRaw(db, 'app', JSON.stringify(restored))
+      if (profiles) writeProfileSetTx(db, profiles)
       db.exec("UPDATE notification_events SET status='suppressed' WHERE status IN ('pending','dispatching','uncertain'); DELETE FROM pending_classifications;")
       for (const old of cooldowns) if (old.backoff_until && Date.parse(old.backoff_until) > Date.now()) {
         db.prepare(`INSERT INTO source_state(source,backoff_until,consecutive_failures,last_error) VALUES(?,?,?,?)

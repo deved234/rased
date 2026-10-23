@@ -3,6 +3,7 @@ import { rased } from '../api.js'
 import { go } from '../router.js'
 import { useUnsavedChanges } from '../components/useUnsavedChanges.js'
 import type { Lang } from '../i18n.js'
+import type { ProfileSet } from '@shared/proposalProfiles.js'
 import type { ProposalDraft, ProposalPreview } from '@shared/proposals.js'
 
 import { AI_NAMES, aiErrorText, defaultAiSettings, sanitizeSelection, type AiSelection, type AiSetup } from '@shared/ai.js'
@@ -11,6 +12,8 @@ import { activePhase, quickErrorText, useExtensionStatus } from '../components/e
 
 export function ProposalView({ lang, projectId }: { lang: Lang; projectId: number }): React.ReactElement {
   const ar = lang === 'ar'
+  const [profiles, setProfiles] = React.useState<ProfileSet | null>(null)
+  const [profileId, setProfileId] = React.useState<string | undefined>()
   const [preview, setPreview] = React.useState<ProposalPreview | null>(null)
   const [previewLoaded, setPreviewLoaded] = React.useState(false)
   const [draft, setDraft] = React.useState<ProposalDraft | null>(null)
@@ -39,8 +42,9 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
   React.useEffect(() => {
     let alive = true
     setPreview(null); setConsent(false); setBusy(false); setNotes(''); setError(''); setPreviewLoaded(false)
-    void Promise.all([rased.getAiSetup(), rased.getProposalDraft(projectId), rased.getProposalPreview(projectId, '')]).then(([setup, existing, p]) => {
+    void Promise.all([rased.getAiSetup(), rased.getProposalDraft(projectId), rased.getProposalPreview(projectId, ''), rased.getProfileSet()]).then(([setup, existing, p, state]) => {
       if (!alive) return
+      setProfiles(state.set); setProfileId(state.set.defaultId)
       setSetup(setup)
       setSelection({ provider: setup.settings.activeProvider, model: setup.settings.modelByProvider[setup.settings.activeProvider] })
       setDraft(existing)
@@ -51,10 +55,10 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
     return () => { alive = false; previewSequence.current++; void rased.cancelProposal() }
   }, [projectId, loadEpoch])
 
-  const refresh = async (): Promise<void> => {
+  const refresh = async (selectedProfileId = profileId): Promise<void> => {
     const seq = ++previewSequence.current
     setConsent(false)
-    try { const p = await rased.getProposalPreview(projectId, notes, selection); if (seq !== previewSequence.current) return; setPreview(p); setPreviewLoaded(true); setError(p ? '' : aiErrorText('bad-request', ar)) }
+    try { const p = await rased.getProposalPreview(projectId, notes, selection, selectedProfileId); if (seq !== previewSequence.current) return; setPreview(p); setPreviewLoaded(true); setError(p ? '' : aiErrorText('bad-request', ar)) }
     catch { setError(ar ? 'تعذرت المعاينة.' : 'Preview failed.') }
   }
   const generate = async (): Promise<void> => {
@@ -63,7 +67,7 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
     const seq = previewSequence.current
     setBusy(true); setConsent(false); setError('')
     try {
-      const result = await rased.generateProposal(projectId, notes, preview.fingerprint, selection)
+      const result = await rased.generateProposal(projectId, notes, preview.fingerprint, selection, profileId)
       if (seq !== previewSequence.current) return
       if (!result.ok || !result.draft) { setError(aiErrorText(result.error, ar, result.retryAfterSeconds)); return }
       setDraft(result.draft)
@@ -110,6 +114,10 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
     {reason && ['consent-required','no-key'].includes(reason) && <p className="banner warn" role="status">{quickErrorText(reason, ar)}</p>}
     {!hasKey && <div className="banner warn">{ar ? 'أضف مفتاح الموفر المختار من الإعدادات.' : 'Add this provider’s API key in Settings.'} <button className="btn sm" onClick={() => go({ name: 'settings', section: 'ai' })}>{ar ? 'إعدادات المساعد' : 'Assistant settings'}</button></div>}
     <section className="proposal-card"><h3>{ar ? 'الموفر والموديل لهذا العرض' : 'Provider and model for this proposal'}</h3>
+      <div className="proposal-field"><label htmlFor="proposal-profile">{ar ? 'الملف المهني لهذا الطلب' : 'Freelancer profile for this request'}</label><select id="proposal-profile" className="select" value={profileId ?? ''} disabled={!profiles || preparing || busy || saving} onChange={e => {
+        const id = e.target.value
+        setProfileId(id); setPreview(null); setConsent(false); void refresh(id)
+      }}>{profiles && [...profiles.profiles].sort((a, b) => Number(b.id === profiles.defaultId) - Number(a.id === profiles.defaultId)).map(p => <option key={p.id} value={p.id}>{p.name}{p.id === profiles.defaultId ? (ar ? ' (افتراضي)' : ' (Default)') : ''}</option>)}</select></div>
       <AiModelPicker ar={ar} setup={setup} selection={selection} disabled={preparing || busy || saving} onSetup={next => { setSetup(next); setPreview(null); setConsent(false); previewSequence.current++ }} onChange={next => { setSelection(next); setPreview(null); setConsent(false); setError(''); previewSequence.current++ }} />
       <p className="hint">{ar ? 'هذا اختيار مؤقت؛ الافتراضي في الإعدادات لا يتغير.' : 'This is a temporary selection; your saved default stays unchanged.'}</p>
     </section>

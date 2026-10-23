@@ -8,7 +8,7 @@ Quick Apply fills a saved proposal on **Mostaql and Nafezly** using your normal 
 2. Open Chrome's extensions page from RASED, enable **Developer mode**, then choose **Load unpacked**. Select the folder displayed by RASED; use Copy path if needed.
 3. Open the RASED extension from Chrome's toolbar and request pairing.
 4. Match the six-digit code shown in Chrome with the code in RASED. Approve and name the profile, then select it as the destination.
-5. Save your proposal template, budget position (0–100%) and extra days. Enable Quick Apply. Sign in to the platforms in this same Chrome profile, including Google sign-in if desired.
+5. Save the Quick Apply template in your default freelancer profile under Assistant settings, then save budget position (0–100%) and extra days under Quick Apply settings. Enable Quick Apply. Sign in to the platforms in this same Chrome profile, including Google sign-in if desired.
 
 ![Quick Apply settings](images/quick-apply.png)
 
@@ -60,6 +60,10 @@ Automated verification uses real Chromium, the native executable and broker with
 
 ## Status and saving
 
-Settings distinguish a paired profile from a currently connected profile. Setup steps collapse after pairing and remain available under pairing management. Save the template, budget position and extra days explicitly; navigating away offers Save and continue, Discard edits, or Stay here. A failed save keeps your edits.
+Settings distinguish a paired profile from a currently connected profile. Setup steps collapse after pairing and remain available under pairing management. Save the template in Assistant → Freelancer profiles, and budget position and extra days in Quick Apply settings; navigating away offers Save and continue, Discard edits, or Stay here. A failed save keeps your edits.
 
 An unpaired project action opens setup; a deliberately disabled feature opens its settings. Preparation status appears beside the matching project and in settings: waiting, opening, reading, ready, login needed, manual input, preserved draft, failure or timeout. Cancel is available only while a job is active. A ready draft still needs your review and manual submission in Chrome.
+
+## Default freelancer profile
+
+Quick Apply buttons and notification tickets always use the default freelancer profile’s saved template. Quick Apply settings link to that profile rather than editing the template. There is no profile selector in Quick Apply. Enabling Quick Apply with an empty template is allowed: a template action reports “Add a template to the default profile or use Quick Apply with Assistant” without opening Chrome. Notification activation shows the same message and opens Assistant settings. Saved-draft preparation and Assistant generation under standing consent still work with an empty default template. Existing project drafts do not change when you switch defaults.

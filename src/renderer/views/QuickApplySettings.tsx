@@ -3,11 +3,15 @@ import type { AppSettings } from '@shared/types.js'
 import type { ExtensionAction } from '@shared/api.js'
 import type { ExtensionStatus } from '@shared/extension/protocol.js'
 import { validQuickApply, quickPrice } from '@shared/quickApply.js'
+import { defaultProfile } from '@shared/proposalProfiles.js'
+import { go } from '../router.js'
 import { rased } from '../api.js'
 import { useUnsavedChanges } from '../components/useUnsavedChanges.js'
 import { activePhase, phaseText } from '../components/extensionStatus.js'
 export function QuickApplySettings({settings}:{settings:AppSettings}):React.ReactElement {
   const ar=settings.language==='ar'
+  const [profileName,setProfileName]=React.useState('')
+  React.useEffect(()=>{void rased.getProfileSet().then(state=>setProfileName(defaultProfile(state.set).name)).catch(()=>{})},[settings.quickApply])
   const [draft,setDraft]=React.useState({...settings.quickApply})
   const [status,setStatus]=React.useState<ExtensionStatus|null>(null)
   const [message,setMessage]=React.useState(''),[busy,setBusy]=React.useState(false)
@@ -44,14 +48,14 @@ export function QuickApplySettings({settings}:{settings:AppSettings}):React.Reac
     </ol></details>
     <p className="hint">{ar?'إذا كان Chrome مغلقًا نحاول فتحه وننتظر البروفايل المختار 20 ثانية. قد يفتح Chrome بروفايلًا مختلفًا؛ افتح المختار وأعد المحاولة بعد انتهاء المهلة. بعد تحديث الإضافة اضغط إعادة تحميل في صفحة إضافات Chrome.':'If Chrome is closed, RASED opens it and waits 20 seconds for the selected profile. Chrome may open a different profile; open yours and retry after a timeout. Reload the extension in Chrome after extension updates.'}</p>
     <label className="set-row"><span>{ar?'تفعيل التقديم السريع':'Enable Quick Apply'}</span><input type="checkbox" checked={draft.enabled} disabled={busy||!ready} onChange={e=>setDraft({...draft,enabled:e.target.checked})}/></label>
-    <label htmlFor="quick-template">{ar?'نص العرض المحفوظ':'Saved proposal text'}</label><textarea id="quick-template" disabled={busy} className="input" rows={9} maxLength={10000} dir="auto" value={draft.template} onChange={e=>setDraft({...draft,template:e.target.value})}/>
+    <p id="quick-template-source" className="hint">{ar?`القالب من البروفايل الافتراضي: ${profileName}`:`Template from default profile: ${profileName}`} <button className="btn sm" onClick={()=>go({name:'settings',section:'ai'})}>{ar?'تعديل':'Edit'}</button></p>
     <label className="set-row"><span>{ar?'موضع السعر داخل الميزانية (%)':'Position within budget (%)'}</span><input className="input" type="number" disabled={busy} min={0} max={100} step={1} value={Number.isFinite(draft.budgetPositionPercent)?draft.budgetPositionPercent:''} onChange={e=>setDraft({...draft,budgetPositionPercent:e.target.valueAsNumber})}/></label>
     <input aria-label={ar?'موضع السعر':'Budget position'} type="range" disabled={busy} min={0} max={100} step={1} value={Number.isFinite(draft.budgetPositionPercent)?draft.budgetPositionPercent:0} onChange={e=>setDraft({...draft,budgetPositionPercent:Number(e.target.value)})}/>
     <label className="set-row"><span>{ar?'أيام إضافية فوق مدة العميل':'Extra days beyond client duration'}</span><input className="input" type="number" disabled={busy} min={0} max={365} step={1} value={Number.isFinite(draft.extraDays)?draft.extraDays:''} onChange={e=>setDraft({...draft,extraDays:e.target.valueAsNumber})}/></label>
     <p className="hint">{ar?'مثال: ميزانية 25–50 دولارًا، مدة 5 أيام →':'Example: $25–50 budget, 5 days →'} <b>{quickPrice(25,50,draft.budgetPositionPercent)??'—'} USD / {Number.isInteger(draft.extraDays)?5+draft.extraDays:'—'} {ar?'أيام':'days'}</b></p>
-    {!validQuickApply(draft)&&<p className="field-err" role="status">{ar?'اكتب قالبًا، وحدد نسبة من 0 إلى 100 وأيامًا صحيحة من 0 إلى 365.':'Enter a template, a position from 0 to 100, and whole extra days from 0 to 365.'}</p>}
-    <button className="btn primary" disabled={busy||!validQuickApply(draft)} onClick={()=>void save()}>{ar?'حفظ القالب والإعدادات':'Save template and settings'}</button>
-    <p className="hint" role="status">{dirty?(ar?'تعديلات غير محفوظة':'Unsaved changes'):(ar?'القالب والإعدادات محفوظة':'Template and settings saved')}</p>
+    {!validQuickApply(draft)&&<p className="field-err" role="status">{ar?'حدد نسبة من 0 إلى 100 وأيامًا صحيحة من 0 إلى 365.':'Enter a position from 0 to 100, and whole extra days from 0 to 365.'}</p>}
+    <button className="btn primary" disabled={busy||!validQuickApply(draft)} onClick={()=>void save()}>{ar?'حفظ الإعدادات':'Save settings'}</button>
+    <p className="hint" role="status">{dirty?(ar?'تعديلات غير محفوظة':'Unsaved changes'):(ar?'الإعدادات محفوظة':'Settings saved')}</p>
     {status?.lastJob&&<p role="status">{phaseText(status.lastJob.phase,ar,status.lastJob.error)} {activePhase(status.lastJob.phase)&&<button className="btn sm" disabled={busy} onClick={()=>void act({action:'cancel'})}>{ar?'إلغاء التجهيز':'Cancel preparation'}</button>}</p>}
     <p className="hint">{ar?'0% للحد الأدنى و100% للحد الأعلى. البيانات الناقصة تُدخل يدويًا؛ المسودة الموجودة لا تُستبدل. القالب يدخل في تصدير الإعدادات؛ مفاتيح الربط لا تدخل فيه.':'0% selects the minimum and 100% the maximum. Missing values require manual input; existing drafts are preserved. Settings exports include the template but exclude pairing keys.'}</p><p role="status">{message}</p>
     {unsavedDialog}

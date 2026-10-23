@@ -6,9 +6,9 @@ The assistant creates editable proposals for **Mostaql projects only**. Gemini, 
 
 1. Open Settings → Proposal Assistant. Choose a provider and save its API key. Saved means stored, not validated against the provider.
 2. Request a model-list refresh, then select a model. Advanced settings accept a manual model ID with compatibility warnings; catalog visibility does not prove generation access.
-3. Enter your real specialization, experience, relevant work and preferred proposal style. Save the default settings. Do not invent credentials or promise unavailable services.
+3. Create a named freelancer profile with your real specialization, experience, relevant work and preferred proposal style. Save it and choose your default. Do not invent credentials or promise unavailable services.
 4. Optionally use Test generation. It sends synthetic data, requires confirmation, may consume quota and saves no draft.
-5. From a Mostaql project, open the assistant. You can temporarily choose another provider/model for this draft without changing the default.
+5. From a Mostaql project, open the assistant. You can temporarily choose another profile and provider/model for this draft without changing the defaults.
 6. Review the outgoing project text, freelancer profile and instructions, then explicitly generate. Edit/copy the draft and submit it yourself on the platform.
 
 ![Arabic provider settings](images/ai-settings.png)
@@ -42,3 +42,11 @@ The Mostaql **Quick Apply with Assistant** action reuses the latest saved draft 
 Standing consent is off by default in Assistant settings. Its disclosure names the active provider and model: each click without a saved draft sends public project data and the freelancer profile without preview, excludes private and proposal-specific notes, and may incur provider charges/quotas. Review and submit yourself in Chrome. Consent is tied to the provider, model and key revision; changing the active selection, saving/deleting any key, importing settings or restoring a backup clears it. It is excluded from exports/backups and can be withdrawn in one click, cancelling its current operation. Analytics acceptance remains separate.
 
 Generation shares the manual flow's busy guard, 45-second timeout, cancellation and telemetry. It reserves Quick Apply while writing, cannot overwrite a draft saved concurrently, and never retries a paid call automatically. Draft reuse emits no generation event. Failed Chrome preparation keeps generated text. Output over 10,000 and up to 12,000 characters is saved for shortening; output over 12,000 is rejected without saving. Hiding to the tray continues; exiting cancels. Quick Apply supports Mostaql/Nafezly; the assistant action supports Mostaql only. Khamsat and KAF remain excluded.
+
+## Multiple freelancer profiles
+
+Assistant settings hold 1–10 named profiles (names 1–60 characters), each with skills, experience, portfolio, tone, language and an optional Quick Apply template of up to 10,000 characters. Add or edit profiles and save explicitly. Set another saved profile as default before deleting the current default; the last profile cannot be deleted. Unsaved profile, key and model edits remain protected when navigating.
+
+The default supplies Quick Apply templates (including notifications) and new Assistant generation under standing consent. Changing the default does not revoke standing consent or alter saved drafts. Manual Assistant requests start with the default and allow a different profile for that request only; switching refreshes the preview and clears per-request approval. Only the five professional-fact fields are sent to the AI provider, never profile names, IDs, templates or other profiles. There is no category-based selection.
+
+An unreadable or unsupported stored profile set is preserved. Settings show the legacy profile read-only, and generation/preparation temporarily use it. “Recreate from legacy profile” replaces the damaged set only after confirmation. Export/backup refuses an unreadable set rather than silently dropping it.

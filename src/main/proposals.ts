@@ -3,24 +3,37 @@ import { readAiKey } from './ai/keyStore.js'
 import { generateAiJson, modelCapabilities } from './ai/providers.js'
 import { createHash } from 'node:crypto'
 import type { Db } from '../storage/db.js'
-import { getProjectById, getProjectDetailsRow, getSettingRaw, setSettingRaw } from '../storage/repositories.js'
-import { emptyProposalProfile, sanitizeProposalProfile, type ProposalDraft, type ProposalPreview, type ProposalProfile } from '../shared/proposals.js'
+import { getProjectById, getProjectDetailsRow, runInTransaction } from '../storage/repositories.js'
+import { sanitizeProposalProfile, type ProposalDraft, type ProposalPreview, type ProposalProfile } from '../shared/proposals.js'
 
-const PROFILE_SETTING = 'proposal-profile'
+import { defaultProfile, sanitizeProfileSet, validProfileId, type ProfileSet } from '../shared/proposalProfiles.js'
+import { legacyProfileSet, readProfileSet, selectedProfile, writeProfileSetTx } from '../storage/proposalProfiles.js'
+import type { AppSettings } from '../shared/types.js'
 
-export function getProposalProfile(db: Db): ProposalProfile {
-  const raw = getSettingRaw(db, PROFILE_SETTING)
-  if (!raw) return emptyProposalProfile()
-  try { return sanitizeProposalProfile(JSON.parse(raw)) ?? emptyProposalProfile() } catch { return emptyProposalProfile() }
+export function getProposalProfile(db: Db): ProposalProfile { return selectedProfile(db)!.profile }
+
+export function saveProfileSet(db: Db, value: unknown, publish: (settings: AppSettings) => void = () => {}, recover = false): ProfileSet | null {
+  const previous = readProfileSet(db)
+  const set = recover ? legacyProfileSet(db) : sanitizeProfileSet(value)
+  if (!set || (recover && !previous.error) || (previous.error && !recover) || (!recover && !set.profiles.some(p => p.id === previous.set.defaultId))) return null
+  const settings = runInTransaction(db, () => writeProfileSetTx(db, set))
+  publish(settings)
+  return set
 }
 
-export function saveProposalProfile(db: Db, value: unknown): ProposalProfile | null {
+export function saveProposalProfile(db: Db, value: unknown, publish: (settings: AppSettings) => void = () => {}): ProposalProfile | null {
   const profile = sanitizeProposalProfile(value)
-  if (profile) setSettingRaw(db, PROFILE_SETTING, JSON.stringify(profile))
-  return profile
+  if (!profile) return null
+  const state = readProfileSet(db)
+  if (state.error) return null
+  Object.assign(defaultProfile(state.set), profile)
+  return saveProfileSet(db, state.set, publish) ? profile : null
 }
 
-export function getProposalPreview(db: Db, projectId: number, projectNotes: string, selection: AiSelection = { provider: 'gemini', model: 'gemini-2.5-flash' }, revision = '', capabilities = modelCapabilities(selection)): ProposalPreview | null {
+export function getProposalPreview(db: Db, projectId: number, projectNotes: string, selection: AiSelection = { provider: 'gemini', model: 'gemini-2.5-flash' }, revision = '', capabilities = modelCapabilities(selection), profileId?: string): ProposalPreview | null {
+  if (profileId !== undefined && !validProfileId(profileId)) return null
+  const selected = selectedProfile(db, profileId)
+  if (!selected) return null
   const project = getProjectById(db, projectId)
   if (!project || project.source !== 'mostaql') return null
   const details = getProjectDetailsRow(db, projectId)
@@ -33,13 +46,13 @@ export function getProposalPreview(db: Db, projectId: number, projectNotes: stri
     category: (project.categoryName || project.categorySlug)?.slice(0, 150) ?? null,
     skills: (project.skills ?? []).slice(0, 30).map(s => s.slice(0, 100)),
     budget: (project.budgetRaw || (project.budgetMin !== null || project.budgetMax !== null ? `${project.budgetMin ?? '?'}–${project.budgetMax ?? '?'} ${project.currency ?? ''}` : null))?.slice(0, 150) ?? null,
-    profile: getProposalProfile(db),
+    profile: selected.profile,
     projectNotes: projectNotes.slice(0, 2000),
     model: selection.model,
     provider: selection.provider,
     promptVersion: PROMPT_VERSION
   } as const
-  const fingerprint = createHash('sha256').update(JSON.stringify({ ...base, revision, capabilities })).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({ ...base, profileId: selected.id, revision, capabilities })).digest('hex')
   return { ...base, fingerprint }
 }
 

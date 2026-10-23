@@ -15,6 +15,8 @@ import {QuickAssistant} from '../src/main/extension/quickAssistant.js'
 import type {AiService} from '../src/main/ai/service.js'
 import {clearQuickConsent} from '../src/storage/quickConsent.js'
 import {getSettingRaw,setSettingRaw} from '../src/storage/repositories.js'
+import {saveProfileSet} from '../src/main/proposals.js'
+import {emptyProposalProfile} from '../src/shared/proposals.js'
 const wait=async(fn:()=>boolean)=>{for(let i=0;i<80;i++){if(fn())return;await new Promise(r=>setTimeout(r,25))}throw Error('condition-timeout')}
 const connect=async(broker:ExtensionBroker,token:string,id:string,sockets:Socket[])=>{
   const socket=createConnection(broker.setup.pipe),messages:Record<string,unknown>[]=[];sockets.push(socket)
@@ -25,6 +27,54 @@ const connect=async(broker:ExtensionBroker,token:string,id:string,sockets:Socket
   socket.write(encodeFrame({type:'pair-request'}));await wait(()=>broker.status().pairing.some(p=>p.id===id))
   const code=broker.status().pairing.find(p=>p.id===id)!.code;expect(broker.approve(id,code,id.slice(0,3))).toBe(true);return {socket,messages}
 }
+it.skipIf(process.platform!=='win32')('default profile supplies quick preparation; empty templates reject notifications without launching and permit drafts',async()=>{
+  const root=mkdtempSync(join(tmpdir(),'rased-broker-profiles-')),db=openDatabase(join(root,'db')),sockets:Socket[]=[]
+  let settings=defaultSettings()
+  settings.quickApply={enabled:true,template:'',budgetPositionPercent:50,extraDays:1}
+  setSettingRaw(db,'app',JSON.stringify(settings))
+  const set={version:1 as const,defaultId:'0'.repeat(32),profiles:[
+    {...emptyProposalProfile(),id:'0'.repeat(32),name:'First',quickTemplate:'First template'},
+    {...emptyProposalProfile(),id:'b'.repeat(32),name:'Second',quickTemplate:'Second template'}
+  ]}
+  const publish=(next:typeof settings)=>{settings=next}
+  saveProfileSet(db,set,publish)
+  const launch=vi.fn(async()=>undefined)
+  const broker=new ExtensionBroker(db,join(root,'link'),root,()=>settings,()=>undefined,launch,'com.rased.quick_apply_unit')
+  try{
+    await broker.start();broker.setup.installed=true;broker.setup.registered=true
+    const peer=await connect(broker,broker.setup.token,'a'.repeat(32),sockets)
+    db.prepare("INSERT INTO projects(id,source,external_id,url,title,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at) VALUES(1,'mostaql','1','https://mostaql.com/project/1','Fixture','now','now','initial','now','now')").run()
+    saveProfileSet(db,{...set,defaultId:'b'.repeat(32)},publish)
+    expect(await broker.quick(1)).toEqual({ok:true})
+    await wait(()=>peer.messages.some(m=>m.type==='prepare'))
+    expect((peer.messages.find(m=>m.type==='prepare')!.settings as {template:string}).template).toBe('Second template')
+    broker.cancel()
+    saveProfileSet(db,{...set,defaultId:'b'.repeat(32),profiles:set.profiles.map(p=>({...p,quickTemplate:''}))},publish)
+    const before=peer.messages.filter(m=>m.type==='prepare').length
+    const ticket=new URL(broker.ticket(1)!).searchParams.get('ticket')!
+    expect(await broker.activate(ticket)).toEqual({ok:false,error:'text-empty'})
+    expect(await broker.quick(1)).toEqual({ok:false,error:'text-empty'})
+    expect(launch).not.toHaveBeenCalled()
+    expect(peer.messages.filter(m=>m.type==='prepare')).toHaveLength(before)
+    const ai={standingPreflight:vi.fn(),generateStanding:vi.fn()}
+    const assistant=new QuickAssistant(db,ai as unknown as AiService,broker,()=>true,()=>undefined)
+    for(const proposal of ['', ' \n\t ']){
+      saveProposalDraft(db,{projectId:1,proposal,assumptions:[],questions:[],updatedAt:new Date().toISOString()})
+      expect(await broker.quick(1,'draft')).toEqual({ok:false,error:'draft-empty'})
+      expect(await broker.quick(1,'draft',proposal)).toEqual({ok:false,error:'draft-empty'})
+      expect(await assistant.quick(1)).toEqual({ok:false,error:'draft-empty'})
+      expect(peer.messages.filter(m=>m.type==='prepare')).toHaveLength(before)
+      expect(launch).not.toHaveBeenCalled()
+    }
+    expect(ai.standingPreflight).not.toHaveBeenCalled()
+    expect(ai.generateStanding).not.toHaveBeenCalled()
+    assistant.dispose()
+    saveProposalDraft(db,{projectId:1,proposal:'Saved draft with no default template',assumptions:[],questions:[],updatedAt:new Date().toISOString()})
+    expect(await broker.quick(1,'draft')).toEqual({ok:true})
+    await wait(()=>peer.messages.filter(m=>m.type==='prepare').length===before+1)
+    expect((peer.messages.filter(m=>m.type==='prepare').at(-1)!.settings as {template:string}).template).toBe('Saved draft with no default template')
+  }finally{broker.dispose();for(const socket of sockets)socket.destroy();db.close()}
+})
 it.skipIf(process.platform!=='win32')('authenticates, isolates selected clients, ignores wrong-owner results, and cancels without accepting late results',async()=>{
   const root=mkdtempSync(join(tmpdir(),'rased-broker-unit-')),db=openDatabase(join(root,'db')),settings=defaultSettings(),sockets:Socket[]=[]
   settings.quickApply={enabled:true,template:'Private template',budgetPositionPercent:50,extraDays:1}

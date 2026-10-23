@@ -1,3 +1,4 @@
+import { validPrepare } from '../src/shared/extension/protocol.js'
 import { describe,expect,it } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../src/storage/migrations.js'
@@ -10,9 +11,10 @@ describe('quick apply values',()=>{
   it.each([[0,25],[50,37.5],[100,50]])('positions %s within the budget', (percent,price)=>expect(quickPrice(25,50,percent)).toBe(price))
   it('uses fixed budgets and rounds within valid integer limits',()=>{expect(quickPrice(25,25,100)).toBe(25);expect(quickPrice(25.2,50.2,0,1)).toBe(26);expect(quickPrice(25.2,25.8,0,1)).toBeNull()})
   it.each([[0,50,0],[50,25,0],[25,50,101],[25,50,NaN],[25,Infinity,0]])('rejects invalid budget %s %s %s',(a,b,c)=>expect(quickPrice(a,b,c)).toBeNull())
-  it('preserves old settings and requires an explicit usable template',()=>{
+  it('preserves old settings and requires an explicit usable wire template while permitting empty settings',()=>{
     expect(sanitizeSettings({language:'en'}).quickApply).toEqual(defaultQuickApply())
-    expect(validQuickApply({...defaultQuickApply(),enabled:true})).toBe(false)
+    expect(validPrepare({type:'prepare',requestId:'a'.repeat(32),source:'mostaql',externalId:'1',url:'https://mostaql.com/project/1',title:'Project',language:'en',settings:{...defaultQuickApply(),enabled:true},expiresAt:1000})).toBe(false)
+    expect(validQuickApply({...defaultQuickApply(),enabled:true})).toBe(true)
     expect(validQuickApply({...defaultQuickApply(),template:'Real proposal',enabled:true})).toBe(true)
     expect(validQuickApply({...defaultQuickApply(),extraDays:1.5})).toBe(false)
     expect(validQuickApply({...defaultQuickApply(),template:'x'.repeat(10001)})).toBe(false)

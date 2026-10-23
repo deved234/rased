@@ -59,8 +59,8 @@ export class AiService {
     return this.run(preview, false, owner)
   }
   cancelStanding(owner: string): void { if (this.active?.owner === owner) this.active.controller.abort() }
-  preview(id: number, notes: string, selection: AiSelection): ProposalPreview | null {
-    return getProposalPreview(this.db, id, notes, selection, keyStatus(this.userData, selection.provider).revision, getCapabilities(this.db, this.userData, selection))
+  preview(id: number, notes: string, selection: AiSelection, profileId?: string): ProposalPreview | null {
+    return getProposalPreview(this.db, id, notes, selection, keyStatus(this.userData, selection.provider).revision, getCapabilities(this.db, this.userData, selection), profileId)
   }
   private cancelProvider(provider: AiProviderId): void { if (this.active?.provider === provider) this.active.controller.abort(); this.catalogs.get(provider)?.abort() }
   saveKey(provider: AiProviderId, key: unknown): boolean {
@@ -96,10 +96,11 @@ export class AiService {
       finally { clearTimeout(timeout); if (this.catalogs.get(provider) === controller) this.catalogs.delete(provider) }
     })())
   }
-  generate(id: number, notes: string, fingerprint: string, selection: AiSelection): Promise<ProposalResult> {
+  generate(id: number, notes: string, fingerprint: string, selection: AiSelection, profileId?: string): Promise<ProposalResult> {
     if (this.closed) return Promise.resolve({ ok: false, error: 'cancelled' })
-    const preview = this.preview(id, notes, selection)
-    if (!preview || preview.fingerprint !== fingerprint) return Promise.resolve({ ok: false, error: 'preview-changed' })
+    const preview = this.preview(id, notes, selection, profileId)
+    if (!preview) return Promise.resolve({ ok: false, error: 'bad-request' })
+    if (preview.fingerprint !== fingerprint) return Promise.resolve({ ok: false, error: 'preview-changed' })
     return this.run(preview, false)
   }
   test(selection: AiSelection): Promise<AiOperationResult> {

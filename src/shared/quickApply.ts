@@ -4,7 +4,7 @@ export const defaultQuickApply = (): QuickApplySettings => ({ enabled: false, te
 export function validQuickApply(v: unknown): v is QuickApplySettings {
   if (!v || typeof v !== 'object') return false
   const x = v as QuickApplySettings
-  return typeof x.enabled === 'boolean' && typeof x.template === 'string' && x.template.length <= 10000 && (!x.enabled || !!x.template.trim()) && Number.isInteger(x.budgetPositionPercent) && x.budgetPositionPercent >= 0 && x.budgetPositionPercent <= 100 && Number.isInteger(x.extraDays) && x.extraDays >= 0 && x.extraDays <= 365
+  return typeof x.enabled === 'boolean' && typeof x.template === 'string' && x.template.length <= 10000 && Number.isInteger(x.budgetPositionPercent) && x.budgetPositionPercent >= 0 && x.budgetPositionPercent <= 100 && Number.isInteger(x.extraDays) && x.extraDays >= 0 && x.extraDays <= 365
 }
 export function quickPrice(min: number, max: number, percent: number, step = 0.01, base=0): number | null {
   if (![min,max,percent,step,base].every(Number.isFinite) || min <= 0 || max < min || percent < 0 || percent > 100 || step <= 0) return null
@@ -18,7 +18,7 @@ export function parseQuickTicket(raw: string): string | null {
 }
 
 export type QuickTextSource = 'draft' | 'template'
-export type QuickApplyError = 'blocked' | 'not-ready' | 'disabled' | 'busy' | 'unsupported-source' | 'invalid-project' | 'text-missing' | 'text-changed' | 'text-empty' | 'text-too-long' | 'message-too-large' | 'chrome-unavailable'
+export type QuickApplyError = 'blocked' | 'not-ready' | 'disabled' | 'busy' | 'unsupported-source' | 'invalid-project' | 'text-missing' | 'text-changed' | 'text-empty' | 'draft-empty' | 'text-too-long' | 'message-too-large' | 'chrome-unavailable'
 export type QuickApplyResult = { ok: true } | { ok: false; error: QuickApplyError }
 export type QuickAssistantResult = { ok: true } | { ok: false; error: QuickApplyError | 'consent-required' | 'no-key' | 'generation-failed' | import('./ai.js').AiError }
 export const QUICK_TEXT_MAX = 10000

@@ -1,3 +1,4 @@
+import type { ProfileSet, ProfileSetState } from './proposalProfiles.js'
 import type { AboutLink } from './about.js'
 import type { AnalyticsStatus, UiSurface } from './telemetry.js'
 import type { ExtensionStatus } from './extension/protocol.js'
@@ -77,6 +78,9 @@ export interface RasedApi {
   setQuickConsent(enabled:boolean, selection?:AiSelection):Promise<MutationResult>
   onExtensionStatus(cb:(status:ExtensionStatus)=>void):()=>void
   getProposalSetup(): Promise<{ hasKey: boolean; profile: ProposalProfile }>
+  getProfileSet(): Promise<ProfileSetState>
+  saveProfileSet(set: ProfileSet): Promise<MutationResult>
+  recoverProfileSet(): Promise<MutationResult>
   getAiSetup(): Promise<AiSetup>
   saveAiSettings(settings: AiSettings): Promise<MutationResult>
   saveAiKey(provider: AiProviderId, key: string): Promise<MutationResult>
@@ -84,8 +88,8 @@ export interface RasedApi {
   listAiModels(provider: AiProviderId): Promise<AiOperationResult>
   testAiModel(selection: AiSelection): Promise<AiOperationResult>
   saveProposalProfile(profile: ProposalProfile): Promise<MutationResult>
-  getProposalPreview(id: number, projectNotes: string, selection?: AiSelection): Promise<ProposalPreview | null>
-  generateProposal(id: number, projectNotes: string, fingerprint: string, selection?: AiSelection): Promise<ProposalResult>
+  getProposalPreview(id: number, projectNotes: string, selection?: AiSelection, profileId?: string): Promise<ProposalPreview | null>
+  generateProposal(id: number, projectNotes: string, fingerprint: string, selection?: AiSelection, profileId?: string): Promise<ProposalResult>
   cancelProposal(): Promise<void>
   getProposalDraft(id: number): Promise<ProposalDraft | null>
   saveProposalDraft(draft: ProposalDraft): Promise<MutationResult>
@@ -172,7 +176,7 @@ export interface RasedApi {
   onDetailsChanged(cb: (e: DetailsChangedEvent) => void): () => void
   onNavigate(cb: (e: NavigateEvent) => void): () => void
   onPlayBeep(cb: () => void): () => void
-  onOpenSettings(cb: () => void): () => void
+  onOpenSettings(cb: (section?: 'ai') => void): () => void
 }
 
 export type { NotifyEvent }

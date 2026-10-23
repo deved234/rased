@@ -53,22 +53,22 @@ try{
  await nav('#/saved');await shot('ar-dark-saved')
  await nav('#/filters');await shot('ar-dark-filters');await ev('document.querySelector(".settings-inner .row-actions button:nth-child(2)").click()');await wait('!!document.querySelector(".drawer")');results.checks.savedFilterEditName=await ev('document.querySelector(".drawer input[maxlength]")?.value');assert.equal(results.checks.savedFilterEditName,'تصميم وتطوير','edit filter retains its current name');await shot('ar-dark-filter-drawer');await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await sleep(100)
  for(const section of ['watching','notifications','appearance','ai','quick','data','updates','about','legal']){await nav('#/settings/'+section);await shot('ar-dark-settings-'+section)}
- await nav('#/settings/quick');await fill('#quick-template','تعديل محمي في اختبار الواجهة');await nav('#/settings/about')
- assert.equal(await ev('location.hash'),'#/settings/quick','dirty template blocks route before unmount')
+ await nav('#/settings/ai');await wait('!!document.querySelector("#profile-template")');await fill('#profile-template','تعديل محمي في اختبار الواجهة');await nav('#/settings/about')
+ assert.equal(await ev('location.hash'),'#/settings/ai','dirty template blocks route before unmount')
  await wait('!!document.querySelector(".dialog")')
  await ev('Array.from(document.querySelectorAll(".dialog button")).find(e=>e.textContent.includes("البقاء")).click()');await sleep(100)
- assert.equal(await ev('document.querySelector("#quick-template").value'),'تعديل محمي في اختبار الواجهة','cancel retains unsaved template')
+ assert.equal(await ev('document.querySelector("#profile-template").value'),'تعديل محمي في اختبار الواجهة','cancel retains unsaved template')
  await nav('#/settings/about');await ev('Array.from(document.querySelectorAll(".dialog button")).find(e=>e.textContent.includes("حفظ والمتابعة")).click()');await wait('location.hash==="#/settings/about"')
  assert.equal((await ev('window.rased.getSettings()')).quickApply.template,'تعديل محمي في اختبار الواجهة','save resumes the exact transition and persists template')
- await nav('#/settings/quick');await fill('#quick-template','تعديل سيتم تجاهله');await nav('#/settings/about');await ev('Array.from(document.querySelectorAll(".dialog button")).find(e=>e.textContent.includes("تجاهل")).click()');await wait('location.hash==="#/settings/about"')
+ await nav('#/settings/ai');await wait('!!document.querySelector("#profile-template")');await fill('#profile-template','تعديل سيتم تجاهله');await nav('#/settings/about');await ev('Array.from(document.querySelectorAll(".dialog button")).find(e=>e.textContent.includes("تجاهل")).click()');await wait('location.hash==="#/settings/about"')
  assert.equal((await ev('window.rased.getSettings()')).quickApply.template,'تعديل محمي في اختبار الواجهة','discard preserves stored template')
- await nav('#/settings/quick');await fill('#quick-template','محاولة حفظ أثناء خطأ قاعدة البيانات');await nav('#/settings/about')
+ await nav('#/settings/ai');await wait('!!document.querySelector("#profile-template")');await fill('#profile-template','محاولة حفظ أثناء خطأ قاعدة البيانات');await nav('#/settings/about')
  const lockDb=new DatabaseSync(join(profile,'rased.db'));lockDb.exec('BEGIN IMMEDIATE')
  try {
   await ev('Array.from(document.querySelectorAll(".dialog button")).find(e=>e.textContent.includes("حفظ والمتابعة")).click()')
   await wait('document.querySelector(".dialog")?.textContent.includes("تعذر الحفظ")')
-  assert.equal(await ev('location.hash'),'#/settings/quick','failed database save cannot leave the page')
-  assert.equal(await ev('document.querySelector("#quick-template").value'),'محاولة حفظ أثناء خطأ قاعدة البيانات','failed save retains every character')
+  assert.equal(await ev('location.hash'),'#/settings/ai','failed database save cannot leave the page')
+  assert.equal(await ev('document.querySelector("#profile-template").value'),'محاولة حفظ أثناء خطأ قاعدة البيانات','failed save retains every character')
  } finally {lockDb.exec('ROLLBACK');lockDb.close()}
  await ev('Array.from(document.querySelectorAll(".dialog button")).find(e=>e.textContent.includes("تجاهل")).click()');await wait('location.hash==="#/settings/about"')
  assert.equal((await ev('window.rased.getSettings()')).quickApply.template,'تعديل محمي في اختبار الواجهة','failed storage write also preserves live settings')
@@ -84,6 +84,16 @@ try{
  for(const [name,route] of [['projects','#/'],['quick','#/settings/quick'],['ai','#/settings/ai'],['proposal','#/proposal/1'],['detail','#/project/1']]){await nav(route);await shot('en-light-125-900-'+name)}
  await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.updateSettings({language:"ar",ui:{...s.ui,theme:"dark",textScale:100}})})()');await nav('#/');await shot('ar-dark-100-900-projects');await click('[data-row] article .preview-action');await shot('ar-dark-100-900-preview')
  await nav('#/settings/ai');await ev('document.querySelector("#ai-key").focus()');await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});results.checks.inputKeyboardFocusStyle=await ev('(()=>{const s=getComputedStyle(document.activeElement);return {outlineStyle:s.outlineStyle,outlineWidth:s.outlineWidth}})()');assert.notEqual(results.checks.inputKeyboardFocusStyle.outlineStyle,'none','keyboard focus indicator is visible')
+ await nav('#/settings/ai');await wait('!!document.querySelector("#profile-name")')
+ assert.ok(await ev('document.querySelector(".profile-list-card .btn.danger").disabled'),'default profile deletion is disabled')
+ await ev('document.querySelector("#profile-name").focus()');await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
+ assert.equal(await ev('document.activeElement.id'),'profile-skills','profile fields follow keyboard order')
+ for(const lang of ['ar','en']) {
+  await ev(`(async()=>{const s=await window.rased.getSettings();return window.rased.updateSettings({language:${JSON.stringify(lang)},ui:{...s.ui,textScale:125}})})()`)
+  await nav('#/settings/ai');await wait('!!document.querySelector("#profile-template")')
+  assert.ok(await ev('document.documentElement.scrollWidth<=innerWidth'),'profile editor fits 900px at 125% in '+lang)
+  await shot(lang+'-profiles-125-900')
+ }
  for (const language of ['ar','en']) for (const theme of ['dark','light']) for (const [width,height] of [[900,600],[1024,768],[1280,800],[1920,1080]]) for (const textScale of [100,125]) {
   await ev(`(async()=>{const s=await window.rased.getSettings();return window.rased.updateSettings({language:${JSON.stringify(language)},ui:{...s.ui,theme:${JSON.stringify(theme)},textScale:${textScale}}})})()`)
   await session.call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await nav('#/')
@@ -100,6 +110,21 @@ try{
  await evaluate(compact,'document.querySelector(".compact-caption input").click()');await eventually(()=>evaluate(compact,'document.querySelectorAll(".compact-list .row").length===8'))
  results.checks.compactFilter='opt-in follows display query; opt-out restores latest eight'
  await nav('#/proposal/1');await wait('!!document.querySelector(".proposal-editor")');results.checks.draftAccessibleName=await ev('(()=>{const e=document.querySelector(".proposal-editor");return {labels:e.labels.length,ariaLabel:e.getAttribute("aria-label")}})()')
+ const damagedDb=new DatabaseSync(join(profile,'rased.db'))
+ const damagedRaw='{"version":99,"preserve":"unsupported fixture"}'
+ damagedDb.prepare("INSERT INTO settings(key,value) VALUES('proposal-profiles',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(damagedRaw)
+ try {
+  await nav('#/settings/ai');await wait('!!document.querySelector(".profile-manager [role=alert]")')
+  assert.ok(await ev('document.querySelector("#profile-name").readOnly&&document.querySelector("#profile-template").readOnly'),'damaged profile set shows a read-only legacy view')
+  await ev('window.rased.updateSettings({soundEnabled:false})')
+  assert.equal(damagedDb.prepare("SELECT value FROM settings WHERE key='proposal-profiles'").get().value,damagedRaw,'unrelated IPC writes preserve the damaged set byte for byte')
+  await ev('window.confirm=()=>false;document.querySelector(".profile-manager [role=alert] button").click()')
+  assert.equal(damagedDb.prepare("SELECT value FROM settings WHERE key='proposal-profiles'").get().value,damagedRaw,'cancelling recovery preserves the raw set')
+  await ev('window.confirm=()=>true;document.querySelector(".profile-manager [role=alert] button").click()')
+  await wait('!document.querySelector(".profile-manager [role=alert]")')
+  assert.ok(!(await ev('window.rased.getProfileSet()')).error,'confirmed recovery restores an editable profile set')
+  results.checks.profileRecovery='read-only fallback, raw preservation, cancelled and confirmed recovery passed'
+ } finally {damagedDb.close()}
  assert.equal(results.checks.draftAccessibleName.ariaLabel,'Proposal draft text');assert.ok(results.screens.every(s=>s.unnamedFields.length===0),'all visible fields have programmatic names');assert.ok(results.screens.filter(s=>s.name.includes('900')).every(s=>s.outsideHorizontal.length===0),'narrow layouts keep controls within viewport');assert.ok(results.screens.every(s=>s.nestedControls===0),'opportunity articles no longer nest controls inside buttons');writeFileSync(join(output,'results.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results.checks,null,2))
 }finally{writeFileSync(join(output,'results.json'),JSON.stringify(results,null,2));session?.close();await stopApp(child)}
 await testWhatsNew()

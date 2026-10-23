@@ -161,7 +161,7 @@ export function App(): React.ReactElement {
   React.useEffect(() => rased.onRequestUpdateInstall(() => requestAction(() => { void rased.confirmUpdateInstall() })), [])
 
   React.useEffect(() => {
-    const offS = rased.onOpenSettings(() => go({ name: 'settings', section: null }))
+    const offS = rased.onOpenSettings(section => go({ name: 'settings', section: section ?? null }))
     const offN = rased.onNavigate((e) => {
       navigateHash(e.hash)
     })

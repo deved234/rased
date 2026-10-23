@@ -6,6 +6,7 @@ export function notificationsAllowed(settings: AppSettings, now = Date.now(), qu
 
 export function mergeSettings(settings: AppSettings, patch: Partial<AppSettings>): AppSettings {
   const merged = { ...patch }
+  if (patch.quickApply) merged.quickApply = { ...patch.quickApply, template: settings.quickApply.template }
   if (patch.ui) merged.ui = { ...settings.ui, ...patch.ui }
   if (patch.displayQuery) merged.displayFilter = sanitizeFilterDefinition(patch.displayQuery).categoryFilter
   const linked = patch.linkDisplayAndNotifyFilters ?? settings.linkDisplayAndNotifyFilters

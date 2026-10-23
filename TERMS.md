@@ -32,7 +32,7 @@
 
 ## مساعد العروض
 
-يمكنك طلب مسودة لمشروع مستقل من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموافقة لكل طلب يدوي، أو بنقرة التقديم السريع بمساعد العروض بعد تفعيل موافقة دائمة اختيارية للمزوّد والموديل والمفتاح الحاليين يمكن سحبها من الإعدادات. تُعاد استخدام مسودة المشروع المحفوظة دون توليد؛ راجعها في Chrome وقدّمها بنفسك. راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms .
+يمكنك طلب مسودة لمشروع مستقل من Gemini (Google) أو OpenAI أو Claude (Anthropic)، بمفتاحك واختيار موديل، بعد معاينة البيانات والموافقة لكل طلب يدوي، أو بنقرة التقديم السريع بمساعد العروض بعد تفعيل موافقة دائمة اختيارية للمزوّد والموديل والمفتاح الحاليين يمكن سحبها من الإعدادات. تُعاد استخدام مسودة المشروع المحفوظة دون توليد؛ راجعها في Chrome وقدّمها بنفسك. راجع المسودة وعدّلها قبل تقديمها بنفسك؛ قد تتضمن أخطاء أو وعودًا غير مدعومة. لا يقدم راصد عروضًا آليًا. استخدام API يخضع لشروط الشركة المختارة وصلاحيات حسابك والمنطقة والتكلفة؛ لا تمنح الميزة حقوقًا إضافية في محتوى المشاريع. شروط Gemini: https://ai.google.dev/gemini-api/terms ؛ شروط OpenAI: https://openai.com/policies/services-agreement/ ؛ شروط Anthropic: https://www.anthropic.com/legal/commercial-terms . يستخدم التوليد اليدوي الملف المهني الذي تختاره، ويستخدم التوليد بالموافقة الدائمة ملفك الافتراضي.
 
 ## الترخيص والمسؤولية
 
@@ -78,7 +78,7 @@ Information may be incomplete or stale and alerts may be delayed or missed. Chec
 
 ## Proposal Assistant
 
-Request a Mostaql draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each manual request, or by clicking Quick Apply with Assistant using optional standing consent for the current provider, model and key. Withdraw this consent in Settings. A saved project draft is reused without generation; review it in Chrome and submit it yourself. Output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
+Request a Mostaql draft from Google Gemini, OpenAI or Anthropic Claude using your own key and selected model after previewing and approving each manual request, or by clicking Quick Apply with Assistant using optional standing consent for the current provider, model and key. Withdraw this consent in Settings. Manual generation uses your selected freelancer profile; generation under standing consent uses your default profile. A saved project draft is reused without generation; review it in Chrome and submit it yourself. Output may contain mistakes or unsupported promises. RASED does not submit proposals automatically. API use follows the chosen provider’s account, region, cost and terms and grants no additional content rights. Gemini: https://ai.google.dev/gemini-api/terms ; OpenAI: https://openai.com/policies/services-agreement/ ; Anthropic: https://www.anthropic.com/legal/commercial-terms .
 
 ## License and liability
 

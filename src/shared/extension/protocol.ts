@@ -18,7 +18,7 @@ export type JobPhase = 'waiting-client' | 'opening' | 'reading' | 'ready' | 'nee
 export const phases: JobPhase[] = ['waiting-client','opening','reading','ready','needs-input','needs-login','draft-exists','failed','cancelled','expired']
 export interface PrepareJob { type:'prepare'; requestId:string; source:QuickSource; externalId:string; url:string; title:string; language:'ar'|'en'; settings:QuickApplySettings; expiresAt:number }
 export function validPrepare(v: unknown): v is PrepareJob {
-  return record(v) && v.type === 'prepare' && nonce(v.requestId) && projectDestination(v.url,v.source,v.externalId) && typeof v.title === 'string' && v.title.length <= 500 && (v.language === 'ar' || v.language === 'en') && validQuickApply(v.settings) && typeof v.expiresAt === 'number' && Number.isSafeInteger(v.expiresAt)
+  return record(v) && v.type === 'prepare' && nonce(v.requestId) && projectDestination(v.url,v.source,v.externalId) && typeof v.title === 'string' && v.title.length <= 500 && (v.language === 'ar' || v.language === 'en') && validQuickApply(v.settings) && !!v.settings.template.trim() && typeof v.expiresAt === 'number' && Number.isSafeInteger(v.expiresAt)
 }
 export interface ExtensionClient { id:string; label:string; version:string; connected:boolean; selected:boolean }
 export interface PairRequest { id:string; code:string; expiresAt:number }

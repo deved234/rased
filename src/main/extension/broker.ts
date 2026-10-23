@@ -143,7 +143,7 @@ export class ExtensionBroker {
 
     const cfg=this.settings()
     const chosenText=mode==='draft'?getProposalDraft(this.db,project.id)?.proposal:cfg.quickApply.template
-    const error=chosenText===undefined?'text-missing':!chosenText.trim()?'text-empty':mode==='draft'&&chosenText.length>QUICK_TEXT_MAX?'text-too-long':expectedText!==undefined&&chosenText!==expectedText?'text-changed':null
+    const error=chosenText===undefined?'text-missing':!chosenText.trim()?(mode==='draft'?'draft-empty':'text-empty'):mode==='draft'&&chosenText.length>QUICK_TEXT_MAX?'text-too-long':expectedText!==undefined&&chosenText!==expectedText?'text-changed':null
     if(error){updateExtensionJob(this.db,row.request_id,'failed',null,error);return {ok:false,error}}
     const message:PrepareJob={type:'prepare',requestId:row.request_id,source:project.source,externalId:project.externalId,url:project.url,title:project.title.slice(0,500),language:cfg.language,settings:{...cfg.quickApply,template:chosenText!},expiresAt:Date.now()+20000}
 

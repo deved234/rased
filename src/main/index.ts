@@ -1,3 +1,5 @@
+import { readProfileSet } from '../storage/proposalProfiles.js'
+import { validProfileId } from '../shared/proposalProfiles.js'
 import { recordStartupFailure } from './startupFailure.js'
 import { SearchService } from './search/service.js'
 import { searchReply } from '../shared/searchReply.js'
@@ -122,7 +124,7 @@ import { BrowserLauncher } from './notifications/browserLauncher.js'
 import { ensureDevelopmentComRegistration, windowsRegistrationPort } from './notifications/developmentRegistration.js'
 import { notificationActivationArguments, notificationScheme, parseNotificationActivation } from '../shared/notificationActivation.js'
 import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation } from '../storage/notificationActivations.js'
-import { getProposalProfile, saveProposalProfile } from './proposals.js'
+import { getProposalProfile, saveProposalProfile, saveProfileSet } from './proposals.js'
 import { AiService } from './ai/service.js'
 import { QuickAssistant } from './extension/quickAssistant.js'
 import { loadAppSettings } from '../storage/appSettings.js'
@@ -157,8 +159,8 @@ async function activateExtensionUrl(raw:string):Promise<void> {
   if (!applicationAccessAllowed()) { win?.show(); return }
   const result=await extension?.activate(ticket)
   if(!result||!result.ok){
-    win?.show();win?.webContents.send(IPC.openSettings)
-    if(!testHarness)void dialog.showMessageBox({type:'info',message:settings.language==='ar'?'تعذر بدء التقديم السريع. راجع ربط Chrome وإعدادات القالب، أو ابدأ من بطاقة المشروع.':'Quick Apply could not start. Check Chrome pairing and your template, or start from the project card.'})
+    win?.show();win?.webContents.send(IPC.openSettings, result && !result.ok && result.error === 'text-empty' ? 'ai' : undefined)
+    if(!testHarness)void dialog.showMessageBox({type:'info',message:result && !result.ok && result.error === 'text-empty' ? (settings.language === 'ar' ? 'أضف قالبًا للبروفايل الافتراضي أو استخدم التقديم السريع بمساعد العروض' : 'Add a template to the default profile or use Quick Apply with Assistant') : settings.language==='ar'?'تعذر بدء التقديم السريع. راجع ربط Chrome وإعدادات القالب، أو ابدأ من بطاقة المشروع.':'Quick Apply could not start. Check Chrome pairing and your template, or start from the project card.'})
   }
 }
 
@@ -367,6 +369,10 @@ function saveSettings(s: AppSettings): void {
   if(s.quickApply.enabled&&!extension?.available())s={...s,quickApply:{...s.quickApply,enabled:false}}
   // Persist first: a failed write must not change live settings or cancel work.
   if (db) setSettingRaw(db, 'app', JSON.stringify(s))
+  publishSettings(s)
+}
+
+function publishSettings(s: AppSettings): void {
   const previous = settings
   settings = s
   telemetry?.language(s.language)
@@ -1615,7 +1621,10 @@ function registerIpc(): void {
     const selection = sanitizeSelection(v?.selection)
     return mainSender(event) && selection && aiService ? aiService.test(selection) : { ok: false, error: 'bad-request' }
   })
-  ipcMain.handle(IPC.saveProposalProfile, (event, v: { profile?: unknown }) => ({ ok: !!(mainSender(event) && db && saveProposalProfile(db, v?.profile)) }))
+  ipcMain.handle(IPC.saveProposalProfile, (event, v: { profile?: unknown }) => ({ ok: !!(mainSender(event) && db && saveProposalProfile(db, v?.profile, publishSettings)) }))
+  ipcMain.handle(IPC.getProfileSet, event => mainSender(event) && db ? readProfileSet(db) : null)
+  ipcMain.handle(IPC.saveProfileSet, (event, v) => ({ ok: !!(mainSender(event) && db && saveProfileSet(db, v?.set, publishSettings)) }))
+  ipcMain.handle(IPC.recoverProfileSet, event => ({ ok: !!(mainSender(event) && db && saveProfileSet(db, null, publishSettings, true)) }))
   const selectionFor = (value: unknown) => {
     if (value !== undefined) return sanitizeSelection(value)
     const setup = aiService?.setup()
@@ -1623,12 +1632,12 @@ function registerIpc(): void {
   }
   ipcMain.handle(IPC.getProposalPreview, (event, v) => {
     const selection = selectionFor(v?.selection)
-    return mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && selection ? aiService?.preview(v.id, v.projectNotes, selection) : null
+    return mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && selection && (v?.profileId === undefined || validProfileId(v.profileId)) ? aiService?.preview(v.id, v.projectNotes, selection, v.profileId) : null
   })
   ipcMain.handle(IPC.generateProposal, async (event, v) => {
     const selection = selectionFor(v?.selection)
-    if (!(mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && typeof v?.fingerprint === 'string' && v.fingerprint.length === 64 && selection && aiService)) return { ok: false, error: 'bad-request' }
-    const result = await aiService.generate(v.id, v.projectNotes, v.fingerprint, selection)
+    if (!(mainSender(event) && proposalId(v?.id) && proposalNotes(v?.projectNotes) && typeof v?.fingerprint === 'string' && v.fingerprint.length === 64 && selection && (v?.profileId === undefined || validProfileId(v.profileId)) && aiService)) return { ok: false, error: 'bad-request' }
+    const result = await aiService.generate(v.id, v.projectNotes, v.fingerprint, selection, v.profileId)
     if (result.ok) emitProjects([], [v.id])
     return result
   })
@@ -1723,7 +1732,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.getSettings, () => settings)
   ipcMain.handle(IPC.updateSettings, (_e, patch: Partial<AppSettings>) => {
     if (!localSender(_e)) throw new Error('untrusted-sender')
-    if (patch?.quickApply !== undefined && !validQuickApply(patch.quickApply)) throw new Error('invalid-quick-apply-settings')
+    if (patch?.quickApply !== undefined && !validQuickApply({ ...patch.quickApply, template: settings.quickApply.template })) throw new Error('invalid-quick-apply-settings')
     if(patch?.quickApply?.enabled&&!extension?.available())throw Error('extension-not-paired')
     const p = (patch ?? {}) as Partial<AppSettings>
     const next = mergeSettings(settings, p)
@@ -2391,7 +2400,7 @@ async function validateSettingsImport(): Promise<ImportSummary> {
     filtersReplaced: payload.savedFilters.filter((f) => currentIds.has(f.id)).length,
     startupRequested: payload.settings.runAtStartup === true,
     startupIncluded: payload.settings.runAtStartup !== undefined,
-    profileIncluded: !!payload.proposalProfile, aiIncluded: !!payload.aiSettings, legacy: payload.version === 1
+    profileIncluded: !!payload.proposalProfiles || !!payload.proposalProfile, aiIncluded: !!payload.aiSettings, legacy: payload.version === 1
   }
 }
 

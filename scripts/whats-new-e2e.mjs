@@ -67,6 +67,7 @@ export async function testWhatsNew() {
     await wait('!document.querySelector(".analytics-consent-actions .primary").disabled')
     await ev('document.querySelector(".analytics-consent-actions .primary").click()')
     await wait('!!document.querySelector(".whats-new-dialog")')
+    check('0.11.0 includes multiple profiles within the card limit',await ev('document.querySelector(".whats-new-dialog").textContent.includes("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length>=2 && document.querySelectorAll(".whats-new-card").length<=5'))
     check('acceptance reveals the upgrade dialog over the inert workspace', await ev('!document.querySelector(".analytics-access") && document.querySelector(".app").inert && document.querySelector(".whats-new-dialog").getAttribute("aria-modal")==="true" && document.querySelector(".whats-new-dialog").getAttribute("role")==="dialog"'))
     await ev('window.rased.openCompact()')
     const compact = await pageWs(port, target => target.url.includes('compact'))

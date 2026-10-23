@@ -2,15 +2,18 @@ import React from 'react'
 import { rased } from '../api.js'
 import { useUnsavedChanges } from '../components/useUnsavedChanges.js'
 import type { Lang } from '../i18n.js'
-import { emptyProposalProfile, type ProposalProfile } from '@shared/proposals.js'
+import { sanitizeProfileSet, type ProfileSet } from '@shared/proposalProfiles.js'
+import { ProfileEditor } from '../components/ProfileEditor.js'
 
 import { AI_NAMES, aiErrorText, defaultAiSettings, sanitizeSelection, type AiSettings, type AiSetup } from '@shared/ai.js'
 import { AiModelPicker } from '../components/AiModelPicker.js'
 
 export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
   const ar = lang === 'ar'
-  const [profile, setProfile] = React.useState<ProposalProfile>(emptyProposalProfile())
-  const [savedProfile, setSavedProfile] = React.useState<ProposalProfile>(emptyProposalProfile())
+  const [profiles, setProfiles] = React.useState<ProfileSet | null>(null)
+  const [savedProfiles, setSavedProfiles] = React.useState<ProfileSet | null>(null)
+  const [profileError, setProfileError] = React.useState(false)
+  const profileDirty = JSON.stringify(profiles) !== JSON.stringify(savedProfiles)
   const [setup, setSetup] = React.useState<AiSetup | null>(null)
   const [aiSettings, setAiSettings] = React.useState<AiSettings>(defaultAiSettings())
   const [savedAiSettings, setSavedAiSettings] = React.useState<AiSettings>(defaultAiSettings())
@@ -26,14 +29,14 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
   const [showKey, setShowKey] = React.useState(false)
   React.useEffect(() => {
     let alive = true
-    void Promise.all([rased.getProposalSetup(), rased.getAiSetup()]).then(([profileSetup, ai]) => {
+    void Promise.all([rased.getProfileSet(), rased.getAiSetup()]).then(([profileSetup, ai]) => {
       if (!alive) return
-      setProfile(profileSetup.profile); setSavedProfile(profileSetup.profile)
+      setProfiles(profileSetup.set); setSavedProfiles(profileSetup.set); setProfileError(!!profileSetup.error)
       setSetup(ai); setAiSettings(ai.settings); setSavedAiSettings(ai.settings)
     }).catch(() => alive && setMessage(aiErrorText('network-error', ar)))
     return () => { alive = false; void rased.cancelProposal() }
   }, [])
-  const dirty = JSON.stringify(profile) !== JSON.stringify(savedProfile) || aiDirty || !!key
+  const dirty = profileDirty || aiDirty || !!key
   const saveAll = async (): Promise<boolean> => {
     if (busy || !setup || !sanitizeSelection(selection)) return false
     setBusy(true)
@@ -42,9 +45,7 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
       const config = await rased.saveAiSettings(aiSettings)
       if (!config.ok) return false
       setSavedAiSettings(aiSettings)
-      const result = await rased.saveProposalProfile(profile)
-      if (!result.ok) return false
-      setSavedProfile(profile)
+      if (profileDirty && !(await persistProfiles(profiles))) return false
       await reload()
       setMessage(ar ? 'تم حفظ تعديلاتك محليًا.' : 'Your changes were saved locally.')
       return true
@@ -52,7 +53,19 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
     finally { setBusy(false) }
   }
   const unsavedDialog = useUnsavedChanges(dirty, ar, saveAll)
-  const set = (field: keyof ProposalProfile, value: string): void => setProfile(p => ({ ...p, [field]: value }))
+  const persistProfiles = async (value: ProfileSet | null): Promise<boolean> => {
+    if (profileError || !sanitizeProfileSet(value)) return false
+    const result = await rased.saveProfileSet(value!)
+    if (!result.ok) { setMessage(ar ? 'تعذر حفظ الملفات المهنية.' : 'Could not save profiles.'); return false }
+    const state = await rased.getProfileSet()
+    setProfiles(state.set); setSavedProfiles(state.set); setProfileError(!!state.error)
+    setMessage(ar ? 'تم حفظ الملفات المهنية محليًا.' : 'Profiles saved locally.')
+    return true
+  }
+  const saveProfiles = (value: ProfileSet): void => {
+    setMessageSection('profile'); setBusy(true)
+    void persistProfiles(value).catch(() => setMessage(aiErrorText('network-error', ar))).finally(() => setBusy(false))
+  }
   const reload = async (): Promise<void> => setSetup(await rased.getAiSetup())
   const saveKey = async (): Promise<void> => {
     setMessageSection('key'); setBusy(true)
@@ -117,11 +130,10 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
       }} /> {ar ? 'اسمح بالتقديم السريع بمساعد العروض' : 'Allow Quick Apply with Assistant'}</label>
       {aiDirty && <p className="hint">{ar ? 'احفظ اختيار المزوّد والموديل أولًا.' : 'Save the provider and model selection first.'}</p>}
     </section>
-    <h3>{ar ? '4. ملفك المهني' : '4. Your freelancer profile'}</h3>
-    <p className="hint">{ar ? 'اكتب حقائق حقيقية فقط. تظهر في معاينة الطلب اليدوي؛ التقديم السريع يستخدمها بموافقتك الدائمة.' : 'Enter only real facts. Manual requests preview these facts; Quick Apply uses them under standing consent.'}</p>
-    {([['skills', ar ? 'المهارات' : 'Skills', 2000], ['experience', ar ? 'الخبرة' : 'Experience', 3000], ['portfolio', ar ? 'نماذج الأعمال والروابط' : 'Portfolio examples and links', 3000], ['tone', ar ? 'أسلوب العرض' : 'Proposal tone', 500]] as const).map(([field, label, max]) => <div key={field} className="proposal-field"><label htmlFor={`profile-${field}`}>{label}</label><textarea id={`profile-${field}`} disabled={busy} className="textarea" dir="auto" maxLength={max} value={profile[field]} placeholder={field === 'skills' ? 'React, TypeScript, Node.js' : field === 'experience' ? (ar ? 'اذكر خبرتك الفعلية ونوع المشروعات التي نفذتها.' : 'Describe your actual experience and completed projects.') : field === 'portfolio' ? (ar ? 'عنوان العمل، دورك فيه، ورابطه إن وجد.' : 'Project title, your contribution, and a link if available.') : (ar ? 'مثال: مختصر وواضح، مع خطوات التنفيذ.' : 'Example: concise, clear, with implementation steps.')} onChange={e => set(field, e.target.value)} /></div>)}
-    <div className="set-row"><label htmlFor="profile-language">{ar ? 'لغة العرض' : 'Proposal language'}</label><select id="profile-language" disabled={busy} className="select" value={profile.language} onChange={e => set('language', e.target.value)}><option value="ar">العربية</option><option value="en">English</option></select></div>
-    <div className="row-actions"><button className="btn primary sm" disabled={JSON.stringify(profile) === JSON.stringify(savedProfile) || busy} onClick={() => { setMessageSection('profile'); setBusy(true); void rased.saveProposalProfile(profile).then(r => { if (r.ok) setSavedProfile(profile); setMessage(r.ok ? (ar ? 'تم حفظ الملف الشخصي محليًا.' : 'Profile saved locally.') : (ar ? 'تعذر حفظ الملف الشخصي.' : 'Could not save profile.')) }).catch(() => setMessage(aiErrorText('network-error', ar))).finally(() => setBusy(false)) }}>{ar ? 'حفظ الملف الشخصي' : 'Save profile'}</button><button className="btn danger sm" disabled={busy} onClick={() => { setMessageSection('profile'); if (window.confirm(ar ? 'مسح الملف الشخصي؟' : 'Clear profile?')) { setBusy(true); void rased.saveProposalProfile(emptyProposalProfile()).then(result => { if (!result.ok) { setMessage(ar ? 'تعذر مسح الملف.' : 'Could not clear profile.'); return }; setProfile(emptyProposalProfile()); setSavedProfile(emptyProposalProfile()); setMessage(ar ? 'تم مسح الملف الشخصي.' : 'Profile cleared.') }).catch(() => setMessage(aiErrorText('network-error', ar))).finally(() => setBusy(false)) } }}>{ar ? 'مسح الملف' : 'Clear profile'}</button></div>
+    <ProfileEditor ar={ar} value={profiles} saved={savedProfiles} error={profileError} busy={busy} onChange={setProfiles} onSave={saveProfiles} onRecover={() => {
+      setBusy(true); setMessageSection('profile')
+      void rased.recoverProfileSet().then(async result => { if (!result.ok) throw Error(); const state = await rased.getProfileSet(); setProfiles(state.set); setSavedProfiles(state.set); setProfileError(!!state.error) }).catch(() => setMessage(ar ? 'تعذرت إعادة الإنشاء.' : 'Recovery failed.')).finally(() => setBusy(false))
+    }} />
 
     {message && messageSection === 'profile' && <p className="inline-feedback" role="status">{message}</p>}
     {message && messageSection === 'all' && <p className="inline-feedback" role="status">{message}</p>}

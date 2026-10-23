@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Save up to ten freelancer profiles with optional Quick Apply templates and choose one default for buttons, notifications and generation under standing consent.
+- Select another profile for an individual manual Assistant request, with a refreshed preview and renewed per-request approval. Saved drafts remain unchanged.
+- Transfer every profile with settings v3 and portable backups; preserve legacy mirrors and older-version edits without a schema change. Version 0.10.0 cannot import v3 files or profile-set backups.
+- Keep unreadable sets intact until explicit recovery, and explain empty default templates without opening Chrome.
 - Added a bilingual What's New dialog after upgrades, after startup and analytics acceptance, with keyboard dismissal, local version tracking and manual review from About settings.
 - Quick Apply prepares the template in one click; a separate Mostaql Assistant action reuses a saved draft or generates under optional, revocable provider/model/key-bound consent. Writing has progress/cancel, and notifications remain template-based. No preview dialog or per-time overrides; review and submit manually in Chrome.
 - Preparing from the Assistant saves and verifies the displayed text while the editor is locked. Concurrent drafts are preserved, failed Chrome preparation keeps generated drafts, and standing consent is excluded from exports/backups and cleared on key/selection changes, import and restore. Updated bilingual legal wording dated 2026-10-23; analytics disclosure v4 is unchanged.

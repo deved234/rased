@@ -216,7 +216,7 @@ describe('device-local standing consent portability', () => {
     }
     expect(() => parseSettingsTransfer({ ...settingsPayload(db), 'ai-quick-consent': JSON.parse(consent) })).toThrow('bad-schema')
   })
-  it('exports a 0.10.0-compatible archive, clears destination consent transactionally and rejects injected grants', async () => {
+  it('exports a portable archive, clears destination consent transactionally and rejects injected grants', async () => {
     const folder = profile(), source = database(folder); seed(source)
     setSettingRaw(source, 'ai-quick-consent', consent)
     const file = join(folder, 'standing.rased-backup')

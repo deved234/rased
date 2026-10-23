@@ -74,6 +74,17 @@ try {
     await ev('window.rased.deleteProposalDraft(1)')
   }
   await nav('#/proposal/1'); await wait('!!document.querySelector(".proposal-fields")')
+  const profileSet = (await ev('window.rased.getProfileSet()')).set
+  const extraProfile = {...profileSet.profiles[0],id:'e'.repeat(32),name:'Temporary manual profile',quickTemplate:'EXCLUDE_FROM_AI',skills:'Manual profile facts'}
+  profileSet.profiles.push(extraProfile)
+  check('multiple profiles save through typed preload',(await ev(`window.rased.saveProfileSet(${JSON.stringify(profileSet)})`)).ok)
+  await nav('#/settings/ai');await nav('#/proposal/1');await wait('!!document.querySelector(".proposal-fields")')
+  await ev('document.querySelector(".proposal-consent input").click()')
+  await select('#proposal-profile',extraProfile.id)
+  await wait('!!document.querySelector(".proposal-fields")')
+  check('profile selector refreshes facts and clears per-request approval',await ev('!document.querySelector(".proposal-consent input").checked && document.querySelector(".profile-preview").textContent.includes("Manual profile facts")'))
+  check('preload rejects invalid profile IDs',(await ev('window.rased.generateProposal(1,"","a".repeat(64),undefined,"bad-id")')).error==='bad-request')
+  await select('#proposal-profile',profileSet.defaultId);await wait('!!document.querySelector(".proposal-fields")')
   const oldPreview = await ev('window.rased.getProposalPreview(1,"")')
   const count = traces().filter(t => t.kind === 'ai-request').length
   const mismatch = await ev(`window.rased.generateProposal(1,"",${JSON.stringify(oldPreview.fingerprint)},{provider:"openai",model:"gpt-4.1-mini"})`)
@@ -108,6 +119,7 @@ try {
   send({type:'hello',clientId:'d'.repeat(32),token:null,version:'0.1.0',protocol:1});await eventually(()=>messages.some(m=>m.type==='unpaired'));send({type:'pair-request'})
   const pending=await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.pairing.length===1),pair=pending.pairing[0]
   check('AI test profile paired', (await ev(`window.rased.extensionAction(${JSON.stringify({action:'approve',id:pair.id,code:pair.code,label:'Synthetic AI profile'})})`)).ok)
+  await ev('(async()=>{const {set}=await window.rased.getProfileSet();set.profiles.find(p=>p.id===set.defaultId).quickTemplate="Synthetic template";return window.rased.saveProfileSet(set)})()')
   await ev('window.rased.updateSettings({quickApply:{enabled:true,template:"Synthetic template",budgetPositionPercent:50,extraDays:1}})')
   const beforeStanding=traces().filter(t=>t.kind==='ai-request').length
   check('standing generation and handoff complete in main', (await ev('window.rased.quickApplyAssistant(1)')).ok)

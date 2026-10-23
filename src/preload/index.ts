@@ -1,3 +1,4 @@
+import { validProfileId } from '../shared/proposalProfiles.js'
 // Preload: the ONLY bridge. Narrow, typed, no Node/SQL/fetch exposure.
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/channels.js'
@@ -51,9 +52,12 @@ const api: RasedApi = {
   deleteAiKey: (provider) => ipcRenderer.invoke(IPC.deleteAiKey, { provider }),
   listAiModels: (provider) => ipcRenderer.invoke(IPC.listAiModels, { provider }),
   testAiModel: (selection) => ipcRenderer.invoke(IPC.testAiModel, { selection }),
+  getProfileSet: () => ipcRenderer.invoke(IPC.getProfileSet),
+  saveProfileSet: (set) => ipcRenderer.invoke(IPC.saveProfileSet, { set }),
+  recoverProfileSet: () => ipcRenderer.invoke(IPC.recoverProfileSet),
   saveProposalProfile: (profile) => ipcRenderer.invoke(IPC.saveProposalProfile, { profile }),
-  getProposalPreview: (id, projectNotes, selection) => ipcRenderer.invoke(IPC.getProposalPreview, { id, projectNotes, selection }),
-  generateProposal: (id, projectNotes, fingerprint, selection) => ipcRenderer.invoke(IPC.generateProposal, { id, projectNotes, fingerprint, selection }),
+  getProposalPreview: (id, projectNotes, selection, profileId) => profileId !== undefined && !validProfileId(profileId) ? Promise.resolve(null) : ipcRenderer.invoke(IPC.getProposalPreview, { id, projectNotes, selection, profileId }),
+  generateProposal: (id, projectNotes, fingerprint, selection, profileId) => profileId !== undefined && !validProfileId(profileId) ? Promise.resolve({ ok: false, error: 'bad-request' }) : ipcRenderer.invoke(IPC.generateProposal, { id, projectNotes, fingerprint, selection, profileId }),
   cancelProposal: () => ipcRenderer.invoke(IPC.cancelProposal),
   getProposalDraft: (id) => ipcRenderer.invoke(IPC.getProposalDraft, { id }),
   saveProposalDraft: (draft) => ipcRenderer.invoke(IPC.saveProposalDraft, { draft }),
@@ -139,7 +143,7 @@ const api: RasedApi = {
   onDetailsChanged: (cb: (e: DetailsChangedEvent) => void) => sub(IPC.detailsChanged, cb),
   onNavigate: (cb: (e: NavigateEvent) => void) => sub(IPC.navigate, cb),
   onPlayBeep: (cb: () => void) => sub(IPC.playBeep, cb),
-  onOpenSettings: (cb: () => void) => sub(IPC.openSettings, cb)
+  onOpenSettings: (cb: (section?: 'ai') => void) => sub(IPC.openSettings, cb)
 }
 
 contextBridge.exposeInMainWorld('rased', api)

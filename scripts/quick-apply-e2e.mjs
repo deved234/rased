@@ -2,10 +2,10 @@
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {existsSync,readFileSync,writeFileSync,mkdirSync} from 'node:fs'
-import {join} from 'node:path'
+import {join,resolve} from 'node:path'
 import {createConnection} from 'node:net'
 import {createHash} from 'node:crypto'
-import {spawnSync} from 'node:child_process'
+import {spawn,spawnSync} from 'node:child_process'
 import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call,sleep,persistentSession} from './cdp-tools.mjs'
 const args=parseArgs(process.argv.slice(2)), profile=newProfile(),port=9366
 writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
@@ -23,12 +23,14 @@ let bridgeSocket
 const check=(name,value)=>{assert.ok(value,name);checks++;console.log('PASS '+name)}
 try {
  const ws=await pageWs(port),ev=expression=>evaluate(ws,expression)
+ const saveTemplate=text=>ev(`(async()=>{const {set}=await window.rased.getProfileSet();set.profiles.find(p=>p.id===set.defaultId).quickTemplate=${JSON.stringify(text)};return window.rased.saveProfileSet(set)})()`)
  await eventually(()=>ev("typeof window.rased?.getSettings==='function'"))
  await eventually(()=>ev("!!document.querySelector('.app') || !!document.querySelector('.analytics-access') || document.querySelector('.splash')?.dataset.phase==='ready'"))
  await ev("document.querySelector('.splash-enter')?.click()")
  await eventually(()=>ev("!!document.querySelector('.analytics-access')"))
  check('Quick Apply is unavailable before required analytics acceptance',!(await ev('window.rased.quickApplyProject(1)')).ok)
  check('Assistant and standing consent are blocked before acceptance',!(await ev('window.rased.quickApplyAssistant(1)')).ok&&!(await ev('window.rased.setQuickConsent(true,{provider:"gemini",model:"gemini-2.5-flash"})')).ok)
+ check('profile endpoints are blocked before acceptance',!(await ev('window.rased.getProfileSet()'))&&!(await ev('window.rased.recoverProfileSet()')).ok&&!(await ev('window.rased.saveProfileSet({})')).ok)
  await ev('window.rased.analyticsConsent("enable")')
  await eventually(()=>ev("!!document.querySelector('.app')"))
  const saved=await ev('window.rased.getSettings()')
@@ -39,13 +41,14 @@ try {
  check('old activation tickets invalidated',db.prepare('SELECT COUNT(*) n FROM quick_apply_tickets').get().n===0)
  check('all three source histories preserved',db.prepare('SELECT COUNT(*) n FROM projects').get().n===3)
  await ev("location.hash='#/settings/quick'")
- await eventually(()=>ev("!!document.getElementById('quick-template')"))
- check('settings show preserved template',await ev("document.getElementById('quick-template').value==='Preserved template'"))
+ await eventually(()=>ev("!!document.getElementById('quick-template-source')"))
+ check('settings show preserved template',(await ev('window.rased.getProfileSet()')).set.profiles[0].quickTemplate==='Preserved template'&&await ev("!!document.querySelector('#quick-template-source button')&&!document.querySelector('#quick-template')"))
  check('extension toggle requires pairing and embedded login is absent',await ev("!Array.from(document.querySelectorAll('button')).some(b=>/الدخول|حذف جلسة|Sign in|Delete session/.test(b.textContent)) && document.querySelector('section.set-group input[type=checkbox]').disabled"))
  check('extension setup and Khamsat exclusion disclosed',await ev("document.body.textContent.includes('خمسات غير مشمول')&&document.body.textContent.includes('تحميل إضافة غير مضغوطة')"))
  mkdirSync('.local/qa/screenshots/quick-apply',{recursive:true})
  writeFileSync('.local/qa/screenshots/quick-apply/ar-settings.png',Buffer.from((await call(ws,'Page.captureScreenshot',{format:'png'})).data,'base64'))
- await ev("window.rased.updateSettings({quickApply:{enabled:false,template:'Updated template',budgetPositionPercent:75,extraDays:2}})")
+ await saveTemplate('Updated template')
+ await ev("window.rased.updateSettings({quickApply:{enabled:false,template:'Ignored legacy template',budgetPositionPercent:75,extraDays:2}})")
  check('template settings remain editable',(await ev('window.rased.getSettings()')).quickApply.template==='Updated template')
  await ev("window.rased.updateSettings({quickApply:{enabled:true,template:'Updated template',budgetPositionPercent:75,extraDays:2}}).catch(()=>null)")
  check('legacy clients cannot re-enable the retired flow',(await ev('window.rased.getSettings()')).quickApply.enabled===false)
@@ -68,9 +71,14 @@ try {
  const pending=await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.pairing.length===1)
  const pair=pending.pairing[0]
  check('main IPC approves only the pending code',(await ev(`window.rased.extensionAction(${JSON.stringify({action:'approve',id:pair.id,code:pair.code,label:'Integration profile'})})`)).ok)
+ await saveTemplate('Integration draft')
  const cfg=await ev("window.rased.updateSettings({quickApply:{enabled:true,template:'Integration draft',budgetPositionPercent:50,extraDays:1}})")
  check('paired client enables saved template',cfg.quickApply.enabled)
 
+ const profileSet=(await ev('window.rased.getProfileSet()')).set
+ profileSet.profiles.push({...profileSet.profiles[0],id:'b'.repeat(32),name:'Default for Quick Apply',quickTemplate:'Integration draft'})
+ profileSet.defaultId='b'.repeat(32)
+ check('default profile switch publishes the template mirror',(await ev(`window.rased.saveProfileSet(${JSON.stringify(profileSet)})`)).ok&&(await ev('window.rased.getSettings()')).quickApply.template==='Integration draft')
  const prepares=()=>messages.filter(m=>m.type==='prepare')
  const finish=async()=>{
    const request=prepares().at(-1)
@@ -86,12 +94,35 @@ try {
  check('one template click prepares immediately without a dialog',prepares().at(-1).settings.template==='Integration draft'&&await ev("!document.querySelector('.quick-dialog')"))
  check('both actions disabled while preparing',await ev("document.querySelector('.quick-template-action').disabled&&document.querySelector('.quick-assistant-action').disabled"))
  await finish()
+ await saveTemplate('')
+ check('enabled settings permit an empty default template',(await ev('window.rased.getSettings()')).quickApply.enabled)
+ const emptyCount=prepares().length
+ check('empty template quick action is a precise failure',(await ev('window.rased.quickApplyProject(1)')).error==='text-empty'&&prepares().length===emptyCount)
+ const notificationTicket='f'.repeat(32),notificationRequest='c'.repeat(32)
+ db.prepare('INSERT INTO extension_jobs(ticket,request_id,project_id,expires_at,updated_at) VALUES(?,?,1,?,?)').run(notificationTicket,notificationRequest,Date.now()+60000,Date.now())
+ const notificationEnv={...process.env};delete notificationEnv.ELECTRON_RUN_AS_NODE;delete notificationEnv.ELECTRON_RENDERER_URL
+ const second=spawn(resolve(args.exe??'node_modules/electron/dist/electron.exe'),[...(args.app??(args.exe?undefined:'out/main/index.js')?[resolve(args.app??'out/main/index.js')]:[]),'--user-data-dir='+profile,'--rased-test','rased-dev://quick-apply-v2?ticket='+notificationTicket],{env:notificationEnv,windowsHide:true,stdio:'ignore'})
+ await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('notification handoff timeout')),10000);second.once('exit',()=>{clearTimeout(timeout);resolve()});second.once('error',reject)})
+ await eventually(()=>db.prepare('SELECT error FROM extension_jobs WHERE request_id=?').get(notificationRequest)?.error==='text-empty')
+ await eventually(()=>ev("location.hash==='#/settings/ai'"))
+ check('notification URL with empty default opens profile settings without prepare',prepares().length===emptyCount&&db.prepare('SELECT phase FROM extension_jobs WHERE request_id=?').get(notificationRequest).phase==='failed')
+ await ev("location.hash='#/project/1'");await eventually(()=>ev("!!document.querySelector('.quick-assistant-action')"))
+ await ev("window.rased.saveProposalDraft({projectId:1,proposal:'',assumptions:[],questions:[]})")
+ check('empty saved draft has its own direct and Assistant errors',(await ev("window.rased.quickApplyProject(1,'draft')")).error==='draft-empty'&&(await ev('window.rased.quickApplyAssistant(1)')).error==='draft-empty'&&prepares().length===emptyCount)
+ for(const [lang,message] of [['ar','العرض المحفوظ فارغ — اكتبه في مساعد العروض أو احذفه'],['en','The saved proposal is empty — write it in the Proposal Assistant or delete it']]){
+   await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)}})`)
+   await eventually(()=>ev(`document.documentElement.lang===${JSON.stringify(lang)}&&!document.querySelector('.quick-assistant-action').disabled`))
+   await clickQuick('.quick-assistant-action')
+   await eventually(()=>ev(`document.querySelector('.quick-action [role=alert]')?.textContent===${JSON.stringify(message)}`))
+   check('empty saved draft shows actionable '+lang+' advice without preparation',prepares().length===emptyCount&&db.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=1').get().proposal==='')
+ }
  await ev("window.rased.saveProposalDraft({projectId:1,proposal:'Saved exact draft',assumptions:[],questions:[]})")
  const beforeDraft=prepares().length
  await eventually(()=>ev("!document.querySelector('.quick-assistant-action').disabled"))
  await clickQuick('.quick-assistant-action')
  await eventually(()=>prepares().length>beforeDraft)
  check('Assistant reuses saved draft without a provider key or consent',prepares().at(-1).settings.template==='Saved exact draft')
+ check('saved draft succeeds with empty default template',(await ev('window.rased.getSettings()')).quickApply.template==='')
  check('draft preparation uses saved price and duration settings',prepares().at(-1).settings.budgetPositionPercent===50&&prepares().at(-1).settings.extraDays===1)
  await finish()
  const invalid=await ev("(async()=>{const out=[];for(const mode of [null,false,0,'','unknown',{}])out.push(await window.rased.quickApplyProject(1,mode));return out})()")
@@ -124,6 +155,8 @@ try {
  await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.lastJob?.phase==='opening')
  await finish()
  check('draft reuse emits no proposal_result',(await proposalEvents()).length===generatedEvents.length)
+ check('standing generation succeeds with empty default template',(await ev('window.rased.getSettings()')).quickApply.template==='')
+ await saveTemplate('Integration draft')
  writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
  // Progress and cancellation use the operation ID published by main.
  await ev('window.rased.deleteProposalDraft(1)')
@@ -180,7 +213,7 @@ try {
  await viewport.call('Emulation.clearDeviceMetricsOverride');viewport.close()
  await ev(`window.rased.updateSettings({ui:${JSON.stringify(uiBefore)}})`)
  await ev("location.hash='#/settings/quick'")
- await eventually(()=>ev("!!document.getElementById('quick-template')"))
+ await eventually(()=>ev("!!document.getElementById('quick-template-source')"))
 
  check('quick project action enters actual broker',(await ev('window.rased.quickApplyProject(1)')).ok)
  await eventually(()=>messages.some(m=>m.type==='prepare'))
