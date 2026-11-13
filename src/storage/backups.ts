@@ -87,6 +87,7 @@ export function finalizeBackup(temporary: string, appVersion: string): Inspected
 }
 
 const LEGACY_NOTIFICATION_EVENTS_SQL = "CREATE TABLE notification_events ( id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, kind TEXT NOT NULL DEFAULT 'new_project', status TEXT NOT NULL DEFAULT 'pending', session_id TEXT NULL, attempted_at TEXT NULL, batch_key TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(project_id, kind) )"
+const LEGACY_NOTIFICATION_ACTIVATIONS_SQL = 'CREATE TABLE notification_activations ( token_hash TEXT PRIMARY KEY, url TEXT NOT NULL, project_id INTEGER NULL, expires_at INTEGER NOT NULL, last_attempt_at INTEGER NULL )'
 
 let expectedSchema: Map<string, string> | null = null
 function referenceSchema(): Map<string, string> {
@@ -123,6 +124,7 @@ export function inspectBackup(file: string): InspectedBackup {
     if (version < 11) {
       for (const name of ['project_watch', 'watch_source_state', 'watch_episode', 'watch_episode_member']) expected.delete(name)
       expected.set('notification_events', LEGACY_NOTIFICATION_EVENTS_SQL)
+      if (version >= 9) expected.set('notification_activations', LEGACY_NOTIFICATION_ACTIVATIONS_SQL)
     }
     for (const item of schema) {
       if (!['table','index','trigger'].includes(item.type)) throw Error('bad-schema')

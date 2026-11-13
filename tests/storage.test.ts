@@ -90,6 +90,8 @@ describe('migrations', () => {
     expect(cols).toContain('dedupe_key')
     expect(cols).toContain('payload')
     expect(cols).toContain('episode_id')
+    const actCols = (db.prepare('PRAGMA table_info(notification_activations)').all() as { name: string }[]).map(r => r.name)
+    expect(actCols).toContain('origin')
     expect(db.prepare('PRAGMA foreign_key_check').all()).toHaveLength(0)
     expect((db.prepare('PRAGMA integrity_check').get() as Record<string, string>)['integrity_check']).toBe('ok')
   })

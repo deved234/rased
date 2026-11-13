@@ -128,7 +128,7 @@ import { NotificationActivationController } from './notifications/activation.js'
 import { BrowserLauncher } from './notifications/browserLauncher.js'
 import { ensureDevelopmentComRegistration, windowsRegistrationPort } from './notifications/developmentRegistration.js'
 import { notificationActivationArguments, notificationScheme, parseNotificationActivation } from '../shared/notificationActivation.js'
-import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation } from '../storage/notificationActivations.js'
+import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation, watchActivationTarget, type NotificationOrigin } from '../storage/notificationActivations.js'
 import { getProposalProfile, saveProposalProfile, saveProfileSet } from './proposals.js'
 import { AiService } from './ai/service.js'
 import { QuickAssistant } from './extension/quickAssistant.js'
@@ -262,12 +262,27 @@ function extensionChanged(): void {
 const activationScheme = notificationScheme(IS_PACKAGED)
 let notificationBoot = process.argv.some(arg => /^-+embedding$/i.test(arg) || !!parseNotificationActivation(arg, activationScheme))
 let nativeActivationReady = false
+function showMainWindowForWatch(): void {
+  if (testHarness) {
+    testHarness.record('watch-window', true)
+    return
+  }
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
+}
 const browserLauncher = new BrowserLauncher(url => shell.openExternal(url, { logUsage: true }))
 const notificationActivation = new NotificationActivationController(activationScheme, {
   claim: token => db?.isOpen ? claimNotificationActivation(db, token) : null,
   open: async destination => {
     if (quitRequested) return { launch: 'failed', foreground: 'not-attempted', reason: 'quitting', durationMs: 0 }
     if (!applicationAccessAllowed()) { win?.show(); return { launch: 'failed', foreground: 'not-attempted', reason: 'analytics-acceptance-required', durationMs: 0 } }
+    if (watchActivationTarget(destination, id => Boolean(db?.isOpen && getProjectById(db, id))) === 'app') {
+      showMainWindowForWatch()
+      return { launch: 'failed', foreground: 'not-attempted', reason: 'watch-project-missing', durationMs: 0 }
+    }
     if (testHarness) {
       testHarness.record('open-external', destination.url)
       return { launch: 'accepted', foreground: 'not-attempted', durationMs: 0 }
@@ -275,6 +290,10 @@ const notificationActivation = new NotificationActivationController(activationSc
     return browserLauncher.launch(destination.url)
   },
   completed: (destination, result) => {
+    if (result.reason === 'watch-project-missing') {
+      auditUi('watch-notification-project-missing')
+      return
+    }
     if (destination.projectId !== null) {
       const source = sourceForTelemetry(destination.url)
       telemetry?.record('project_open_result', { source, entry: 'notification', launch: result.launch, foreground: result.foreground, duration: durationBucket(result.durationMs) })
@@ -470,13 +489,13 @@ function projectLine(p: { title: string }): string {
 const activeNotifications = new Set<Notification>()
 const activeNotificationActivations = new Map<string, Notification>()
 
-function showToast(title: string, body: string, onClick: () => void, url: string, quickLink?:string, projectId: number | null = null): Promise<boolean> {
+function showToast(title: string, body: string, onClick: () => void, url: string, quickLink?:string, projectId: number | null = null, origin: NotificationOrigin = 'notification'): Promise<boolean> {
   const measuredSource = projectId === null ? 'unknown' : sourceForTelemetry(url)
   const measure = (kind: 'requested' | 'shown' | 'failed'): void => { if (measuredSource !== 'unknown') telemetry?.counter('notification_summary', `${measuredSource}_${kind}`) }
   measure('requested')
   let activation: string | undefined
   if (process.platform === 'win32' && nativeActivationReady && db?.isOpen) {
-    try { activation = notificationActivationArguments(issueNotificationActivation(db, { url, projectId })) }
+    try { activation = notificationActivationArguments(issueNotificationActivation(db, { url, projectId, origin })) }
     catch { auditUi('notification-ticket-unavailable') }
   }
   if (!IS_PACKAGED) quickLink = quickLink?.replace(/^rased:/, 'rased-dev:')
@@ -696,13 +715,18 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
             `${platformName} — ${projectLine(p.project)}`,
             p.text,
             () => {
+              if (watchActivationTarget({ url, projectId: id, origin: 'watch_notification' }, (pid) => Boolean(db?.isOpen && getProjectById(db, pid))) === 'app') {
+                showMainWindowForWatch()
+                return
+              }
               void openProjectById(id, true, url).then((result) => {
                 if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
               })
             },
             url,
             undefined,
-            id
+            id,
+            'watch_notification'
           )
         },
         sendSummary: (p) => {
@@ -717,6 +741,10 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
             lines.join('\n'),
             () => {
               if (first) {
+                if (watchActivationTarget({ url: first.url, projectId: first.id, origin: 'watch_notification' }, (pid) => Boolean(db?.isOpen && getProjectById(db, pid))) === 'app') {
+                  showMainWindowForWatch()
+                  return
+                }
                 void openProjectById(first.id, true, first.url).then((result) => {
                   if (!result.ok) auditUi(`notification-browser-failed id=${first.id} ${result.error}`)
                 })
@@ -727,7 +755,8 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
             },
             first?.url ?? MOSTAQL_PROJECTS_URL,
             undefined,
-            first?.id ?? null
+            first?.id ?? null,
+            'watch_notification'
           )
         },
         eligible: (event, p) =>

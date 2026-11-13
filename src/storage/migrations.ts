@@ -307,6 +307,7 @@ const MIGRATIONS: string[] = [
   DROP TABLE notification_events;
   ALTER TABLE notification_events_v11 RENAME TO notification_events;
   CREATE INDEX idx_notify_status ON notification_events(status);
+  ALTER TABLE notification_activations ADD COLUMN origin TEXT NOT NULL DEFAULT 'notification';
   `
 ]
 

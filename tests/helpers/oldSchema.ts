@@ -10,6 +10,8 @@ export function removeSearchSchema(db: DatabaseSync): void {
 /** Downgrade an open archive database from schema 11 to schema 10 shape. */
 export function downgradeToSchema10(db: DatabaseSync): void {
   db.exec('DROP TABLE IF EXISTS watch_episode_member; DROP TABLE IF EXISTS watch_episode; DROP TABLE IF EXISTS watch_source_state; DROP TABLE IF EXISTS project_watch;')
+  const hasOrigin = (db.prepare('PRAGMA table_info(notification_activations)').all() as { name: string }[]).some(c => c.name === 'origin')
+  if (hasOrigin) db.exec('ALTER TABLE notification_activations DROP COLUMN origin;')
   const hasSeq = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'").get()
   const oldSeq = hasSeq ? (db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get() as { seq: number } | undefined)?.seq : undefined
   db.exec(`
