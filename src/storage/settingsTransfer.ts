@@ -16,6 +16,7 @@ export const TRANSFER_SETTINGS_KEYS = [
   'khamsatEnabled', 'khamsatNotificationsEnabled', 'khamsatKeywordsAny', 'khamsatExcludeKeywords',
   'nafezlyEnabled', 'nafezlyNotificationsEnabled', 'nafezlyKeywordsAny', 'nafezlyExcludeKeywords',
   'kafEnabled', 'kafNotificationsEnabled', 'kafKeywordsAny', 'kafExcludeKeywords',
+  'watchNotifyStatus', 'watchNotifyContactSure', 'watchNotifyContactMaybe',
   'notifyFilter', 'displayFilter', 'displayQuery', 'linkDisplayAndNotifyFilters',
   'notifyUncertainCategory', 'showUnreadOnly', 'quickApply', 'ui'
 ] as const satisfies readonly (keyof AppSettings)[]

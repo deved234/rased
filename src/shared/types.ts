@@ -77,6 +77,9 @@ export interface AppSettings {
   nafezlyNotificationsEnabled: boolean
   nafezlyKeywordsAny: string[]
   nafezlyExcludeKeywords: string[]
+  watchNotifyStatus: boolean
+  watchNotifyContactSure: boolean
+  watchNotifyContactMaybe: boolean
   soundEnabled: boolean
   runAtStartup: boolean
   /** filter used for notifications */
@@ -300,6 +303,9 @@ export function defaultSettings(): AppSettings {
     nafezlyNotificationsEnabled: true,
     nafezlyKeywordsAny: [],
     nafezlyExcludeKeywords: [],
+    watchNotifyStatus: true,
+    watchNotifyContactSure: true,
+    watchNotifyContactMaybe: true,
     soundEnabled: true,
     runAtStartup: false,
     notifyFilter: defaultCategoryFilter(),
@@ -376,6 +382,9 @@ export function sanitizeSettings(input: unknown): AppSettings {
     nafezlyNotificationsEnabled: o['nafezlyNotificationsEnabled'] !== false,
     nafezlyKeywordsAny: stringList(o['nafezlyKeywordsAny']),
     nafezlyExcludeKeywords: stringList(o['nafezlyExcludeKeywords']),
+    watchNotifyStatus: o['watchNotifyStatus'] !== false,
+    watchNotifyContactSure: o['watchNotifyContactSure'] !== false,
+    watchNotifyContactMaybe: o['watchNotifyContactMaybe'] !== false,
     soundEnabled: typeof o['soundEnabled'] === 'boolean' ? o['soundEnabled'] : true,
     runAtStartup: typeof o['runAtStartup'] === 'boolean' ? o['runAtStartup'] : false,
     notifyFilter: sanitizeFilter(o['notifyFilter']),

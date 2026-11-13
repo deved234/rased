@@ -77,6 +77,7 @@ import {
   listClassificationWaits,
   listDiagnostics,
   listEventsByStatus,
+  listPendingWatchEvents,
   listSavedFilters,
   markAllRead,
   markEnrichmentPending,
@@ -118,6 +119,9 @@ import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './poli
 import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
+import { WATCH_ENABLED } from '../shared/projectWatch.js'
+import { dispatchWatchPending } from './watchNotifier.js'
+import { watchSummaryTitle } from '../shared/watchNotificationText.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 import { browserToastXml, supportsUrgentToasts } from './toast.js'
 import { NotificationActivationController } from './notifications/activation.js'
@@ -647,6 +651,12 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
           detail: `DND until ${settings.doNotDisturbUntil}`
         })
       }
+      if (WATCH_ENABLED) {
+        const watchPend = listPendingWatchEvents(d)
+        if (watchPend.length > 0) {
+          markEvents(d, watchPend.map((p) => p.id), 'suppressed', null, nowIso)
+        }
+      }
       return
     }
     saveSettings({ ...settings, doNotDisturbUntil: null })
@@ -673,7 +683,79 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
       onBeep: () => { if (notificationAllowed() && settings.soundEnabled) { testHarness?.record('beep', true); win?.webContents.send(IPC.playBeep) } }
     }
   )
-  if (out.singles > 0 || out.summaries > 0 || out.skipped > 0) emitProjects([], [])
+  let watchHappened = false
+  if (WATCH_ENABLED) {
+    const watchOut = await dispatchWatchPending(
+      d,
+      { sessionId, nowIso, lang: settings.language },
+      {
+        sendSingle: (p) => {
+          const platformName = SOURCES.find((s) => s.id === p.project.source)?.[settings.language] ?? 'RASED'
+          const { id, url } = p.project
+          return showToast(
+            `${platformName} — ${projectLine(p.project)}`,
+            p.text,
+            () => {
+              void openProjectById(id, true, url).then((result) => {
+                if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
+              })
+            },
+            url,
+            undefined,
+            id
+          )
+        },
+        sendSummary: (p) => {
+          const lang = settings.language
+          const lines = p.projects.slice(0, 3).map((x) => `• ${projectLine(x)}`)
+          if (p.projects.length > 3) {
+            lines.push(lang === 'ar' ? `و ${p.projects.length - 3} أخرى…` : `and ${p.projects.length - 3} more…`)
+          }
+          const first = p.projects[0]
+          return showToast(
+            watchSummaryTitle(p.projects.length, lang),
+            lines.join('\n'),
+            () => {
+              if (first) {
+                void openProjectById(first.id, true, first.url).then((result) => {
+                  if (!result.ok) auditUi(`notification-browser-failed id=${first.id} ${result.error}`)
+                })
+                return
+              }
+              if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
+              else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch((err) => auditUi(`summary-browser-failed ${String(err)}`))
+            },
+            first?.url ?? MOSTAQL_PROJECTS_URL,
+            undefined,
+            first?.id ?? null
+          )
+        },
+        eligible: (event, p) =>
+          notificationAllowed()
+          && getUserState(d, p.id).hiddenAt === null
+          && (p.source === 'mostaql'
+            ? settings.mostaqlEnabled && settings.mostaqlNotificationsEnabled
+            : p.source === 'nafezly'
+            ? settings.nafezlyEnabled && settings.nafezlyNotificationsEnabled
+            : p.source === 'kaf'
+            ? settings.kafEnabled && settings.kafNotificationsEnabled
+            : false)
+          && (event.kind === 'watch_status'
+            ? settings.watchNotifyStatus
+            : event.attribution === 'sure'
+            ? settings.watchNotifyContactSure
+            : settings.watchNotifyContactMaybe),
+        onBeep: () => {
+          if (notificationAllowed() && settings.soundEnabled) {
+            testHarness?.record('beep', true)
+            win?.webContents.send(IPC.playBeep)
+          }
+        }
+      }
+    )
+    if (watchOut.results.length > 0) watchHappened = true
+  }
+  if (out.singles > 0 || out.summaries > 0 || out.skipped > 0 || watchHappened) emitProjects([], [])
 }
 
 // ---------------------------------------------------------------- collector loop

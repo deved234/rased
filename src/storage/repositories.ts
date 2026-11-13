@@ -380,6 +380,21 @@ export function listEventsByStatus(db: Db, status: NotifyEventStatus): NotifyEve
   return db.prepare("SELECT id, project_id, kind, status, session_id, batch_key FROM notification_events WHERE status = ? AND kind = 'new_project' ORDER BY id ASC;").all(status) as unknown as NotifyEventRow[]
 }
 
+export interface WatchEventRow {
+  id: number
+  project_id: number
+  kind: 'watch_status' | 'watch_contact'
+  payload: string | null
+}
+
+export function listPendingWatchEvents(db: Db): WatchEventRow[] {
+  return db
+    .prepare(
+      "SELECT id, project_id, kind, payload FROM notification_events WHERE status = 'pending' AND kind IN ('watch_status', 'watch_contact') AND episode_id IS NULL ORDER BY id ASC;"
+    )
+    .all() as unknown as WatchEventRow[]
+}
+
 export function getEventsByIds(db: Db, ids: number[]): NotifyEventRow[] {
   if (ids.length === 0) return []
   return db.prepare(`SELECT id, project_id, kind, status, session_id, batch_key FROM notification_events WHERE id IN (${ids.map(() => '?').join(',')});`).all(...ids) as unknown as NotifyEventRow[]
