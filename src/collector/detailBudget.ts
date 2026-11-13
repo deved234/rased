@@ -1,5 +1,10 @@
+export interface DetailSlot {
+  claim(now: number): boolean
+  release(): void
+}
+
 /** One host-wide HTML request slot shared by metadata and full descriptions. */
-export class DetailBudget {
+export class DetailBudget implements DetailSlot {
   private busy = false
   private lastStart = -Infinity
   constructor(private readonly gapMs = 2000) {}

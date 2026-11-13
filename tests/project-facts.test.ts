@@ -104,4 +104,32 @@ describe('Facts cache and fetching', () => {
     expect(projectFacts(db, 1)).toMatchObject({ budgetMin: 10, durationDays: 1, status: 'failed', errorCode: 'http-429' })
     await f.close()
   })
+  it('uses an injected DetailSlot stub (claim and release called) instead of default budget', async () => {
+    const db = database(); let requests = 0
+    let claimed = 0
+    let released = 0
+    const stubSlot = {
+      claim(): boolean {
+        claimed++
+        return true
+      },
+      release(): void {
+        released++
+      }
+    }
+    const f = new ProjectFactsFetcher({
+      db: () => db,
+      gateOpen: () => true,
+      budget: stubSlot,
+      settled: () => {},
+      failure: () => {},
+      fetchImpl: (async () => { requests++; return response(nafezly) }) as typeof fetch
+    })
+    f.request(1)
+    await f.pump()
+    expect(claimed).toBe(1)
+    expect(released).toBe(1)
+    expect(requests).toBe(1)
+    await f.close()
+  })
 })

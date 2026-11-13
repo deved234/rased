@@ -3,9 +3,10 @@
 // breadcrumb category link, JSON-LD occupationalCategory, skill tag links,
 // budget range — and validated. Never invents a category from keywords.
 import { parseRetryAfterMs } from './rss.js'
-import { DetailBudget } from './detailBudget.js'
+import { DetailBudget, type DetailSlot } from './detailBudget.js'
 import { parseProjectFacts } from './projectFacts.js'
 import type { ProjectFactValues } from '../shared/projectFacts.js'
+import { isPrivateProjectPage } from './projectWatch.js'
 
 export interface EnrichmentData {
   facts?: ProjectFactValues | null
@@ -123,7 +124,7 @@ export function parseDetail(html: string): EnrichmentData {
   return { categorySlug, categoryName, categoryConfirmed: confirmed, skills, budgetMin: facts?.budgetMin ?? budgetMin, budgetMax: facts?.budgetMax ?? budgetMax, currency: facts?.currency ?? currency, budgetRaw: facts?.budgetRaw ?? budgetRaw, facts }
 }
 
-export type DetailFetchKind = 'timeout' | 'cancelled' | 'http' | 'network' | 'too_large' | 'invalid_content'
+export type DetailFetchKind = 'timeout' | 'cancelled' | 'http' | 'network' | 'too_large' | 'invalid_content' | 'private'
 
 export interface DetailFetchResult {
   ok: boolean
@@ -162,6 +163,54 @@ export async function fetchDetail(
       })
     if (!res.ok) {
       const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'), Date.now())
+      if (opts.source === 'nafezly' && res.status === 403) {
+        let isPrivate = false
+        const reader = res.body?.getReader()
+        if (reader) {
+          let finished = false
+          try {
+            const chunks: Uint8Array[] = []
+            let total = 0
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) {
+                finished = true
+                break
+              }
+              if (value) {
+                total += value.byteLength
+                if (total > 512 * 1024) break
+                chunks.push(value)
+              }
+            }
+            if (finished) {
+              const buf = new Uint8Array(total)
+              let off = 0
+              for (const c of chunks) {
+                buf.set(c, off)
+                off += c.byteLength
+              }
+              const html = new TextDecoder('utf-8', { fatal: false }).decode(buf)
+              if (isPrivateProjectPage(html, 'nafezly')) {
+                isPrivate = true
+              }
+            }
+          } catch {
+            /* Any failure while reading or classifying keeps the 403 verdict. */
+          } finally {
+            if (!finished) {
+              void reader.cancel().catch(() => {})
+            }
+            try {
+              reader.releaseLock()
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        if (isPrivate) return { ok: false, kind: 'private', status: 403 }
+        return { ok: false, kind: 'http', status: 403, retryAfterMs }
+      }
       return { ok: false, kind: 'http', status: res.status, retryAfterMs }
     }
     if (res.url && new URL(res.url).origin !== origin) return { ok: false, kind: 'invalid_content' }
@@ -211,7 +260,7 @@ export interface EnrichmentJob {
 }
 
 export interface EnrichmentQueueDeps {
-  budget?: DetailBudget
+  budget?: DetailSlot
   fetchImpl?: typeof fetch
   nowMs?: () => number
   /** false pauses the queue (app paused, backing off) without dropping jobs */

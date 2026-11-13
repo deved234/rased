@@ -5,14 +5,14 @@ import type { Db } from '../storage/db.js'
 import { getProjectById, getProjectDetailsRow, upsertProjectDetails } from '../storage/repositories.js'
 import type { ProjectDetails } from '../shared/types.js'
 import { fetchDetail, parseDetail, type EnrichmentData, type DetailFetchKind } from '../collector/enrichment.js'
-import { DetailBudget } from '../collector/detailBudget.js'
+import { DetailBudget, type DetailSlot } from '../collector/detailBudget.js'
 import { parseProjectBody } from '../collector/projectBody.js'
 import { markFacts, saveFetchedFacts } from '../storage/projectFacts.js'
 
 export const DETAILS_TTL_MS = 24 * 60 * 60 * 1000
 
 export interface DetailsFetcherDeps {
-  budget?: DetailBudget
+  budget?: DetailSlot
   onMetadata?: (projectId: number, data: EnrichmentData) => void
   fetchImpl?: typeof fetch
   nowMs?: () => number

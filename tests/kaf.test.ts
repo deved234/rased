@@ -10,7 +10,9 @@ import { isAllowedProjectUrl, resolveProjectUrl } from '../src/main/links.js'
 import { defaultFilterDefinition, defaultSettings, sanitizeFilterDefinition, sanitizeSettings } from '../src/shared/types.js'
 import { mergeSettings } from '../src/main/policies.js'
 import { openDatabase, type Db } from '../src/storage/db.js'
-import { getProjectById, getProjectDetailsRow, getSettingRaw, getSourceState, listEventsByStatus, purgeHistory, queryProjectsPage, setSettingRaw } from '../src/storage/repositories.js'
+import { getProjectById, getProjectDetailsRow, getSettingRaw, getSourceState, listEventsByStatus, purgeHistory, queryProjectsPage, saveSourceState, setSettingRaw } from '../src/storage/repositories.js'
+import { SourceArbiter } from '../src/collector/sourceArbiter.js'
+import type { WatchSlotProvider } from '../src/main/projectWatcher.js'
 
 const list = readFileSync('tests/fixtures/kaf-list.html', 'utf8')
 const detail = readFileSync('tests/fixtures/kaf-detail.html', 'utf8')
@@ -188,5 +190,260 @@ describe('KAF scheduler and on-demand detail wiring', () => {
     await c.close()
     expect(f).toHaveBeenCalledTimes(1)
     expect(getProjectDetailsRow(db, 1)).toMatchObject({ text: null, status: 'not_requested', errorCode: 'interrupted' })
+  })
+})
+
+describe('KAF watch slot arbiter', () => {
+  const controller = (fetchImpl: typeof fetch, settings = defaultSettings()): KafController => new KafController({ db: () => db, settings: () => settings, health: () => {}, projects: () => {}, details: () => {}, flush: async () => {}, runId: 'test', fetchImpl, random: () => 0 })
+
+  it('denies watch claim for each individual condition and grants at the 2500ms boundary', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(100000); database()
+
+    // Condition: next poll null
+    const cNull = controller(async () => htmlResponse(page([300])))
+    expect(cNull.watchSlot().claim('watch')).toBeNull()
+
+    // Condition: unavailable - closed
+    const cClosed = controller(async () => htmlResponse(page([300])))
+    await cClosed.poll()
+    await cClosed.close()
+    expect(cClosed.watchSlot().claim('watch')).toBeNull()
+
+    // Condition: unavailable - sleeping
+    const cSleep = controller(async () => htmlResponse(page([300])))
+    await cSleep.poll()
+    cSleep.sleep()
+    expect(cSleep.watchSlot().claim('watch')).toBeNull()
+    await cSleep.close()
+
+    // Condition: unavailable - paused
+    const cPaused = controller(async () => htmlResponse(page([300])))
+    await cPaused.poll()
+    cPaused.setPaused(true)
+    expect(cPaused.watchSlot().claim('watch')).toBeNull()
+    await cPaused.close()
+
+    // Condition: unavailable - kafEnabled false
+    const cDisabled = controller(async () => htmlResponse(page([300])), { ...defaultSettings(), kafEnabled: false })
+    expect(cDisabled.watchSlot().claim('watch')).toBeNull()
+    await cDisabled.close()
+
+    // Condition: unavailable - no db
+    const cNoDb = new KafController({ db: () => null, settings: () => defaultSettings(), health: () => {}, projects: () => {}, details: () => {}, flush: async () => {}, runId: 'test', random: () => 0 })
+    expect(cNoDb.watchSlot().claim('watch')).toBeNull()
+
+    // Condition: unavailable - accessAllowed false
+    const cNoAccess = new KafController({ db: () => db, settings: () => defaultSettings(), accessAllowed: () => false, health: () => {}, projects: () => {}, details: () => {}, flush: async () => {}, runId: 'test', random: () => 0 })
+    expect(cNoAccess.watchSlot().claim('watch')).toBeNull()
+    await cNoAccess.close()
+
+    // Condition: poll in progress
+    const cPollDb = database()
+    saveSourceState(cPollDb, { ...getSourceState(cPollDb, 'kaf'), baselineComplete: true })
+    let finishPoll!: () => void
+    const pollGate = new Promise<Response>(res => { finishPoll = () => res(htmlResponse(page([300]))) })
+    const cPoll = controller(async () => pollGate)
+    const pollWork = cPoll.poll()
+    expect(cPoll.watchSlot().claim('watch')).toBeNull()
+    finishPoll()
+    await pollWork
+    await cPoll.close()
+
+    // Condition: detail in progress
+    database()
+    applyKafCycle(db, parseKafList(list), opts(100000))
+    let finishDetail!: () => void
+    const detailGate = new Promise<Response>(res => { finishDetail = () => res(htmlResponse(detail)) })
+    const cDetail = controller(async url => {
+      if (String(url).includes('/project/')) {
+        return detailGate
+      }
+      return htmlResponse(page([300]))
+    })
+    await cDetail.poll()
+    cDetail.requestDetails(1, true)
+    await Promise.resolve()
+    expect(cDetail.watchSlot().claim('watch')).toBeNull()
+    finishDetail()
+    await vi.advanceTimersByTimeAsync(0)
+    await cDetail.close()
+
+    // Condition: queue not empty
+    const cQueue = controller(async () => htmlResponse(page([300])))
+    await cQueue.poll()
+    ;(cQueue as unknown as { queue: number[] }).queue.push(99)
+    expect(cQueue.watchSlot().claim('watch')).toBeNull()
+    ;(cQueue as unknown as { queue: number[] }).queue.pop()
+    await cQueue.close()
+
+    // Condition: cooldown
+    const cCooldown = controller(async () => htmlResponse(page([300])))
+    await cCooldown.poll()
+    cCooldown.applyWatchBlock(429, 60000)
+    expect(cCooldown.watchSlot().claim('watch')).toBeNull()
+    await cCooldown.close()
+
+    // Conditions: watch gap, watch already active, detail gap, and boundary 2500ms
+    // random: () => 10 gives interval = 5000 + 10 * 1000 = 15000 ms (next poll at 100000 + 15000 = 115000)
+    vi.setSystemTime(100000)
+    database()
+    applyKafCycle(db, parseKafList(list), opts(100000))
+    const cTiming = new KafController({ db: () => db, settings: () => defaultSettings(), health: () => {}, projects: () => {}, details: () => {}, flush: async () => {}, runId: 'test', fetchImpl: async url => htmlResponse(String(url).includes('/project/') ? detail : page([300])), random: () => 10 })
+    await cTiming.poll() // poll completed at 100000, next scheduled at 115000
+
+    // Condition: watch already active
+    const slot = cTiming.watchSlot().claim('watch')
+    expect(slot).not.toBeNull()
+    expect(cTiming.watchSlot().claim('watch')).toBeNull() // denied while active
+    slot!.release() // watchFinished = 100000
+
+    // Condition: watch gap (now - watchFinished < 5000)
+    vi.setSystemTime(104999) // gap 4999 ms, next is 115000 - 104999 = 10001 >= 2500
+    expect(cTiming.watchSlot().claim('watch')).toBeNull()
+
+    vi.setSystemTime(105000) // gap 5000 ms, next is 115000 - 105000 = 10000 >= 2500
+    const slotAfterGap = cTiming.watchSlot().claim('watch')
+    expect(slotAfterGap).not.toBeNull()
+    slotAfterGap!.release() // watchFinished = 105000
+
+    // Condition: detail gap (now - detailFinished < 5000)
+    vi.setSystemTime(110000) // watch gap is 5000 ms
+    cTiming.requestDetails(1, true)
+    await vi.advanceTimersByTimeAsync(0) // detail finishes at 110000 (detailFinished = 110000)
+
+    vi.setSystemTime(114999) // detail gap 4999 ms
+    expect(cTiming.watchSlot().claim('watch')).toBeNull()
+
+    // Conditions: boundary 2500ms (closer than 2.5s denied, exactly 2.5s granted)
+    // Run next poll at 120000 with interval 15000 ms -> next poll scheduled at 135000
+    vi.setSystemTime(120000)
+    await cTiming.poll() // finishes at 120000, next scheduled at 135000 (detailFinished=110000, watchFinished=105000)
+
+    // At 132501: next - now = 135000 - 132501 = 2499 ms (< 2500) -> denied
+    vi.setSystemTime(132501)
+    expect(cTiming.watchSlot().claim('watch')).toBeNull()
+
+    // At 132500: next - now = 135000 - 132500 = 2500 ms (>= 2500) -> granted (boundary 2500 ms)
+    vi.setSystemTime(132500)
+    const slotBoundary = cTiming.watchSlot().claim('watch')
+    expect(slotBoundary).not.toBeNull()
+    slotBoundary!.release()
+
+    await cTiming.close()
+  })
+
+  it('preempts an active watch when poll starts, and later release is harmless', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(100000); database()
+    const c = controller(async () => htmlResponse(page([300])))
+    await c.poll()
+
+    const onPreempt = vi.fn()
+    const slot = c.watchSlot().claim('watch', onPreempt)
+    expect(slot).not.toBeNull()
+
+    // Poll at 105000 starts
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(onPreempt).toHaveBeenCalledTimes(1)
+    expect(getSourceState(db, 'kaf').baselineComplete).toBe(true)
+
+    // Harmless later release
+    expect(() => slot!.release()).not.toThrow()
+    expect(() => slot!.release({ ok: false })).not.toThrow()
+    expect(onPreempt).toHaveBeenCalledTimes(1)
+    await c.close()
+  })
+
+  it('waits for active watch before starting detail, and respects 5s gap after watch release', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(100000); database()
+    applyKafCycle(db, parseKafList(list), opts(100000))
+    let detailFetched = false
+    const f = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('/project/')) {
+        detailFetched = true
+        return htmlResponse(detail)
+      }
+      return htmlResponse(page([300]))
+    })
+    const c = controller(f)
+    await c.poll()
+    expect(f).toHaveBeenCalledTimes(1)
+
+    const slot = c.watchSlot().claim('watch')
+    expect(slot).not.toBeNull()
+
+    const ret = c.requestDetails(1, false)
+    await Promise.resolve()
+    expect(detailFetched).toBe(false)
+    expect(ret?.status).toBe('loading')
+    expect(c.isDetailsPending(1)).toBe(true)
+    expect(getProjectDetailsRow(db, 1).status).toBe('not_requested')
+
+    slot!.release()
+    await Promise.resolve()
+    expect(detailFetched).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(detailFetched).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(detailFetched).toBe(true)
+    expect(getProjectDetailsRow(db, 1).status).toBe('ready')
+    await c.close()
+  })
+
+  it('applyWatchBlock sets source cooldown and state identically to detail blocks', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(100000); database()
+
+    const c403 = controller(async () => htmlResponse(page([300])))
+    await c403.poll()
+    c403.applyWatchBlock(403, null)
+    const state403 = getSourceState(db, 'kaf')
+    expect(state403.lastError).toBe('kaf-forbidden-403')
+    expect(state403.consecutiveFailures).toBe(1)
+    expect(Date.parse(state403.backoffUntil!)).toBe(100000 + 300000)
+    expect(c403.health().state).toBe('needs-review')
+    await c403.close()
+
+    database()
+    const c429 = controller(async () => htmlResponse(page([300])))
+    await c429.poll()
+    c429.applyWatchBlock(429, 120000)
+    const state429 = getSourceState(db, 'kaf')
+    expect(state429.lastError).toBe('kaf-rate_limited-429')
+    expect(state429.consecutiveFailures).toBe(1)
+    expect(Date.parse(state429.backoffUntil!)).toBe(100000 + 120000)
+    expect(c429.health().state).toBe('backing-off')
+    await c429.close()
+  })
+
+  it('calls onPreempt on sleep and close, and denies subsequent watch claims', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(100000); database()
+    const c = controller(async () => htmlResponse(page([300])))
+    await c.poll()
+
+    const onPreemptSleep = vi.fn()
+    const slot1 = c.watchSlot().claim('watch', onPreemptSleep)
+    expect(slot1).not.toBeNull()
+    c.sleep()
+    expect(onPreemptSleep).toHaveBeenCalledTimes(1)
+    expect(c.watchSlot().claim('watch')).toBeNull()
+
+    c.wake()
+    vi.setSystemTime(106000)
+    await c.poll()
+
+    const onPreemptClose = vi.fn()
+    const slot2 = c.watchSlot().claim('watch', onPreemptClose)
+    expect(slot2).not.toBeNull()
+    await c.close()
+    expect(onPreemptClose).toHaveBeenCalledTimes(1)
+    expect(c.watchSlot().claim('watch')).toBeNull()
+  })
+
+  it('SourceArbiter satisfies WatchSlotProvider structurally', () => {
+    const arbiter = new SourceArbiter({ now: () => 0, minGapMs: 1000 })
+    const provider: WatchSlotProvider = arbiter
+    expect(provider.claim).toBeTypeOf('function')
   })
 })

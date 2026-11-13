@@ -9,6 +9,7 @@ import { initialSchedulerState, noteFailure } from '../collector/scheduler.js'
 import { monitoringState } from '../shared/monitoring.js'
 import { monitoringFields } from '../storage/monitoring.js'
 import { markFacts, saveFetchedFacts } from '../storage/projectFacts.js'
+import type { WatchSlotProvider } from './projectWatcher.js'
 
 interface Deps {
   db: () => Db | null
@@ -41,6 +42,8 @@ export class KafController {
   private detailFinished = 0
   private duration: number | null = null
   private count: number | null = null
+  private watchActive: { onPreempt?: () => void } | null = null
+  private watchFinished = 0
   constructor(private readonly deps: Deps) {}
   private now(): number { return this.deps.now?.() ?? Date.now() }
   private available(): boolean { return (this.deps.accessAllowed?.() ?? true) && !this.closed && !this.sleeping && !this.paused && this.deps.settings().kafEnabled && !!this.deps.db() }
@@ -58,7 +61,15 @@ export class KafController {
   settingsChanged(): void { if (!this.available()) this.cancel(); else if (!this.timer && !this.work) this.schedule(); this.emit() }
   sleep(): void { this.sleeping = true; this.cancel() }
   wake(): void { this.sleeping = false; this.schedule(2000) }
-  private cancel(): void { if (this.timer) clearTimeout(this.timer); this.timer = null; this.next = null; this.abort?.abort(); this.detailAbort?.abort(); this.queue = [] }
+  private cancel(): void {
+    if (this.timer) clearTimeout(this.timer); this.timer = null; this.next = null; this.abort?.abort(); this.detailAbort?.abort(); this.queue = []
+    if (this.watchActive) {
+      const active = this.watchActive
+      this.watchActive = null
+      this.watchFinished = this.now()
+      try { active.onPreempt?.() } catch { /* ignore */ }
+    }
+  }
   async close(): Promise<void> { this.closed = true; this.cancel(); await Promise.allSettled([this.work, this.detailWork].filter(Boolean) as Promise<void>[]) }
   private schedule(delay?: number): void {
     if (this.timer) clearTimeout(this.timer)
@@ -73,6 +84,12 @@ export class KafController {
   poll(): Promise<void> {
     if (!this.available() || this.cooldown() > this.now() || this.work) return this.work ?? Promise.resolve()
     if (this.finished && this.now() < this.finished + 1000) { this.schedule(); return Promise.resolve() }
+    if (this.watchActive) {
+      const active = this.watchActive
+      this.watchActive = null
+      this.watchFinished = this.now()
+      try { active.onPreempt?.() } catch { /* ignore */ }
+    }
     this.started = this.now(); this.abort = new AbortController(); this.next = null
     const signal = this.abort.signal
     this.work = this.run(signal).catch(error => { if (!signal.aborted && this.available()) this.fail(error) }).finally(() => {
@@ -80,9 +97,52 @@ export class KafController {
     })
     this.emit(); return this.work
   }
+  watchSlot(): WatchSlotProvider {
+    return {
+      claim: (priority: 'watch', onPreempt?: () => void) => {
+        if (priority !== 'watch') return null
+        const now = this.now()
+        if (
+          !this.available() ||
+          this.work ||
+          this.detailWork ||
+          this.queue.length > 0 ||
+          this.cooldown() > now ||
+          now - this.detailFinished < 5000 ||
+          now - this.watchFinished < 5000 ||
+          this.watchActive !== null ||
+          this.next === null ||
+          this.next - now < 2500
+        ) {
+          return null
+        }
+        const active = { onPreempt }
+        this.watchActive = active
+        let released = false
+        return {
+          release: (): void => {
+            if (released) return
+            released = true
+            if (this.watchActive === active) {
+              this.watchActive = null
+              this.watchFinished = this.now()
+              void this.pumpDetails()
+            }
+          }
+        }
+      }
+    }
+  }
+  applyWatchBlock(status: number, retryAfterMs: number | null): void {
+    const kind = status === 429 ? 'rate_limited' : 'forbidden'
+    this.abort?.abort()
+    this.fail(new KafFetchError(kind, status, retryAfterMs))
+    this.schedule()
+  }
   private fail(error: unknown): void {
     const db = this.deps.db(); if (!db || this.closed) return
     const e = error instanceof KafFetchError ? error : new KafFetchError('invalid_content')
+    if (e.kind === 'private') return
     const previous = getSourceState(db, 'kaf')
     const failure = noteFailure({ ...initialSchedulerState(), consecutiveFailures: previous.consecutiveFailures, backoffUntilMs: this.cooldown() }, { kind: e.kind, retryAfterMs: e.retryAfterMs, nowMs: this.now(), random: this.deps.random })
     this.memoryBackoff = failure.backoffUntilMs ?? this.now() + 30000
@@ -129,7 +189,7 @@ export class KafController {
   }
   isDetailsPending(id: number): boolean { return this.detailId === id || this.queue.includes(id) }
   private pumpDetails(): Promise<void> {
-    if (!this.available() || this.work || this.detailWork || !this.queue.length || this.cooldown() > this.now() || this.now() - this.detailFinished < 5000) return this.detailWork ?? Promise.resolve()
+    if (!this.available() || this.work || this.detailWork || !this.queue.length || this.cooldown() > this.now() || this.now() - this.detailFinished < 5000 || this.watchActive !== null || this.now() - this.watchFinished < 5000) return this.detailWork ?? Promise.resolve()
     const id = this.queue.shift()!, db = this.deps.db()!, p = getProjectById(db, id)
     if (!p || p.source !== 'kaf') return Promise.resolve()
     this.detailAbort = new AbortController(); const signal = this.detailAbort.signal
@@ -150,8 +210,24 @@ export class KafController {
         saveFetchedFacts(db, id, { budgetMin: data.budgetRaw ? data.budgetMin : current.budgetMin, budgetMax: data.budgetRaw ? data.budgetMax : current.budgetMax, budgetRaw: data.budgetRaw ?? current.budgetRaw, currency: data.budgetRaw ? data.budgetMin !== null ? 'USD' : null : current.currency, durationDays: data.durationDays, durationRaw: data.durationRaw })
         this.deps.projects([], [id])
       } catch (error) {
-        if (signal.aborted || !this.available() || this.deps.db() !== db) return
-        if (error instanceof KafFetchError && ['forbidden', 'rate_limited'].includes(error.kind)) { this.abort?.abort(); this.fail(error); this.schedule() }
+        if (this.closed || this.deps.db() !== db) return
+        if (error instanceof KafFetchError && ['forbidden', 'rate_limited'].includes(error.kind)) {
+          this.fail(error)
+          if (!signal.aborted && this.available()) {
+            this.abort?.abort()
+            this.schedule()
+          }
+        }
+        if (signal.aborted || !this.available()) return
+        if (error instanceof KafFetchError && error.kind === 'private') {
+          try {
+            markFacts(db, id, 'failed', 'private')
+            upsertProjectDetails(db, id, { ...existing, status: existing.text ? 'ready' : 'failed', errorCode: 'kaf-detail-private' })
+          } catch (failure) {
+            this.fail(failure)
+          }
+          return
+        }
         try { markFacts(db, id, 'failed', error instanceof KafFetchError ? error.kind : 'metadata-unavailable'); upsertProjectDetails(db, id, { ...existing, status: existing.text ? 'ready' : 'failed', errorCode: 'kaf-detail-failed' }) } catch (failure) { this.fail(failure) }
       } finally {
         if (signal.aborted && this.deps.db() === db && db.isOpen) {

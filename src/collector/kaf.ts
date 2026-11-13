@@ -1,5 +1,6 @@
 import type { UpsertInput } from '../storage/repositories.js'
 import { foldForSearch } from '../shared/filters.js'
+import { isPrivateProjectPage } from './projectWatch.js'
 
 export const KAF_SOURCE = 'kaf'
 export const KAF_ORIGIN = 'https://kafiil.com'
@@ -56,7 +57,7 @@ export function matchesKafKeywords(title: string, excerpt: string, any: string[]
 }
 
 export class KafFetchError extends Error {
-  constructor(public kind: 'network' | 'timeout' | 'http5xx' | 'forbidden' | 'rate_limited' | 'invalid_content' | 'too_large', public status: number | null = null, public retryAfterMs: number | null = null) { super(`kaf-${kind}${status ? `-${status}` : ''}`) }
+  constructor(public kind: 'network' | 'timeout' | 'http5xx' | 'forbidden' | 'rate_limited' | 'invalid_content' | 'too_large' | 'private', public status: number | null = null, public retryAfterMs: number | null = null) { super(`kaf-${kind}${status ? `-${status}` : ''}`) }
 }
 export async function fetchKafHtml(url: string, signal: AbortSignal, fragment = false, fetchImpl: typeof fetch = fetch): Promise<string> {
   const allowed = isKafProjectUrl(url) || /^https:\/\/kafiil\.com\/projects\?sort=latest&page=[1-9]\d{0,2}$/.test(url)
@@ -68,7 +69,51 @@ export async function fetchKafHtml(url: string, signal: AbortSignal, fragment = 
     const r = await fetchImpl(url, { signal: controller.signal, redirect: 'manual', headers: fragment ? { 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html' } : { Accept: 'text/html' } })
     const raw = r.headers.get('retry-after'), seconds = raw !== null && /^\d+$/.test(raw) ? Number(raw) * 1000 : raw ? Date.parse(raw) - Date.now() : NaN
     const retry = Number.isFinite(seconds) ? Math.min(86400000, Math.max(0, seconds)) : null
-    if (!r.ok) { await r.body?.cancel(); throw new KafFetchError(r.status === 429 ? 'rate_limited' : r.status === 401 || r.status === 403 ? 'forbidden' : r.status >= 500 ? 'http5xx' : 'invalid_content', r.status, retry) }
+    if (!r.ok) {
+      if (r.status === 403 && isKafProjectUrl(url)) {
+        let isPrivate = false
+        const reader = r.body?.getReader()
+        if (reader) {
+          let finished = false
+          try {
+            const chunks: Uint8Array[] = []
+            let size = 0
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) {
+                finished = true
+                break
+              }
+              if (value) {
+                size += value.byteLength
+                if (size > 512 * 1024) break
+                chunks.push(value)
+              }
+            }
+            if (finished) {
+              const html = Buffer.concat(chunks).toString('utf8')
+              if (isPrivateProjectPage(html, 'kaf')) {
+                isPrivate = true
+              }
+            }
+          } catch {
+            /* Any failure while reading or classifying keeps the 403 forbidden verdict. */
+          } finally {
+            if (!finished) {
+              void reader.cancel().catch(() => {})
+            }
+            try {
+              reader.releaseLock()
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        if (isPrivate) throw new KafFetchError('private', 403)
+      }
+      void r.body?.cancel().catch(() => {})
+      throw new KafFetchError(r.status === 429 ? 'rate_limited' : r.status === 401 || r.status === 403 ? 'forbidden' : r.status >= 500 ? 'http5xx' : 'invalid_content', r.status, retry)
+    }
     if (r.url && r.url !== url || !/text\/html/i.test(r.headers.get('content-type') ?? '')) { await r.body?.cancel(); throw new KafFetchError('invalid_content', r.status) }
     const reader = r.body?.getReader(); if (!reader) throw new KafFetchError('invalid_content')
     const chunks: Uint8Array[] = []; let size = 0

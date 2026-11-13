@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDatabase, openDatabase, type Db } from '../src/storage/db.js'
-import { SCHEMA_VERSION } from '../src/storage/migrations.js'
-import { removeSearchSchema } from './helpers/oldSchema.js'
+import { SCHEMA_VERSION, applyMigrations } from '../src/storage/migrations.js'
+import { downgradeToSchema10, removeSearchSchema } from './helpers/oldSchema.js'
 import {
   countProjects,
   createPendingEvents,
@@ -68,6 +68,7 @@ describe('migrations', () => {
     const path = join(dir, 'test.db')
     closeDatabase(db)
     db = openDatabase(path)
+    downgradeToSchema10(db)
     removeSearchSchema(db)
     db.exec('ALTER TABLE projects DROP COLUMN platform_status; ALTER TABLE projects DROP COLUMN duration_days; ALTER TABLE projects DROP COLUMN duration_raw; DROP TABLE extension_jobs; DROP TABLE quick_apply_tickets; DROP TABLE proposal_drafts; DROP TABLE project_user_state; DROP TABLE project_details; DROP TABLE saved_filters; DROP TABLE tombstones; DROP TABLE pending_classifications; PRAGMA user_version = 1;')
     closeDatabase(db)
@@ -75,6 +76,192 @@ describe('migrations', () => {
     expect(getProjectById(db, 1)?.externalId).toBe('upgrade')
     const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_classifications';").get()
     expect(table).toBeDefined()
+  })
+
+  it('initializes a fresh database at schema version 11 with watch tables and checks ok', () => {
+    const version = (db.prepare('PRAGMA user_version;').get() as { user_version: number }).user_version
+    expect(version).toBe(11)
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(r => r.name)
+    expect(tables).toContain('project_watch')
+    expect(tables).toContain('watch_source_state')
+    expect(tables).toContain('watch_episode')
+    expect(tables).toContain('watch_episode_member')
+    const cols = (db.prepare('PRAGMA table_info(notification_events)').all() as { name: string }[]).map(r => r.name)
+    expect(cols).toContain('dedupe_key')
+    expect(cols).toContain('payload')
+    expect(cols).toContain('episode_id')
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toHaveLength(0)
+    expect((db.prepare('PRAGMA integrity_check').get() as Record<string, string>)['integrity_check']).toBe('ok')
+  })
+
+  it('upgrades a real version-10 database preserving all notification events rows and metadata', () => {
+    downgradeToSchema10(db)
+    db.exec('PRAGMA user_version = 10;')
+    upsertProjectsBatch(db, [item('101'), item('102'), item('103'), item('104'), item('105'), item('106')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const statuses = ['pending', 'dispatching', 'submitted', 'failed', 'uncertain', 'suppressed']
+    for (const [i, status] of statuses.entries()) {
+      db.prepare(`
+        INSERT INTO notification_events (id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at)
+        VALUES (?, ?, 'new_project', ?, ?, ?, ?, '2026-09-24T14:00:00.000Z', '2026-09-24T14:00:00.000Z')
+      `).run(i + 1, i + 1, status, `session-${i}`, `2026-09-24T14:01:0${i}.000Z`, `batch-${i}`)
+    }
+    interface EventFullRow {
+      id: number
+      project_id: number
+      kind: string
+      status: string
+      session_id: string | null
+      attempted_at: string | null
+      batch_key: string | null
+      created_at: string
+      updated_at: string
+      dedupe_key: string
+      payload: string | null
+      episode_id: number | null
+    }
+    const beforeRows = db.prepare('SELECT id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at FROM notification_events ORDER BY id ASC').all() as unknown as Omit<EventFullRow, 'dedupe_key' | 'payload' | 'episode_id'>[]
+    applyMigrations(db)
+    const version = (db.prepare('PRAGMA user_version;').get() as { user_version: number }).user_version
+    expect(version).toBe(11)
+    const afterRows = db.prepare('SELECT id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at, dedupe_key, payload, episode_id FROM notification_events ORDER BY id ASC').all() as unknown as EventFullRow[]
+    expect(afterRows).toHaveLength(beforeRows.length)
+    for (let i = 0; i < afterRows.length; i++) {
+      const b = beforeRows[i]!
+      const a = afterRows[i]!
+      expect(a.id).toBe(b.id)
+      expect(a.project_id).toBe(b.project_id)
+      expect(a.kind).toBe(b.kind)
+      expect(a.status).toBe(b.status)
+      expect(a.session_id).toBe(b.session_id)
+      expect(a.attempted_at).toBe(b.attempted_at)
+      expect(a.batch_key).toBe(b.batch_key)
+      expect(a.created_at).toBe(b.created_at)
+      expect(a.updated_at).toBe(b.updated_at)
+      expect(a.dedupe_key).toBe('')
+      expect(a.payload).toBeNull()
+      expect(a.episode_id).toBeNull()
+    }
+    const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_notify_status'").get()
+    expect(idx).toBeDefined()
+  })
+
+  it('preserves notification_events autoincrement sequence across upgrade', () => {
+    downgradeToSchema10(db)
+    db.exec('PRAGMA user_version = 10;')
+    upsertProjectsBatch(db, [item('201'), item('202'), item('203'), item('204'), item('205')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    for (let i = 1; i <= 5; i++) {
+      db.prepare("INSERT INTO notification_events (id, project_id, kind, status, created_at, updated_at) VALUES (?, ?, 'new_project', 'pending', 't', 't')").run(i, i)
+    }
+    db.exec('DELETE FROM notification_events WHERE id IN (4, 5);')
+    applyMigrations(db)
+    // Inserting a new event should get id 6, not reusing 4 or 5
+    db.prepare("INSERT INTO notification_events (project_id, kind, status, dedupe_key, created_at, updated_at) VALUES (1, 'watch_status', 'pending', 'k1', 't', 't')").run()
+    const lastRow = db.prepare('SELECT id FROM notification_events ORDER BY id DESC LIMIT 1').get() as { id: number }
+    expect(lastRow.id).toBe(6)
+
+    // Empty-table case: insert then delete all rows before upgrading
+    downgradeToSchema10(db)
+    db.exec("PRAGMA user_version = 10; DELETE FROM notification_events; DELETE FROM sqlite_sequence WHERE name = 'notification_events';")
+    for (let i = 1; i <= 3; i++) {
+      db.prepare("INSERT INTO notification_events (id, project_id, kind, status, created_at, updated_at) VALUES (?, ?, 'new_project', 'pending', 't', 't')").run(i, i)
+    }
+    db.exec('DELETE FROM notification_events;')
+    applyMigrations(db)
+    db.prepare("INSERT INTO notification_events (project_id, kind, status, dedupe_key, created_at, updated_at) VALUES (1, 'watch_status', 'pending', 'k2', 't', 't')").run()
+    const nextRow = db.prepare('SELECT id FROM notification_events ORDER BY id DESC LIMIT 1').get() as { id: number }
+    expect(nextRow.id).toBe(4)
+  })
+
+  it('enforces uniqueness semantics after upgrade with dedupe_key', () => {
+    upsertProjectsBatch(db, [item('301')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const r1 = createPendingEvents(db, [1], 'new_project', '2026-09-24T14:00:00.000Z')
+    expect(r1).toHaveLength(1)
+    const r2 = createPendingEvents(db, [1], 'new_project', '2026-09-24T14:00:00.000Z')
+    expect(r2).toHaveLength(0)
+
+    db.prepare("INSERT INTO notification_events (project_id, kind, dedupe_key, created_at, updated_at) VALUES (1, 'watch_status', 'dedupe-1', 't', 't')").run()
+    db.prepare("INSERT INTO notification_events (project_id, kind, dedupe_key, created_at, updated_at) VALUES (1, 'watch_status', 'dedupe-2', 't', 't')").run()
+    expect(() =>
+      db.prepare("INSERT INTO notification_events (project_id, kind, dedupe_key, created_at, updated_at) VALUES (1, 'watch_status', 'dedupe-1', 't', 't')").run()
+    ).toThrow()
+  })
+
+  it('listEventsByStatus filters exclusively for new_project kind', () => {
+    upsertProjectsBatch(db, [item('401')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    createPendingEvents(db, [1], 'new_project', '2026-09-24T14:00:00.000Z')
+    db.prepare("INSERT INTO notification_events (project_id, kind, status, dedupe_key, created_at, updated_at) VALUES (1, 'watch_status', 'pending', 'w1', 't', 't')").run()
+    const pending = listEventsByStatus(db, 'pending')
+    expect(pending).toHaveLength(1)
+    expect(pending[0]?.kind).toBe('new_project')
+  })
+
+  it('enforces foreign key cascading and state check on watch tables', () => {
+    upsertProjectsBatch(db, [item('501')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    db.prepare("INSERT INTO project_watch (project_id, state, origin) VALUES (1, 'active', 'manual')").run()
+    db.prepare("INSERT INTO watch_episode (id, started_at, deadline_at, summary_state) VALUES (10, 't1', 't2', 'open')").run()
+    db.prepare("INSERT INTO watch_episode_member (episode_id, project_id, generation, observed) VALUES (10, 1, 0, 0)").run()
+
+    expect(() =>
+      db.prepare("UPDATE project_watch SET state = 'bogus' WHERE project_id = 1").run()
+    ).toThrow(/CHECK constraint/i)
+
+    // Cascade delete on project: removes project_watch and watch_episode_member
+    db.prepare('DELETE FROM projects WHERE id = 1').run()
+    expect(db.prepare('SELECT 1 FROM project_watch WHERE project_id = 1').get()).toBeUndefined()
+    expect(db.prepare('SELECT 1 FROM watch_episode_member WHERE project_id = 1').get()).toBeUndefined()
+
+    // Cascade delete on watch_episode: removes members
+    upsertProjectsBatch(db, [item('502')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    db.prepare("INSERT INTO watch_episode (id, started_at, deadline_at) VALUES (20, 't1', 't2')").run()
+    db.prepare("INSERT INTO watch_episode_member (episode_id, project_id, generation) VALUES (20, 2, 0)").run()
+    db.prepare('DELETE FROM watch_episode WHERE id = 20').run()
+    expect(db.prepare('SELECT 1 FROM watch_episode_member WHERE episode_id = 20').get()).toBeUndefined()
+  })
+
+  it('rolls back a failing migration cleanly', () => {
+    downgradeToSchema10(db)
+    db.exec('PRAGMA user_version = 10;')
+    upsertProjectsBatch(
+      db,
+      [item('601'), item('602'), item('603'), item('604'), item('605')],
+      { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' }
+    )
+    for (let i = 1; i <= 5; i++) {
+      db.prepare(`
+        INSERT INTO notification_events (id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at)
+        VALUES (?, ?, 'new_project', 'pending', ?, '2026-09-24T14:01:00.000Z', ?, '2026-09-24T14:00:00.000Z', '2026-09-24T14:00:00.000Z')
+      `).run(i, i, `session-${i}`, `batch-${i}`)
+    }
+    db.exec('DELETE FROM notification_events WHERE id IN (4, 5);')
+    const seqBefore = (db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get() as { seq: number }).seq
+    expect(seqBefore).toBe(5)
+    const rowsBefore = db.prepare('SELECT id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at FROM notification_events ORDER BY id ASC').all()
+    expect(rowsBefore).toHaveLength(3)
+
+    // Force migration 11 to fail at its LAST statement (CREATE INDEX idx_notify_status ON notification_events(status);).
+    // In schema 10, idx_notify_status is on notification_events, which gets dropped during migration 11.
+    // Pre-creating idx_notify_status on `projects` survives the DROP TABLE notification_events,
+    // so the final CREATE INDEX idx_notify_status throws an already-exists error.
+    db.exec('DROP INDEX IF EXISTS idx_notify_status; CREATE INDEX idx_notify_status ON projects(id);')
+
+    expect(() => applyMigrations(db)).toThrow()
+    const version = (db.prepare('PRAGMA user_version;').get() as { user_version: number }).user_version
+    expect(version).toBe(10)
+
+    const cols = (db.prepare('PRAGMA table_info(notification_events)').all() as { name: string }[]).map(r => r.name)
+    expect(cols).toEqual(['id', 'project_id', 'kind', 'status', 'session_id', 'attempted_at', 'batch_key', 'created_at', 'updated_at'])
+    expect(cols).not.toContain('dedupe_key')
+
+    const rowsAfter = db.prepare('SELECT id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at FROM notification_events ORDER BY id ASC').all()
+    expect(rowsAfter).toEqual(rowsBefore)
+
+    const seqAfter = (db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'notification_events'").get() as { seq: number }).seq
+    expect(seqAfter).toBe(seqBefore)
+
+    const newTables = ['project_watch', 'watch_source_state', 'watch_episode', 'watch_episode_member']
+    for (const tbl of newTables) {
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(tbl)).toBeUndefined()
+    }
   })
 })
 

@@ -68,8 +68,10 @@ export function finalizeBackup(temporary: string, appVersion: string): Inspected
       portableSettings(copy)
       copy.exec(`DELETE FROM diagnostics; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets; DELETE FROM notification_activations;
         DELETE FROM pending_classifications; DELETE FROM notification_batches;
+        DELETE FROM watch_episode_member; DELETE FROM watch_episode; DELETE FROM watch_source_state;
         UPDATE notification_events SET status='suppressed' WHERE status IN ('pending','dispatching','uncertain');
-        UPDATE notification_events SET session_id=NULL, batch_key=NULL;
+        UPDATE notification_events SET session_id=NULL, batch_key=NULL, episode_id=NULL;
+        UPDATE project_watch SET last_error=NULL;
         UPDATE source_state SET run_id=NULL;
         UPDATE project_details SET status='not_requested' WHERE status='loading';
         DROP TABLE IF EXISTS rased_backup_manifest;
@@ -83,6 +85,8 @@ export function finalizeBackup(temporary: string, appVersion: string): Inspected
   } finally { copy.close() }
   return inspectBackup(temporary)
 }
+
+const LEGACY_NOTIFICATION_EVENTS_SQL = "CREATE TABLE notification_events ( id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, kind TEXT NOT NULL DEFAULT 'new_project', status TEXT NOT NULL DEFAULT 'pending', session_id TEXT NULL, attempted_at TEXT NULL, batch_key TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(project_id, kind) )"
 
 let expectedSchema: Map<string, string> | null = null
 function referenceSchema(): Map<string, string> {
@@ -111,11 +115,15 @@ export function inspectBackup(file: string): InspectedBackup {
     if (version > SCHEMA_VERSION) throw Error('newer-schema')
     // Schema 9 adds only non-portable notification activation tickets. Existing
     // schema-8 archives remain valid and contain every durable table we restore.
-    if (![8,9,SCHEMA_VERSION].includes(version)) throw Error('bad-schema')
+    if (![8,9,10,SCHEMA_VERSION].includes(version)) throw Error('bad-schema')
     const schema = db.prepare("SELECT name,type,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all() as unknown as { name: string; type: string; sql: string | null }[]
     const expected = new Map(referenceSchema())
     if (version === 8) expected.delete('notification_activations')
     if (version < 10) for (const name of expected.keys()) if (name.startsWith('project_search_') || name.startsWith('search_')) expected.delete(name)
+    if (version < 11) {
+      for (const name of ['project_watch', 'watch_source_state', 'watch_episode', 'watch_episode_member']) expected.delete(name)
+      expected.set('notification_events', LEGACY_NOTIFICATION_EVENTS_SQL)
+    }
     for (const item of schema) {
       if (!['table','index','trigger'].includes(item.type)) throw Error('bad-schema')
       if ((item.type === 'table' || item.type === 'trigger') && item.name !== 'rased_backup_manifest' && expected.get(item.name) !== item.sql?.replace(/\s+/g, ' ').trim()) throw Error('bad-schema')
@@ -131,6 +139,22 @@ export function inspectBackup(file: string): InspectedBackup {
     if (db.prepare(`SELECT 1 FROM settings WHERE key NOT IN (${PORTABLE_KEYS.map(() => '?').join(',')}) LIMIT 1`).get(...PORTABLE_KEYS)) throw Error('bad-schema')
     if (db.prepare('SELECT 1 FROM extension_jobs LIMIT 1').get() || db.prepare('SELECT 1 FROM quick_apply_tickets LIMIT 1').get()) throw Error('bad-schema')
     if (version >= 9 && db.prepare('SELECT 1 FROM notification_activations LIMIT 1').get()) throw Error('bad-schema')
+    if (version >= 11) {
+      if (db.prepare('SELECT 1 FROM watch_source_state LIMIT 1').get() || db.prepare('SELECT 1 FROM watch_episode LIMIT 1').get() || db.prepare('SELECT 1 FROM watch_episode_member LIMIT 1').get()) throw Error('bad-schema')
+      const badWatchTime = db.prepare(`
+        SELECT 1 FROM project_watch
+        WHERE (waiting_since IS NOT NULL AND waiting_since NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (started_at IS NOT NULL AND started_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (stopped_at IS NOT NULL AND stopped_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (status_seen_at IS NOT NULL AND status_seen_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (detail_seen_at IS NOT NULL AND detail_seen_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (last_attempt_at IS NOT NULL AND last_attempt_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (last_changed_at IS NOT NULL AND last_changed_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+           OR (next_due_at IS NOT NULL AND next_due_at NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z')
+        LIMIT 1
+      `).get()
+      if (badWatchTime) throw Error('bad-schema')
+    }
     const settings = JSON.parse(getSettingRaw(db, 'app') ?? 'null') as unknown
     const rawProfiles = getSettingRaw(db, 'proposal-profiles')
     const profiles = rawProfiles === null ? undefined : sanitizeProfileSet(JSON.parse(rawProfiles))
@@ -148,13 +172,20 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
   db.prepare('ATTACH DATABASE ? AS restore_data').run(file)
   try {
     runInTransaction(db, () => {
-      db.exec(`DELETE FROM pending_classifications; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets; DELETE FROM notification_activations;
+      db.exec(`DELETE FROM watch_episode_member; DELETE FROM watch_episode; DELETE FROM project_watch;
+        DELETE FROM pending_classifications; DELETE FROM extension_jobs; DELETE FROM quick_apply_tickets; DELETE FROM notification_activations;
         DELETE FROM notification_events; DELETE FROM notification_batches; DELETE FROM proposal_drafts;
         DELETE FROM project_details; DELETE FROM project_user_state; DELETE FROM projects;
         DELETE FROM saved_filters; DELETE FROM tombstones; DELETE FROM source_state;`)
-      for (const table of TABLES) {
-        const columns = (db.prepare(`PRAGMA main.table_info(${table})`).all() as unknown as { name: string }[]).map(row => `"${row.name}"`).join(',')
-        db.exec(`INSERT INTO main.${table} (${columns}) SELECT ${columns} FROM restore_data.${table}`)
+      const hasProjectWatch = !!db.prepare("SELECT 1 FROM restore_data.sqlite_schema WHERE type='table' AND name='project_watch'").get()
+      const tablesToRestore = hasProjectWatch ? [...TABLES, 'project_watch'] : [...TABLES]
+      for (const table of tablesToRestore) {
+        const mainCols = new Set((db.prepare(`PRAGMA main.table_info(${table})`).all() as unknown as { name: string }[]).map(row => row.name))
+        const archiveCols = (db.prepare(`PRAGMA restore_data.table_info(${table})`).all() as unknown as { name: string }[]).map(row => row.name)
+        const shared = archiveCols.filter(col => mainCols.has(col)).map(col => `"${col}"`).join(',')
+        if (shared.length > 0) {
+          db.exec(`INSERT INTO main.${table} (${shared}) SELECT ${shared} FROM restore_data.${table}`)
+        }
       }
       clearQuickConsent(db)
       for (const key of PORTABLE_KEYS) db.prepare('DELETE FROM settings WHERE key=?').run(key)
@@ -172,7 +203,7 @@ export function restoreDatabase(db: Db, file: string, applyStartup: boolean, res
       restored.whatsNewSeen = current.whatsNewSeen
       setSettingRaw(db, 'app', JSON.stringify(restored))
       if (profiles) writeProfileSetTx(db, profiles)
-      db.exec("UPDATE notification_events SET status='suppressed' WHERE status IN ('pending','dispatching','uncertain'); DELETE FROM pending_classifications;")
+      db.exec("UPDATE notification_events SET status='suppressed' WHERE status IN ('pending','dispatching','uncertain'); UPDATE notification_events SET episode_id=NULL; DELETE FROM pending_classifications;")
       for (const old of cooldowns) if (old.backoff_until && Date.parse(old.backoff_until) > Date.now()) {
         db.prepare(`INSERT INTO source_state(source,backoff_until,consecutive_failures,last_error) VALUES(?,?,?,?)
           ON CONFLICT(source) DO UPDATE SET backoff_until=MAX(COALESCE(backoff_until,''),excluded.backoff_until),

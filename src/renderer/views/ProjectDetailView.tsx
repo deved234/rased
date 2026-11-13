@@ -247,7 +247,7 @@ export function ProjectDetailView({
               <p key={i}>{para}</p>
             ))}
           </div>
-          {(project.source === 'mostaql' || project.source === 'kaf') && (details?.status === 'failed' || details?.errorCode === 'kaf-detail-failed') && (
+          {(project.source === 'mostaql' || project.source === 'kaf') && (details?.status === 'failed' || details?.errorCode === 'kaf-detail-failed' || details?.errorCode === 'kaf-detail-private') && (
             <div className="banner warn">
               {t.detailsUnavailable}
               <span className="spacer" />

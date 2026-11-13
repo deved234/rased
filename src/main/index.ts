@@ -107,12 +107,13 @@ import {
   type SchedulerState
 } from '../collector/scheduler.js'
 import { applyFailedCycle, applySuccessfulCycle, evaluateLateProject } from '../collector/pipeline.js'
-import { EnrichmentQueue, type DetailFetchKind } from '../collector/enrichment.js'
+import { DETAIL_MIN_GAP_MS, EnrichmentQueue, type DetailFetchKind } from '../collector/enrichment.js'
 import { DetailsFetcher, resetStaleLoadingDetails } from './details.js'
 import { ProjectFactsFetcher } from './projectFactsFetcher.js'
 import { factsNeedFetch, projectFacts, saveFetchedFacts, markFacts } from '../storage/projectFacts.js'
 import type { ProjectFacts } from '../shared/projectFacts.js'
-import { DetailBudget } from '../collector/detailBudget.js'
+import { SourceArbiter, type ArbiterClaim } from '../collector/sourceArbiter.js'
+import { arbiterBudget } from '../collector/arbiterBudget.js'
 import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './policies.js'
 import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
@@ -222,7 +223,8 @@ const uncertainWaits = new Map<number, number>()
 let activeRss: AbortController | null = null
 let aiService: AiService | null = null
 let flushing: Promise<void> | null = null
-const detailBudget = new DetailBudget()
+const mostaqlArbiter = new SourceArbiter({ now: () => Date.now(), minGapMs: DETAIL_MIN_GAP_MS })
+const nafezlyArbiter = new SourceArbiter({ now: () => Date.now(), minGapMs: 5000 })
 const work = new Set<Promise<unknown>>()
 let shutdownWork: Promise<void> | null = null
 let quitComplete = false
@@ -739,12 +741,14 @@ function scheduleNafezly(delayMs?: number): void {
   if (nafezlyTimer) clearTimeout(nafezlyTimer)
   nafezlyTimer = null
   nafezlyNextAttemptMs = null
+  nafezlyArbiter.setNextPollDue(null)
   if (!applicationAccessAllowed() || !db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyInFlight) { emitNafezlyHealth(); return }
   const state = getSourceState(db, NAFEZLY_SOURCE)
   const backoff = state.backoffUntil ? Math.max(0, Date.parse(state.backoffUntil) - Date.now()) : 0
   const jitter = Math.floor(Math.random() * 3001)
   const delay = Math.max(delayMs ?? nafezlyBaseIntervalMs + jitter, backoff)
   nafezlyNextAttemptMs = Date.now() + delay
+  nafezlyArbiter.setNextPollDue(nafezlyNextAttemptMs)
   nafezlyTimer = setTimeout(() => void trackWork(runNafezlyCycle()), delay)
   emitNafezlyHealth()
 }
@@ -754,10 +758,13 @@ async function runNafezlyCycle(): Promise<void> {
   const stored = getSourceState(db, NAFEZLY_SOURCE)
   if (stored.backoffUntil && Date.parse(stored.backoffUntil) > Date.now()) { scheduleNafezly(); return }
   nafezlyInFlight = true
+  let pollClaim: ArbiterClaim | null = null
   nafezlyAbort = new AbortController()
   nafezlyNextAttemptMs = null
+  nafezlyArbiter.setNextPollDue(null)
   emitNafezlyHealth()
   try {
+    pollClaim = nafezlyArbiter.claim('poll')
     saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
     const result = await fetchNafezlyFeed(nafezlyAbort.signal, testHarness?.fetchImpl)
     if (!applicationAccessAllowed() || !db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyAbort.signal.aborted) return
@@ -796,6 +803,7 @@ async function runNafezlyCycle(): Promise<void> {
     if (outcome.notifyIds.length) await flushNotifications(null)
   } finally {
     nafezlyInFlight = false
+    pollClaim?.release()
     nafezlyAbort = null
     scheduleNafezly()
     void trackWork(nafezlyFacts.pump())
@@ -843,10 +851,12 @@ async function runCycle(): Promise<RefreshResult> {
   if (inFlight) return { ok: false, started: false, reason: 'busy' }
   if (isBackingOff(sched, Date.now())) return { ok: false, started: false, reason: 'backoff' }
   inFlight = true
+  let pollClaim: ArbiterClaim | null = null
   lastStartMs = Date.now()
   activeRss = new AbortController()
   emitHealth()
   try {
+    pollClaim = mostaqlArbiter.claim('poll')
     saveSourceState(db, { ...getSourceState(db, SOURCE), lastAttemptAt: new Date(lastStartMs).toISOString() })
     const res = await fetchRss(RSS_URL, { signal: activeRss.signal, fetchImpl: testHarness?.fetchImpl })
     lastDurationMs = res.durationMs
@@ -926,6 +936,7 @@ async function runCycle(): Promise<RefreshResult> {
     return { ok: true, started: true }
   } finally {
     inFlight = false
+    pollClaim?.release()
     activeRss = null
     lastFinishMs = Date.now()
     emitHealth()
@@ -941,15 +952,18 @@ function scheduleNext(): void {
   }
   if (!applicationAccessAllowed() || !settings.mostaqlEnabled || paused || quitRequested || !db || inFlight) {
     nextAttemptAtMs = null
+    mostaqlArbiter.setNextPollDue(null)
     emitHealth()
     return
   }
   const delay = delayUntilNext(sched, settings.pollIntervalMs, Date.now(), lastStartMs, lastFinishMs)
   if (delay < 0) {
     nextAttemptAtMs = null
+    mostaqlArbiter.setNextPollDue(null)
     return
   }
   nextAttemptAtMs = Date.now() + delay
+  mostaqlArbiter.setNextPollDue(nextAttemptAtMs)
   emitHealth()
   timer = setTimeout(() => {
     lastRecovering = wasGap()
@@ -976,7 +990,7 @@ function persistScheduler(): void {
 
 const enrichQueue = new EnrichmentQueue({
   fetchImpl: testHarness?.fetchImpl,
-  budget: detailBudget,
+  budget: arbiterBudget(mostaqlArbiter, 'enrichment'),
   gateOpen: () => applicationAccessAllowed() && settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
   onTransportFailure: (kind: DetailFetchKind | 'http5xx' | 'forbidden' | 'rate_limited', retryAfterMs: number | null) => {
     const mapped: FailureKind =
@@ -1067,7 +1081,7 @@ function detailTransportFailure(kind: DetailFetchKind | 'http5xx' | 'forbidden' 
 
 const detailsFetcher = new DetailsFetcher(() => db, {
   fetchImpl: testHarness?.fetchImpl,
-  budget: detailBudget,
+  budget: arbiterBudget(mostaqlArbiter, 'details'),
   gateOpen: () => applicationAccessAllowed() && settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
   onMetadata: (projectId, data) => {
     if (!db || !getProjectById(db, projectId)) return
@@ -1088,6 +1102,7 @@ const detailsFetcher = new DetailsFetcher(() => db, {
 
 const nafezlyFacts = new ProjectFactsFetcher({
   db: () => db, fetchImpl: testHarness?.fetchImpl,
+  budget: arbiterBudget(nafezlyArbiter, 'details'),
   gateOpen: () => applicationAccessAllowed() && !!db && !quitRequested && settings.nafezlyEnabled && !nafezlyPaused && !nafezlyInFlight && !(getSourceState(db, NAFEZLY_SOURCE).backoffUntil && Date.parse(getSourceState(db, NAFEZLY_SOURCE).backoffUntil!) > Date.now()),
   settled: id => { emitProjects([], [id]); emitDetails([id]) },
   failure: result => {
@@ -1411,6 +1426,7 @@ async function doPause(): Promise<SourceHealth> {
     timer = null
   }
   nextAttemptAtMs = null
+  mostaqlArbiter.setNextPollDue(null)
   emitHealth()
   return snapshotHealth()
 }
@@ -1447,6 +1463,7 @@ async function doPauseNafezly(): Promise<SourceHealth> {
   if (nafezlyTimer) clearTimeout(nafezlyTimer)
   nafezlyTimer = null
   nafezlyNextAttemptMs = null
+  nafezlyArbiter.setNextPollDue(null)
   emitNafezlyHealth()
   return snapshotNafezlyHealth()
 }

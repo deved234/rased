@@ -3,7 +3,7 @@ import { getProjectById } from '../storage/repositories.js'
 import { factsNeedFetch, markFacts, saveFetchedFacts } from '../storage/projectFacts.js'
 import { fetchDetail, type DetailFetchResult } from '../collector/enrichment.js'
 import { parseProjectFacts } from '../collector/projectFacts.js'
-import { DetailBudget } from '../collector/detailBudget.js'
+import { DetailBudget, type DetailSlot } from '../collector/detailBudget.js'
 
 /** Nafezly metadata only: RSS remains the description source and polling keeps priority. */
 export class ProjectFactsFetcher {
@@ -12,8 +12,10 @@ export class ProjectFactsFetcher {
   private abort: AbortController | null = null
   private work: Promise<void> | null = null
   private closed = false
-  private budget = new DetailBudget(5000)
-  constructor(private deps: { db: () => Db | null; gateOpen: () => boolean; settled: (id: number) => void; failure: (result: DetailFetchResult) => void; fetchImpl?: typeof fetch; now?: () => number }) {}
+  private readonly budget: DetailSlot
+  constructor(private deps: { db: () => Db | null; gateOpen: () => boolean; settled: (id: number) => void; failure: (result: DetailFetchResult) => void; fetchImpl?: typeof fetch; now?: () => number; budget?: DetailSlot }) {
+    this.budget = deps.budget ?? new DetailBudget(5000)
+  }
   private now(): number { return this.deps.now?.() ?? Date.now() }
   isPending(id: number): boolean { return this.active === id || this.queue.includes(id) }
   request(id: number, force = false): void {
@@ -37,12 +39,17 @@ export class ProjectFactsFetcher {
         markFacts(db, id, 'loading', null, new Date(this.now()).toISOString())
         const result = await fetchDetail(p.url, { source: 'nafezly', signal: controller.signal, fetchImpl: this.deps.fetchImpl })
         if (controller.signal.aborted || this.closed || this.deps.db() !== db || !db.isOpen || !getProjectById(db, id)) {
+          if (!this.closed && this.deps.db() === db && db.isOpen && !result.ok && result.kind === 'http' && (result.status === 401 || result.status === 403 || result.status === 429)) {
+            this.deps.failure(result)
+          }
           if (db.isOpen && getProjectById(db, id)) markFacts(db, id, 'not_requested')
           return
         }
         const data = result.ok && result.html ? parseProjectFacts(result.html, 'nafezly') : null
         if (data) saveFetchedFacts(db, id, data, new Date(this.now()).toISOString())
-        else {
+        else if (result.kind === 'private') {
+          markFacts(db, id, 'failed', 'private', new Date(this.now()).toISOString())
+        } else {
           markFacts(db, id, 'failed', result.ok ? 'metadata-unavailable' : result.kind === 'http' ? `http-${result.status}` : result.kind ?? 'invalid_content', new Date(this.now()).toISOString())
           if (!result.ok) this.deps.failure(result)
         }

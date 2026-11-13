@@ -224,6 +224,90 @@ const MIGRATIONS: string[] = [
     UPDATE project_search_state SET backfill_complete=0;
   END;
   `
+  ,/* 11 */ `
+  CREATE TABLE project_watch (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    state TEXT NOT NULL CHECK (state IN ('active','waiting','stopped')),
+    origin TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    generation INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 0,
+    waiting_since TEXT NULL,
+    started_at TEXT NULL,
+    stopped_at TEXT NULL,
+    stop_reason TEXT NULL,
+    auto_start_blocked INTEGER NOT NULL DEFAULT 0,
+    status TEXT NULL,
+    offers INTEGER NULL,
+    offers_capped INTEGER NOT NULL DEFAULT 0,
+    contacts INTEGER NULL,
+    client_open INTEGER NULL,
+    client_in_progress INTEGER NULL,
+    status_seen_at TEXT NULL,
+    detail_seen_at TEXT NULL,
+    last_attempt_at TEXT NULL,
+    last_changed_at TEXT NULL,
+    next_due_at TEXT NULL,
+    failures INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NULL
+  );
+  CREATE INDEX idx_project_watch_state ON project_watch(state, waiting_since, project_id);
+  CREATE TABLE watch_source_state (
+    source TEXT PRIMARY KEY,
+    slot_ms INTEGER NOT NULL,
+    success_streak INTEGER NOT NULL DEFAULT 0,
+    paused_until TEXT NULL,
+    blocked_at TEXT NULL,
+    needs_poll_success INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE watch_episode (
+    id INTEGER PRIMARY KEY,
+    started_at TEXT NOT NULL,
+    deadline_at TEXT NOT NULL,
+    summary_state TEXT NOT NULL DEFAULT 'open' CHECK (summary_state IN ('open','reserved','done'))
+  );
+  CREATE TABLE watch_episode_member (
+    episode_id INTEGER NOT NULL REFERENCES watch_episode(id) ON DELETE CASCADE,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    generation INTEGER NOT NULL,
+    observed INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (episode_id, project_id)
+  );
+  CREATE TABLE notification_events_v11 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'new_project',
+    status TEXT NOT NULL DEFAULT 'pending',
+    session_id TEXT NULL,
+    attempted_at TEXT NULL,
+    batch_key TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    dedupe_key TEXT NOT NULL DEFAULT '',
+    payload TEXT NULL,
+    episode_id INTEGER NULL,
+    UNIQUE(project_id, kind, dedupe_key)
+  );
+  INSERT INTO notification_events_v11 (
+    id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at
+  )
+  SELECT
+    id, project_id, kind, status, session_id, attempted_at, batch_key, created_at, updated_at
+  FROM notification_events
+  ORDER BY id;
+  UPDATE sqlite_sequence
+    SET seq = (SELECT seq FROM sqlite_sequence WHERE name = 'notification_events')
+    WHERE name = 'notification_events_v11'
+      AND (SELECT seq FROM sqlite_sequence WHERE name = 'notification_events') > seq;
+  INSERT INTO sqlite_sequence (name, seq)
+    SELECT 'notification_events_v11', seq
+    FROM sqlite_sequence
+    WHERE name = 'notification_events'
+      AND NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'notification_events_v11');
+  DROP TABLE notification_events;
+  ALTER TABLE notification_events_v11 RENAME TO notification_events;
+  CREATE INDEX idx_notify_status ON notification_events(status);
+  `
 ]
 
 export const SCHEMA_VERSION = MIGRATIONS.length

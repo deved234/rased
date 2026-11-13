@@ -364,8 +364,8 @@ export interface NotifyEventRow {
 
 export function createPendingEvents(db: Db, projectIds: number[], kind: string, now: string): number[] {
   const stmt = db.prepare(
-    `INSERT INTO notification_events (project_id, kind, status, created_at, updated_at)
-     VALUES (?, ?, 'pending', ?, ?) ON CONFLICT(project_id, kind) DO NOTHING;`
+    `INSERT INTO notification_events (project_id, kind, status, dedupe_key, created_at, updated_at)
+     VALUES (?, ?, 'pending', '', ?, ?) ON CONFLICT(project_id, kind, dedupe_key) DO NOTHING;`
   )
   const ids: number[] = []
   for (const pid of projectIds) {
@@ -376,7 +376,8 @@ export function createPendingEvents(db: Db, projectIds: number[], kind: string, 
 }
 
 export function listEventsByStatus(db: Db, status: NotifyEventStatus): NotifyEventRow[] {
-  return db.prepare('SELECT id, project_id, kind, status, session_id, batch_key FROM notification_events WHERE status = ? ORDER BY id ASC;').all(status) as unknown as NotifyEventRow[]
+  // Watch kinds are dispatched by their own path and must never enter the new-project dispatcher.
+  return db.prepare("SELECT id, project_id, kind, status, session_id, batch_key FROM notification_events WHERE status = ? AND kind = 'new_project' ORDER BY id ASC;").all(status) as unknown as NotifyEventRow[]
 }
 
 export function getEventsByIds(db: Db, ids: number[]): NotifyEventRow[] {
