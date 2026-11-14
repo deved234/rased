@@ -10,6 +10,7 @@ import { useNow } from '../hooks.js'
 import { overallSourceState, type OverallSourceState } from '@shared/sourceStatus.js'
 import logo from '../assets/logo.svg'
 import { SOURCES } from '@shared/sources.js'
+import { WATCH_ENABLED } from '@shared/projectWatch.js'
 
 export function dotClass(h: SourceHealth | null): string {
   if (!h) return ''
@@ -53,6 +54,7 @@ export function Sidebar({
   route,
   unread,
   savedCount,
+  watchingCount,
   collapsed,
   onToggleCollapse
 }: {
@@ -60,6 +62,7 @@ export function Sidebar({
   route: Route
   unread: number
   savedCount: number
+  watchingCount: number
   collapsed: boolean
   onToggleCollapse: () => void
 }): React.ReactElement {
@@ -82,6 +85,7 @@ export function Sidebar({
       </div>
       {item({ name: 'projects' }, 'briefcase', t.navProjects, unread, route.name === 'projects')}
       {item({ name: 'saved' }, 'bookmark', t.navSaved, savedCount, route.name === 'saved')}
+      {WATCH_ENABLED && item({ name: 'watching' }, 'bell', t.navWatching, watchingCount, route.name === 'watching')}
       {item({ name: 'filters' }, 'filter', t.navFilters, undefined, route.name === 'filters')}
       <div className="side-spacer" />
       <div className="side-foot">

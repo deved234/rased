@@ -1,0 +1,171 @@
+/* WatchingView layout and row styles */
+
+.watching-view {
+  container-type: inline-size;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+  overflow-y: auto;
+  min-block-size: 0;
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+
+.watch-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 16px;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--border);
+}
+
+.watch-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.watch-platform-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.watch-platform-counter {
+  font-size: 0.82rem;
+  padding-inline: 10px;
+  padding-block: 2px;
+}
+
+.watch-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.watch-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.watch-section-title {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  padding-inline-start: 2px;
+}
+
+.watch-section-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.watch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-block-end: 0;
+}
+
+.watch-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  inline-size: 100%;
+}
+
+.watch-row-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.watch-row-title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.4;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.watch-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.watch-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.watch-fact-item {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+
+.watch-refresh-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-block-end: 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-s);
+  color: var(--bad);
+  font-size: 0.9rem;
+}
+
+.watch-refresh-error-banner button {
+  white-space: nowrap;
+}
+
+.watch-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-block: 48px;
+  text-align: center;
+}
+
+.watch-error p {
+  margin: 0;
+  color: var(--bad);
+  font-size: 0.95rem;
+}
+
+.watch-loading {
+  padding-block: 24px;
+}
+
+@container (max-width: 760px) {
+  .watch-row-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .watch-row-actions {
+    inline-size: 100%;
+    justify-content: flex-start;
+  }
+}

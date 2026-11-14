@@ -13,6 +13,7 @@ import { ProjectDetailView } from './views/ProjectDetailView.js'
 import { ProposalView } from './views/ProposalView.js'
 import { SplashView } from './views/SplashView.js'
 import { CompactView } from './views/CompactView.js'
+import { WatchingView } from './views/WatchingView.js'
 const SettingsView = React.lazy(() => import('./views/SettingsView.js').then(module => ({ default: module.SettingsView })))
 import { useUpdates, UpdateBanner } from './views/UpdatesView.js'
 import { AnalyticsAccess } from './views/AnalyticsAccess.js'
@@ -46,13 +47,15 @@ export function App(): React.ReactElement {
   const [search, setSearch] = React.useState('')
   const [unread, setUnread] = React.useState(0)
   const [savedCount, setSavedCount] = React.useState(0)
+  const [watchingCount, setWatchingCount] = React.useState(0)
   const searchRef = React.useRef<HTMLInputElement | null>(null)
   const sessionStart = React.useRef(Date.now())
   const memoryRef = React.useRef<Partial<Record<'projects' | 'saved', ListMemory>>>({})
+  const watchMemoryRef = React.useRef<{ scrollTop: number; projectId: number | null }>({ scrollTop: 0, projectId: null })
   const restoredSearch = React.useRef(false)
   const returnRoute = React.useRef<Route>({ name: 'projects' })
   const lastListRoute = React.useRef<Route>({ name: 'projects' })
-  if (route.name === 'projects' || route.name === 'saved') lastListRoute.current = route
+  if (route.name === 'projects' || route.name === 'saved' || route.name === 'watching') lastListRoute.current = route
   if (route.name !== 'project' && route.name !== 'proposal') returnRoute.current = lastListRoute.current
   const lang = settings.language
   const t = STRINGS[lang]
@@ -134,7 +137,7 @@ export function App(): React.ReactElement {
   const countGeneration = React.useRef(0)
   const refreshCounts = React.useCallback(() => {
     const generation = ++countGeneration.current
-    void rased.getSidebarCounts().then(c => { if (generation === countGeneration.current) { setUnread(c.unread); setSavedCount(c.saved) } }).catch(() => {})
+    void rased.getSidebarCounts().then(c => { if (generation === countGeneration.current) { setUnread(c.unread); setSavedCount(c.saved); setWatchingCount(c.watching) } }).catch(() => {})
   }, [])
   React.useEffect(() => {
     if (boot !== 'ready') return
@@ -203,7 +206,7 @@ export function App(): React.ReactElement {
   }
 
   const title =
-    route.name === 'saved' ? t.navSaved : route.name === 'filters' ? t.navFilters : route.name === 'settings' ? t.navSettings : route.name === 'project' ? t.projectDetails : route.name === 'proposal' ? (lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant') : t.allProjects
+    route.name === 'watching' ? t.navWatching : route.name === 'saved' ? t.navSaved : route.name === 'filters' ? t.navFilters : route.name === 'settings' ? t.navSettings : route.name === 'project' ? t.projectDetails : route.name === 'proposal' ? (lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant') : t.allProjects
 
   const pause = (source: 'mostaql' | 'khamsat' | 'nafezly' | 'kaf'): void => {
     void togglePause(source, source === 'mostaql' ? health : source === 'khamsat' ? khamsatHealth : source === 'kaf' ? kafHealth : nafezlyHealth)
@@ -219,6 +222,7 @@ export function App(): React.ReactElement {
         route={route}
         unread={unread}
         savedCount={savedCount}
+        watchingCount={watchingCount}
         collapsed={settings.ui.sidebarCollapsed}
         onToggleCollapse={() => void patchSettings({ ui: { ...settings.ui, sidebarCollapsed: !settings.ui.sidebarCollapsed } })}
       />
@@ -259,6 +263,8 @@ export function App(): React.ReactElement {
             sessionStart={sessionStart.current}
             scope="saved"
           />
+        ) : route.name === 'watching' ? (
+          <WatchingView key="watching" lang={lang} memory={watchMemoryRef.current} onOpenProject={(id) => go({ name: 'project', id })} />
         ) : route.name === 'filters' ? (
           <SavedFiltersView
             lang={lang}

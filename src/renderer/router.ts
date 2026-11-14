@@ -1,22 +1,26 @@
+import { WATCH_ENABLED } from '../shared/projectWatch.js'
+
 // Tiny hash router (works with file://, no server fallback needed).
-// Routes: #/ #/saved #/filters #/project/:id #/settings/:section? #/compact
+// Routes: #/ #/saved #/watching #/filters #/project/:id #/settings/:section? #/compact
 
 export type Route =
   | { name: 'projects' }
   | { name: 'saved' }
+  | { name: 'watching' }
   | { name: 'filters' }
   | { name: 'project'; id: number }
   | { name: 'proposal'; id: number; reason?: string }
   | { name: 'settings'; section: string | null }
   | { name: 'compact' }
 
-export function parseHash(hash: string): Route {
+export function parseHash(hash: string, watchEnabled: boolean = WATCH_ENABLED): Route {
   const h = hash.startsWith('#') ? hash.slice(1) : hash
   const [path] = h.split('?')
   const seg = (path || '/').split('/').filter(Boolean)
   if (seg.length === 0) return { name: 'projects' }
   const [first, second] = seg
   if (first === 'saved') return { name: 'saved' }
+  if (first === 'watching' && watchEnabled) return { name: 'watching' }
   if (first === 'filters') return { name: 'filters' }
   if (first === 'compact') return { name: 'compact' }
   if (first === 'project' && second && /^\d+$/.test(second)) return { name: 'project', id: Number(second) }
@@ -29,6 +33,7 @@ export function routeHash(r: Route): string {
   switch (r.name) {
     case 'projects': return '#/'
     case 'saved': return '#/saved'
+    case 'watching': return '#/watching'
     case 'filters': return '#/filters'
     case 'compact': return '#/compact'
     case 'project': return `#/project/${r.id}`
@@ -50,7 +55,7 @@ export function currentRoute(): Route {
   return parseHash(acceptedHash)
 }
 
-let acceptedHash = window.location.hash || '#/'
+let acceptedHash = typeof window !== 'undefined' ? (window.location.hash || '#/') : '#/'
 let blocker: ((proceed: () => void) => boolean) | null = null
 export function registerNavigationBlocker(fn: (proceed: () => void) => boolean): () => void {
   blocker = fn
@@ -62,16 +67,20 @@ export function requestAction(proceed: () => void): void {
 function commitHash(hash: string): void {
   if (hash === acceptedHash) return
   acceptedHash = hash
-  window.history.pushState(null, '', hash)
-  window.dispatchEvent(new Event('rased-route'))
+  if (typeof window !== 'undefined') {
+    window.history.pushState(null, '', hash)
+    window.dispatchEvent(new Event('rased-route'))
+  }
 }
 export function navigateHash(hash: string): void {
   requestAction(() => commitHash(hash))
 }
-window.addEventListener('hashchange', () => {
-  const target = window.location.hash || '#/'
-  if (target === acceptedHash) return
-  // Restore before any component can unmount; only an accepted transition emits.
-  window.history.replaceState(null, '', acceptedHash)
-  requestAction(() => commitHash(target))
-})
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => {
+    const target = window.location.hash || '#/'
+    if (target === acceptedHash) return
+    // Restore before any component can unmount; only an accepted transition emits.
+    window.history.replaceState(null, '', acceptedHash)
+    requestAction(() => commitHash(target))
+  })
+}

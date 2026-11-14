@@ -12,9 +12,11 @@ export interface WatchButtonProps {
   project: ProjectWithUser
   entry: WatchOrigin
   compact?: boolean
+  /** Label for the not-watching state, e.g. «تابع من جديد» on stopped rows. */
+  offLabel?: string
 }
 
-export function WatchButton({ lang, project, entry, compact = false }: WatchButtonProps): React.ReactElement | null {
+export function WatchButton({ lang, project, entry, compact = false, offLabel }: WatchButtonProps): React.ReactElement | null {
   if (!WATCH_ENABLED || !canWatch(project.source)) return null
 
   const [busy, setBusy] = React.useState(false)
@@ -36,7 +38,7 @@ export function WatchButton({ lang, project, entry, compact = false }: WatchButt
   projectIdRef.current = project.id
 
   const state = watchButtonState(project.watch)
-  const label = watchButtonLabel(state, lang)
+  const label = state === 'off' && offLabel ? offLabel : watchButtonLabel(state, lang)
   const isPressed = state === 'active' || state === 'waiting'
   const stateClass = state === 'active' ? ' watch-on' : state === 'waiting' ? ' watch-wait' : ''
 
