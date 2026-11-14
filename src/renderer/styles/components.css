@@ -334,3 +334,15 @@
 .profile-manager .proposal-field { min-inline-size: 0; }
 .profile-manager input, .profile-manager textarea, .profile-manager select { max-inline-size: 100%; }
 .profile-manager textarea[readonly], .profile-manager input[readonly] { background: var(--bg); color: var(--muted); }
+
+/* Project watch */
+.watch-on { border-color: var(--good) !important; color: var(--good) !important; background: var(--good-bg) !important; }
+.watch-wait { border-color: var(--warn, #d6a548) !important; color: var(--warn, #d6a548) !important; }
+.set-subgroup { margin-block: 8px; padding-block: 8px; border-block-start: 1px solid var(--border); }
+.set-subgroup h3 { margin: 0 0 6px; font-size: 0.98rem; }
+.watch-replace-list { display: grid; gap: 8px; max-block-size: 320px; overflow-y: auto; margin-block: 12px; }
+.watch-replace-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-s); cursor: pointer; }
+.watch-replace-item:hover, .watch-replace-item.selected { background: var(--panel-2); }
+.watch-replace-item-body { display: grid; gap: 2px; min-inline-size: 0; }
+.watch-replace-item-title { font-weight: 500; font-size: 0.95rem; }
+.watch-load-error { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-block: 12px; }

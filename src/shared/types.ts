@@ -3,6 +3,8 @@
 
 import { defaultQuickApply, validQuickApply, type QuickApplySettings } from './quickApply.js'
 import { isReleaseVersion } from './whatsNew.js'
+import type { WatchState, WatchStopReason } from './projectWatch.js'
+export type { WatchState, WatchStopReason }
 export type DiscoveryKind = 'initial' | 'live' | 'recovered'
 export type EnrichmentStatus = 'not_requested' | 'pending' | 'ready' | 'failed'
 export type NotifyEventStatus = 'pending' | 'dispatching' | 'submitted' | 'failed' | 'uncertain' | 'suppressed'
@@ -211,6 +213,7 @@ export interface ProjectWithUser extends Project {
   personalStatus: PersonalStatus
   hasNote: boolean
   matchedFields?: import('./searchText.js').MatchedField[]
+  watch?: { state: WatchState; version: number; stopReason: WatchStopReason | null } | null
 }
 
 /** Single-project payload: includes the private note body (never in lists). */

@@ -1,5 +1,6 @@
 import React from 'react'
 import { QuickApplyButton } from '../components/QuickApplyButton.js'
+import { WatchButton } from '../components/WatchButton.js'
 import { rased } from '../api.js'
 import { categoryDisplay } from '@shared/categories.js'
 import { isAiProposalSource } from '@shared/proposals.js'
@@ -282,6 +283,7 @@ export function ProjectDetailView({
           <button className="btn primary" onClick={() => void openExternal()}>
             <Icon name="external" size={16} /> {openOnSource(project.source, lang)}
           </button>
+          <WatchButton key={project.id} lang={lang} project={project} entry="detail" />
           {isAiProposalSource(project.source) && <button className="btn" onClick={() => go({ name: 'proposal', id: project.id })}>
             {lang === 'ar' ? 'مساعد العروض' : 'Proposal Assistant'}
           </button>}

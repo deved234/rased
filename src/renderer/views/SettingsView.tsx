@@ -21,6 +21,7 @@ import { KeywordTokens } from '../components/FilterDrawer.js'
 import { SourceMonitoringSettings } from './SourceMonitoringSettings.js'
 import { SOURCES } from '@shared/sources.js'
 import { AnalyticsSettings } from './AnalyticsSettings.js'
+import { WATCH_ENABLED } from '@shared/projectWatch.js'
 
 type Section = 'watching' | 'notifications' | 'appearance' | 'ai' | 'quick' | 'data' | 'about' | 'legal' | 'updates' | 'analytics'
 
@@ -226,6 +227,23 @@ export function SettingsView({
                 <label>{t.enableNotifications}</label>
                 <Toggle checked={settings.notificationsEnabled} onChange={(v) => void patchSettings({ notificationsEnabled: v })} label={t.enableNotifications} />
               </div>
+              {WATCH_ENABLED && (
+                <div className="set-subgroup">
+                  <h3>{lang === 'ar' ? 'تنبيهات متابعة المشاريع' : 'Project watch alerts'}</h3>
+                  <div className="set-row">
+                    <label>{lang === 'ar' ? 'تغيّر حالة المشروع' : 'Project status changes'}</label>
+                    <Toggle checked={settings.watchNotifyStatus} onChange={(v) => void patchSettings({ watchNotifyStatus: v })} label={lang === 'ar' ? 'تغيّر حالة المشروع' : 'Project status changes'} />
+                  </div>
+                  <div className="set-row">
+                    <label>{lang === 'ar' ? 'تواصل مؤكد على مشروعك' : 'Confirmed client contact on your project'}</label>
+                    <Toggle checked={settings.watchNotifyContactSure} onChange={(v) => void patchSettings({ watchNotifyContactSure: v })} label={lang === 'ar' ? 'تواصل مؤكد على مشروعك' : 'Confirmed client contact on your project'} />
+                  </div>
+                  <div className="set-row">
+                    <label>{lang === 'ar' ? 'تواصل محتمل' : 'Possible client contact'}</label>
+                    <Toggle checked={settings.watchNotifyContactMaybe} onChange={(v) => void patchSettings({ watchNotifyContactMaybe: v })} label={lang === 'ar' ? 'تواصل محتمل' : 'Possible client contact'} />
+                  </div>
+                </div>
+              )}
               <div className="set-row">
                 <label>{t.settingsSound}</label>
                 <Toggle checked={settings.soundEnabled} onChange={(v) => void patchSettings({ soundEnabled: v })} label={t.settingsSound} />

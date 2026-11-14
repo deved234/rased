@@ -11,6 +11,7 @@ import {
   createPendingEvents,
   getEventsByIds,
   getProjectById,
+  hydrateProjects,
   getSettingRaw,
   getSourceState,
   hasBatch,
@@ -462,5 +463,63 @@ describe('purge with project watch', () => {
 
     expect(getProjectById(db, pStopped.id)).toBeNull()
     expect(getProjectById(db, pNoWatch.id)).toBeNull()
+  })
+})
+
+describe('project hydration watch', () => {
+  it('returns watch null without a row, and state/version/stopReason with one', () => {
+    upsertProjectsBatch(
+      db,
+      [item('p-no-watch'), item('p-active-watch'), item('p-stopped-watch')],
+      { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' }
+    )
+    const pNoWatch = getProjectById(db, 1)!
+    const pActive = getProjectById(db, 2)!
+    const pStopped = getProjectById(db, 3)!
+
+    setWatch(db, {
+      projectId: pActive.id,
+      want: 'on',
+      expectVersion: null,
+      origin: 'list',
+      now: '2026-09-24T14:00:00.000Z'
+    })
+
+    setWatch(db, {
+      projectId: pStopped.id,
+      want: 'on',
+      expectVersion: null,
+      origin: 'list',
+      now: '2026-09-24T14:00:00.000Z'
+    })
+    setWatch(db, {
+      projectId: pStopped.id,
+      want: 'off',
+      expectVersion: 1,
+      origin: 'list',
+      now: '2026-09-24T14:01:00.000Z'
+    })
+
+    const hydrated = hydrateProjects(db, [pNoWatch.id, pActive.id, pStopped.id])
+
+    const hNoWatch = hydrated.get(pNoWatch.id)
+    expect(hNoWatch).toBeDefined()
+    expect(hNoWatch?.watch).toBeNull()
+
+    const hActive = hydrated.get(pActive.id)
+    expect(hActive).toBeDefined()
+    expect(hActive?.watch).toEqual({
+      state: 'active',
+      version: 1,
+      stopReason: null
+    })
+
+    const hStopped = hydrated.get(pStopped.id)
+    expect(hStopped).toBeDefined()
+    expect(hStopped?.watch).toEqual({
+      state: 'stopped',
+      version: 2,
+      stopReason: 'manual'
+    })
   })
 })

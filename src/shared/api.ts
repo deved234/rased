@@ -34,6 +34,7 @@ import type {
   ProjectDetails,
   ProjectFull,
   ProjectQuery,
+  ProjectWithUser,
   QueryWindow,
   ProjectUserState,
   RefreshResult,
@@ -62,12 +63,14 @@ export interface PurgePreview {
   backupPath?: string | null
 }
 
+export type WatchListRow = WatchRow & { project: ProjectWithUser }
+
 export interface WatchListResult {
-  rows: WatchRow[]
+  rows: WatchListRow[]
   total: number
 }
 
-export type WatchCounts = Record<WatchSource, { active: number; waiting: number; cap: number }>
+export type WatchCounts = Record<WatchSource, { active: number; waiting: number; cap: number; pausedUntil: string | null }>
 
 export interface AppInfo {
   version: string

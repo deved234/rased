@@ -78,6 +78,7 @@ import {
   listDiagnostics,
   listEventsByStatus,
   suppressPendingWatchEvents,
+  hydrateProjects,
   listSavedFilters,
   markAllRead,
   markEnrichmentPending,
@@ -122,12 +123,14 @@ import { dispatchPending, recoverPreviousSession, type SinglePayload, type Summa
 import {
   WATCH_CAP_PER_SOURCE,
   WATCH_ENABLED,
+  WATCH_EXPIRE_MS,
   WATCH_SOURCES,
   type WatchSource
 } from '../shared/projectWatch.js'
 import {
   autoStartOnSubmittedTx,
   countActiveWatches,
+  getWatch,
   getWatchSourceState,
   listWatches,
   replaceWatch,
@@ -2112,13 +2115,15 @@ function registerIpc(): void {
     const p = getProjectById(db, v.id)
     if (!p) return null
     const u = getUserState(db, v.id)
+    const w = WATCH_ENABLED ? getWatch(db, v.id) : null
     const out: ProjectFull = {
       ...p,
       saved: u.savedAt !== null,
       hidden: u.hiddenAt !== null,
       personalStatus: u.status,
       hasNote: u.note !== '',
-      note: u.note
+      note: u.note,
+      watch: w ? { state: w.state, version: w.version, stopReason: w.stopReason } : null
     }
     return out
   })
@@ -2313,13 +2318,37 @@ function registerIpc(): void {
     const source = typeof raw?.source === 'string' && (WATCH_SOURCES as readonly string[]).includes(raw.source)
       ? (raw.source as WatchSource)
       : undefined
-    return listWatches(db, source ? { source } : undefined)
+    const limit = 500
+    const page = listWatches(db, { ...(source ? { source } : {}), limit, offset: 0 })
+    const allRows = [...page.rows]
+    let offset = page.rows.length
+    while (allRows.length < page.total && page.rows.length > 0) {
+      const nextPage = listWatches(db, { ...(source ? { source } : {}), limit, offset })
+      if (nextPage.rows.length === 0) break
+      allRows.push(...nextPage.rows)
+      offset += nextPage.rows.length
+    }
+    const cutoff = new Date(Date.now() - WATCH_EXPIRE_MS).toISOString()
+    const keptRows = allRows.filter(r => r.state !== 'stopped' || (r.stoppedAt !== null && r.stoppedAt >= cutoff))
+    const ids = keptRows.map(r => r.projectId)
+    const projectsById = hydrateProjects(db, ids)
+    const rows = keptRows
+      .filter(r => projectsById.has(r.projectId))
+      .map(r => ({
+        ...r,
+        project: projectsById.get(r.projectId)!
+      }))
+    return {
+      rows,
+      total: keptRows.length
+    }
   })
   ipcMain.handle(IPC.watchCounts, event => {
     if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
     if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
     if (!db) return { ok: false, error: 'no-db' }
-    const counts = {} as Record<WatchSource, { active: number; waiting: number; cap: number }>
+    const now = new Date().toISOString()
+    const counts = {} as Record<WatchSource, { active: number; waiting: number; cap: number; pausedUntil: string | null }>
     for (const s of WATCH_SOURCES) {
       const active = countActiveWatches(db, s)
       const waitingRow = db.prepare(`
@@ -2328,10 +2357,13 @@ function registerIpc(): void {
         JOIN projects p ON p.id = pw.project_id
         WHERE pw.state = 'waiting' AND p.source = ?;
       `).get(s) as { c: number } | undefined
+      const st = getWatchSourceState(db, s)
+      const pausedUntil = st.pausedUntil && st.pausedUntil > now ? st.pausedUntil : null
       counts[s] = {
         active,
         waiting: waitingRow ? Number(waitingRow.c) : 0,
-        cap: WATCH_CAP_PER_SOURCE
+        cap: WATCH_CAP_PER_SOURCE,
+        pausedUntil
       }
     }
     return counts

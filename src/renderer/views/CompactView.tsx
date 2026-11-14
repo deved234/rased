@@ -5,6 +5,7 @@ import { STRINGS } from '../i18n.js'
 import { applyUiPrefs, useHealth, useKhamsatHealth, useNafezlyHealth, useKafHealth, useNow, useSettings } from '../hooks.js'
 import { timeAgo } from '../format.js'
 import { Icon } from '../components/Icon.js'
+import { WatchButton } from '../components/WatchButton.js'
 import { overallDot, overallText } from '../components/shell.js'
 import { overallSourceState } from '@shared/sourceStatus.js'
 import { openOnSource, platformStatusName, sourceName } from '../sourceCopy.js'
@@ -86,6 +87,7 @@ export function CompactView(): React.ReactElement {
               <span>
                 {timeAgo(p.publishedAt ?? p.firstSeenAt, lang)}
               </span>
+              <WatchButton key={p.id} lang={lang} project={p} entry="compact" compact />
               <button
                 className={p.saved ? 'icon-btn on' : 'icon-btn'}
                 title={p.saved ? t.unsaveProject : t.saveProject}

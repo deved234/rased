@@ -1,6 +1,7 @@
 import { MonitoringNotices } from '../components/SourceHealthDetails.js'
 import React from 'react'
 import { QuickApplyButton } from '../components/QuickApplyButton.js'
+import { WatchButton } from '../components/WatchButton.js'
 import { rased } from '../api.js'
 import {
   defaultFilterDefinition,
@@ -549,6 +550,7 @@ function PreviewPanel({
           <button className="btn primary sm" onClick={onOpenDetail}>
             {t.previewFullDetails}
           </button>
+          <WatchButton key={p.id} lang={lang} project={p} entry="preview" />
           <button className="btn sm" onClick={onOpenExternal}>
             {openOnSource(p.source, lang)}
           </button>

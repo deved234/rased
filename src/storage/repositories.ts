@@ -471,7 +471,9 @@ import type {
   ProjectUserState,
   ProjectWithUser,
   QueryWindow,
-  SavedFilter
+  SavedFilter,
+  WatchState,
+  WatchStopReason
 } from '../shared/types.js'
 import { defaultFilterDefinition, sanitizeFilterDefinition } from '../shared/types.js'
 
@@ -649,6 +651,9 @@ interface PrefilterRow extends ProjectRow {
   saved_at: string | null
   hidden_at: string | null
   personal_status: PersonalStatus | null
+  watch_state?: WatchState | null
+  watch_version?: number | null
+  watch_stop_reason?: WatchStopReason | null
 }
 
 function mapWithUser(row: PrefilterRow): ProjectWithUser {
@@ -657,8 +662,23 @@ function mapWithUser(row: PrefilterRow): ProjectWithUser {
     saved: row.saved_at !== null,
     hidden: row.hidden_at !== null,
     personalStatus: row.personal_status ?? 'none',
-    hasNote: false // filled below when needed; list queries skip note bodies
+    hasNote: false, // filled below when needed; list queries skip note bodies
+    watch: row.watch_state && row.watch_version !== null && row.watch_version !== undefined
+      ? {
+          state: row.watch_state,
+          version: Number(row.watch_version),
+          stopReason: row.watch_stop_reason ?? null
+        }
+      : null
   }
+}
+
+export function hydrateProjects(db: Db, ids: number[]): Map<number, ProjectWithUser> {
+  const byId = new Map<number, ProjectWithUser>()
+  if (!ids.length) return byId
+  const data = db.prepare(`SELECT p.*,u.saved_at,u.hidden_at,u.personal_status,(COALESCE(u.note,'')!='') AS has_note,w.state AS watch_state,w.version AS watch_version,w.stop_reason AS watch_stop_reason FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id LEFT JOIN project_watch w ON w.project_id=p.id WHERE p.id IN (${ids.map(() => '?').join(',')})`).all(...ids) as unknown as (PrefilterRow & {has_note: number})[]
+  for (const row of data) byId.set(row.id, { ...mapWithUser(row), hasNote: row.has_note === 1 })
+  return byId
 }
 
 /**
@@ -671,10 +691,13 @@ export function queryProjectsPage(db: Db, def: FilterDefinition, page: { limit: 
   try {
     const result = queryProjectIds(db, def, page, window)
     const fields = matchingFields(db, def, result.ids)
-    const byId = new Map<number, ProjectWithUser>()
-    if (result.ids.length) {
-      const data = db.prepare(`SELECT p.*,u.saved_at,u.hidden_at,u.personal_status,(COALESCE(u.note,'')!='') AS has_note FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id WHERE p.id IN (${result.ids.map(() => '?').join(',')})`).all(...result.ids) as unknown as (PrefilterRow & {has_note: number})[]
-      for (const row of data) byId.set(row.id, { ...mapWithUser(row), hasNote: row.has_note === 1, ...(fields.has(row.id) ? { matchedFields: fields.get(row.id) } : {}) })
+    const byId = hydrateProjects(db, result.ids)
+    if (fields.size > 0) {
+      for (const [id, matched] of fields) {
+        const p = byId.get(id)
+        if (p) p.matchedFields = matched
+      }
+
     }
     if (ownsTransaction) db.exec('COMMIT')
     return { rows: result.ids.map(id => byId.get(id)!), total: result.total, unread: result.unread, ceilingId: result.ceilingId, visibleTotal: result.visibleTotal }
