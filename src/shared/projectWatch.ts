@@ -1,7 +1,7 @@
 // Dormant contract for a future project-watch feature. Nothing schedules,
 // persists or calls it yet: these values only describe the intended policy.
 
-export const WATCH_ENABLED = false
+export const WATCH_ENABLED = true
 export const WATCH_SLOT_MS = 10_000
 export const WATCH_SLOT_MAX_MS = 300_000
 export const WATCH_CAP_PER_SOURCE = 10

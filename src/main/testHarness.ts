@@ -27,6 +27,28 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   const fetchImpl = (async (url, options) => {
     record('fetch', String(url))
     if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const watchPagesPath = join(profile, 'watch-pages.json')
+    if (existsSync(watchPagesPath)) {
+      const watchPages = JSON.parse(readFileSync(watchPagesPath, 'utf8')) as Record<string, { status: number; file?: string; location?: string; retryAfter?: string; delayMs?: number }>
+      const entry = watchPages[String(url)]
+      if (entry) {
+        if (entry.delayMs) await new Promise<void>((resolve, reject) => {
+          const abort = (): void => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')) }
+          const timer = setTimeout(() => { options?.signal?.removeEventListener('abort', abort); resolve() }, entry.delayMs)
+          options?.signal?.addEventListener('abort', abort, { once: true })
+        })
+        if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+        const headers: Record<string, string> = {}
+        if (entry.retryAfter) headers['retry-after'] = entry.retryAfter
+        if (entry.location) {
+          headers['location'] = entry.location
+          return new Response(null, { status: entry.status, headers })
+        }
+        headers['content-type'] = 'text/html'
+        const body = entry.file ? readFileSync(resolve(profile, entry.file), 'utf8') : ''
+        return new Response(body, { status: entry.status, headers })
+      }
+    }
     const factsSource = /^https:\/\/mostaql\.com\/(go|project)\//.test(String(url)) ? 'mostaql' : /^https:\/\/nafezly\.com\/project\//.test(String(url)) ? 'nafezly' : null
     const factsPath = join(profile, 'facts-config.json')
     const factsConfig = factsSource && existsSync(factsPath) ? (JSON.parse(readFileSync(factsPath, 'utf8')) as Record<string, { status?: number; delay?: number; retryAfter?: string }>)[factsSource] : undefined

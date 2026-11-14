@@ -602,6 +602,8 @@ describe('ProjectWatcher', () => {
     let state = getWatchSourceState(db, 'mostaql')
     expect(state.slotMs).toBe(20_000)
     expect(state.pausedUntil).toBe(new Date(tBlock1 + 40 * 60 * 1000).toISOString())
+    // Open screens are told so the platform pause note appears without navigation
+    expect(changedCalls).toContainEqual([p1])
 
     // Repeated block with shorter retry-after (e.g. 5 min) does NOT shorten the existing pause
     // Simulate concurrent update during in-flight fetch:

@@ -138,7 +138,8 @@
     "test:project-facts": "node scripts/project-facts-e2e.mjs",
     "test:notification-activation": "node scripts/notification-activation-e2e.mjs",
     "test:telemetry": "node scripts/telemetry-worker-test.mjs && node scripts/telemetry-e2e.mjs && node scripts/telemetry-lifecycle-e2e.mjs",
-    "test:startup": "node scripts/test-database-startup.mjs"
+    "test:startup": "node scripts/test-database-startup.mjs",
+    "test:watch": "node scripts/project-watch-e2e.mjs"
   },
   "version": "0.11.0"
 }

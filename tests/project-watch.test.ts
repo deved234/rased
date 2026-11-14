@@ -36,8 +36,8 @@ const kafInfo = (...rows: string[]): string => `${kafHead}<div class="block-body
 const emptySnapshot: WatchSnapshot = { status: null, offers: null, offersCapped: false, contacts: null, clientOpen: null, clientInProgress: null }
 
 describe('Watch contract stays dormant', () => {
-  it('ships disabled and limited to the three supported sources', () => {
-    expect(WATCH_ENABLED).toBe(false)
+  it('ships enabled and limited to the three supported sources', () => {
+    expect(WATCH_ENABLED).toBe(true)
     expect(WATCH_SOURCES).toEqual(['mostaql', 'nafezly', 'kaf'])
     expect(WATCH_OFFERS_PAGE_CAP).toBe(50)
   })

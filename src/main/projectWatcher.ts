@@ -246,6 +246,13 @@ export class ProjectWatcher {
       // ignore
     }
 
+    // 4b. Let open screens refresh the platform pause note
+    try {
+      this.deps.onChanged([picked.row.projectId])
+    } catch {
+      // ignore
+    }
+
     // 5. Counters: each in its own try/catch (Item 3)
     try {
       this.deps.onCounter?.(source, 'blocked')

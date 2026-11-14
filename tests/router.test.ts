@@ -69,9 +69,9 @@ describe('router', () => {
   })
 
   describe('watching route behavior with watchEnabled flag', () => {
-    it('defaults watchEnabled parameter to WATCH_ENABLED constant (false)', () => {
-      expect(WATCH_ENABLED).toBe(false)
-      expect(parseHash('#/watching')).toEqual({ name: 'projects' })
+    it('defaults watchEnabled parameter to WATCH_ENABLED constant (true)', () => {
+      expect(WATCH_ENABLED).toBe(true)
+      expect(parseHash('#/watching')).toEqual({ name: 'watching' })
     })
 
     it('falls back to projects when watchEnabled is explicitly false', () => {

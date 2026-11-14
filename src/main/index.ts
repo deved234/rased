@@ -2160,7 +2160,7 @@ function registerIpc(): void {
         const before = getUserState(d, v.id).status
         const ok = updateUserState(d, v.id, patch)
         if (!ok) return false
-        if (patch.status === 'submitted' && before !== 'submitted') {
+        if (applicationAccessAllowed() && patch.status === 'submitted' && before !== 'submitted') {
           const res = autoStartOnSubmittedTx(d, v.id, nowIso)
           if (res.ok && res.changed && res.row) {
             try {
@@ -2179,7 +2179,7 @@ function registerIpc(): void {
             promoted = res.promoted
           }
         }
-        if (patch.status === 'ignored' || patch.hidden === true) {
+        if (applicationAccessAllowed() && (patch.status === 'ignored' || patch.hidden === true)) {
           const res = stopWatchTx(d, { projectId: v.id, reason: 'ignored', now: nowIso })
           if (res.changed) {
             try {
@@ -2225,7 +2225,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.watchSet, (event, raw) => {
     if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
-    if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
+    if (!localSender(event) || !applicationAccessAllowed()) return { ok: false, error: 'untrusted-sender' }
     if (!db) return { ok: false, error: 'no-db' }
     const payload = validateWatchSetPayload(raw)
     if (!payload) return { ok: false, error: 'bad-request' }
@@ -2272,7 +2272,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.watchReplace, (event, raw) => {
     if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
-    if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
+    if (!localSender(event) || !applicationAccessAllowed()) return { ok: false, error: 'untrusted-sender' }
     if (!db) return { ok: false, error: 'no-db' }
     const payload = validateWatchReplacePayload(raw)
     if (!payload) return { ok: false, error: 'bad-request' }
