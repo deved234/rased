@@ -105,6 +105,9 @@ if (options.purgeOnly) {
       else if (message.type === 'counter' && message.generation === consent.generation && enabled()) {
         const e = envelope(message.name, { [message.field]: 1 }, true)
         store.counter(message.name, message.name + ':' + e.occurredAt, message.field, e)
+      } else if (message.type === 'gauge' && message.generation === consent.generation && enabled()) {
+        const e = envelope(message.name, { [message.field]: message.value }, true)
+        store.gauge(message.name, message.name + ':' + e.occurredAt, message.field, message.value, e)
       } else if (message.type === 'context') options.context.language = message.language
       else if (message.type === 'suspend') { suspended = true; controller?.abort('suspend') }
       else if (message.type === 'resume') { suspended = false; delivery.resume() }

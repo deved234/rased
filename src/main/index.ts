@@ -119,10 +119,10 @@ import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './poli
 import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
-import { WATCH_ENABLED } from '../shared/projectWatch.js'
+import { WATCH_ENABLED, WATCH_SOURCES, type WatchSource } from '../shared/projectWatch.js'
 import { startEpisode } from '../storage/projectWatch.js'
-import { dispatchWatchPending, dispatchWatchEpisode } from './watchNotifier.js'
-import { watchSummaryTitle, watchAwayTitle } from '../shared/watchNotificationText.js'
+import { dispatchWatchPending, dispatchWatchEpisode, watchChangeKind } from './watchNotifier.js'
+import { watchSummaryTitle, watchAwayTitle, parseWatchPayload } from '../shared/watchNotificationText.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 import { browserToastXml, supportsUrgentToasts } from './toast.js'
 import { NotificationActivationController } from './notifications/activation.js'
@@ -297,7 +297,7 @@ const notificationActivation = new NotificationActivationController(activationSc
     }
     if (destination.projectId !== null) {
       const source = sourceForTelemetry(destination.url)
-      telemetry?.record('project_open_result', { source, entry: 'notification', launch: result.launch, foreground: result.foreground, duration: durationBucket(result.durationMs) })
+      telemetry?.record('project_open_result', { source, entry: destination.origin === 'watch_notification' ? 'watch_notification' : 'notification', launch: result.launch, foreground: result.foreground, duration: durationBucket(result.durationMs) })
       if (source !== 'unknown') telemetry?.counter('notification_summary', `${source}_activated`)
       telemetry?.activity('interface')
     }
@@ -672,8 +672,16 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
         })
       }
       if (WATCH_ENABLED) {
-        suppressPendingWatchEvents(d, nowIso)
-        await dispatchWatchEpisode(
+        const suppressed = suppressPendingWatchEvents(d, nowIso)
+        for (const row of suppressed) {
+          const project = getProjectById(d, row.project_id)
+          if (!project || !(WATCH_SOURCES as readonly string[]).includes(project.source)) continue
+          const valid = parseWatchPayload(row.kind, row.payload)
+          if (!valid) continue
+          const change = watchChangeKind(row.kind as 'watch_status' | 'watch_contact', valid)
+          telemetry?.record('watch_change', { source: project.source as WatchSource, change, notified: 'suppressed' })
+        }
+        const episodeOut = await dispatchWatchEpisode(
           d,
           { sessionId, nowIso, silent: true },
           {
@@ -681,6 +689,11 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
             eligible: () => false
           }
         )
+        for (const r of episodeOut.results) {
+          if ((WATCH_SOURCES as readonly string[]).includes(r.source)) {
+            telemetry?.record('watch_change', { source: r.source as WatchSource, change: r.change, notified: r.result })
+          }
+        }
       }
       return
     }
@@ -757,7 +770,7 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
                   showMainWindowForWatch()
                   return
                 }
-                void openProjectById(first.id, true, first.url).then((result) => {
+                void openProjectById(first.id, true, first.url, 'watch_notification').then((result) => {
                   if (!result.ok) auditUi(`notification-browser-failed id=${first.id} ${result.error}`)
                 })
                 return
@@ -775,6 +788,11 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
         onBeep: watchOnBeep
       }
     )
+    for (const r of episodeOut.results) {
+      if ((WATCH_SOURCES as readonly string[]).includes(r.source)) {
+        telemetry?.record('watch_change', { source: r.source as WatchSource, change: r.change, notified: r.result })
+      }
+    }
     if (episodeOut.results.length > 0) watchHappened = true
 
     const watchOut = await dispatchWatchPending(
@@ -792,7 +810,7 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
                 showMainWindowForWatch()
                 return
               }
-              void openProjectById(id, true, url).then((result) => {
+              void openProjectById(id, true, url, 'watch_notification').then((result) => {
                 if (!result.ok) auditUi(`notification-browser-failed id=${id} ${result.error}`)
               })
             },
@@ -818,7 +836,7 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
                   showMainWindowForWatch()
                   return
                 }
-                void openProjectById(first.id, true, first.url).then((result) => {
+                void openProjectById(first.id, true, first.url, 'watch_notification').then((result) => {
                   if (!result.ok) auditUi(`notification-browser-failed id=${first.id} ${result.error}`)
                 })
                 return
@@ -836,6 +854,11 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
         onBeep: watchOnBeep
       }
     )
+    for (const r of watchOut.results) {
+      if ((WATCH_SOURCES as readonly string[]).includes(r.source)) {
+        telemetry?.record('watch_change', { source: r.source as WatchSource, change: r.change, notified: r.result })
+      }
+    }
     if (watchOut.results.length > 0) watchHappened = true
   }
   if (out.singles > 0 || out.summaries > 0 || out.skipped > 0 || watchHappened) emitProjects([], [])
@@ -1309,10 +1332,10 @@ function requestFacts(id: number, force: boolean): ProjectFacts | null {
 
 // ---------------------------------------------------------------- open project
 
-async function openProjectById(id: number, fromNotification: boolean, notificationUrl?: string): Promise<{ ok: boolean; error?: string }> {
+async function openProjectById(id: number, fromNotification: boolean, notificationUrl?: string, entry: 'notification' | 'watch_notification' = 'notification'): Promise<{ ok: boolean; error?: string }> {
   const openStarted = Date.now()
   const measureOpen = (url: string, launch: 'accepted' | 'failed'): void => {
-    telemetry?.record('project_open_result', { source: sourceForTelemetry(url), entry: fromNotification ? 'notification' : 'app', launch, foreground: 'not-attempted', duration: durationBucket(Date.now() - openStarted) })
+    telemetry?.record('project_open_result', { source: sourceForTelemetry(url), entry: fromNotification ? entry : 'app', launch, foreground: 'not-attempted', duration: durationBucket(Date.now() - openStarted) })
     telemetry?.activity('interface')
   }
   if (quitRequested) return { ok: false, error: 'quitting' }

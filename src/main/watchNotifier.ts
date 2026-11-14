@@ -57,7 +57,7 @@ export interface WatchDispatchOutcome {
   results: WatchResultEntry[]
 }
 
-function determineChange(
+export function watchChangeKind(
   kind: 'watch_status' | 'watch_contact',
   valid: ValidWatchPayload | null
 ): 'contact_sure' | 'contact_maybe' | 'status_in_progress' | 'status_closed' {
@@ -69,6 +69,8 @@ function determineChange(
   }
   return valid.to === 'in_progress' ? 'status_in_progress' : 'status_closed'
 }
+
+const determineChange = watchChangeKind
 
 export async function dispatchWatchPending(
   db: Db,

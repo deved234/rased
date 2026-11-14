@@ -2,9 +2,10 @@ import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import { mkdirSync, existsSync, statSync } from 'node:fs'
-import { validTelemetryEnvelope, type TelemetryEnvelope, type TelemetryName } from '../shared/telemetry.js'
+import { TELEMETRY_SUMMARIES, validTelemetryEnvelope, type TelemetryEnvelope, type TelemetryName, type WatchSlotBucket } from '../shared/telemetry.js'
 
 const MAX_AGE = 7 * 86400000
+const SLOT_ORDER: Record<WatchSlotBucket, number> = { '10s': 0, '20s': 1, '40s': 2, '80s_plus': 3 }
 /** Worker-owned database. Never attach or include this file in project backups. */
 export class TelemetryStore {
   readonly db: DatabaseSync
@@ -42,7 +43,7 @@ export class TelemetryStore {
       const day = envelope.occurredAt.slice(0, 10), rateKey = `rate:${day}:${envelope.name}`
       const count = Number(this.get(rateKey) ?? 0) + 1
       this.set(rateKey, String(count))
-      if (count > 100 && !['monitoring_hourly', 'notification_summary'].includes(envelope.name)) {
+      if (count > 100 && !(TELEMETRY_SUMMARIES as readonly string[]).includes(envelope.name)) {
         const signature = createHash('sha256').update(JSON.stringify(envelope.properties)).digest('hex')
         this.aggregate(`overflow:${day}:${envelope.occurredAt.slice(11, 13)}:${envelope.name}:${signature}`, envelope)
       } else this.insert(envelope)
@@ -70,6 +71,30 @@ export class TelemetryStore {
     }
     const body = JSON.stringify(e)
     if (validTelemetryEnvelope(e)) this.db.prepare('INSERT OR REPLACE INTO buckets VALUES(?,?,?,?)').run(key, body, Buffer.byteLength(body), Date.parse(e.occurredAt))
+    this.trim()
+  }
+  gauge(name: TelemetryName, key: string, field: string, value: WatchSlotBucket, envelope: TelemetryEnvelope): void {
+    if (!(TELEMETRY_SUMMARIES as readonly string[]).includes(name)) return
+    if (!validTelemetryEnvelope(envelope)) return
+    const previous = this.db.prepare('SELECT body FROM buckets WHERE key=?').get(key) as { body: string } | undefined
+    if (previous) {
+      let candidate: unknown
+      try { candidate = JSON.parse(previous.body) } catch { /* Replace the damaged bucket. */ }
+      if (validTelemetryEnvelope(candidate) && candidate.name === envelope.name && candidate.distinctId === envelope.distinctId) {
+        const existing = candidate.properties[field]
+        if (typeof existing === 'string' && existing in SLOT_ORDER && SLOT_ORDER[existing as WatchSlotBucket] >= SLOT_ORDER[value]) return
+        candidate.properties[field] = value
+        const body = JSON.stringify(candidate)
+        this.db.prepare('INSERT OR REPLACE INTO buckets VALUES(?,?,?,?)').run(key, body, Buffer.byteLength(body), Date.parse(candidate.occurredAt))
+      } else {
+        this.set('dropped', String(Number(this.get('dropped') ?? 0) + 1))
+        const body = JSON.stringify(envelope)
+        this.db.prepare('INSERT OR REPLACE INTO buckets VALUES(?,?,?,?)').run(key, body, Buffer.byteLength(body), Date.parse(envelope.occurredAt))
+      }
+    } else {
+      const body = JSON.stringify(envelope)
+      this.db.prepare('INSERT OR REPLACE INTO buckets VALUES(?,?,?,?)').run(key, body, Buffer.byteLength(body), Date.parse(envelope.occurredAt))
+    }
     this.trim()
   }
   seal(all = false): void {
@@ -135,7 +160,7 @@ export class TelemetryStore {
     const before = this.status().queued
     this.db.prepare('DELETE FROM queue WHERE at<?').run(this.now() - MAX_AGE)
     this.db.prepare('DELETE FROM buckets WHERE at<?').run(this.now() - MAX_AGE)
-    this.db.prepare("DELETE FROM meta WHERE (key LIKE 'once:active:%' OR key LIKE 'rate:%') AND at<?").run(this.now() - MAX_AGE)
+    this.db.prepare("DELETE FROM meta WHERE (key LIKE 'once:active:%' OR key LIKE 'once:watch_daily:%' OR key LIKE 'rate:%') AND at<?").run(this.now() - MAX_AGE)
     for (let i = 0; i < 1100; i++) {
       const size = this.db.prepare('SELECT (SELECT COALESCE(SUM(bytes),0) FROM queue)+(SELECT COALESCE(SUM(bytes),0) FROM buckets) AS bytes').get() as { bytes: number }
       if (this.status().queued <= 1000 && size.bytes <= 2 * 1024 * 1024) break
@@ -148,7 +173,7 @@ export class TelemetryStore {
     if (dropped > 0) this.set('dropped', String(Number(this.get('dropped') ?? 0) + dropped))
   }
   counter(name: TelemetryName, key: string, field: string, envelope: TelemetryEnvelope): void {
-    if (name !== 'monitoring_hourly' && name !== 'notification_summary') return
+    if (!(TELEMETRY_SUMMARIES as readonly string[]).includes(name)) return
     this.aggregate(key, envelope, field)
   }
   close(): void { this.db.close() }

@@ -3,9 +3,10 @@ import { join } from 'node:path'
 import { ConsentStore } from './consent.js'
 import type { TelemetryConfig } from './config.js'
 import type { TelemetryMessage, TelemetryWorkerData } from './protocol.js'
-import { TELEMETRY_DISCLOSURE, validTelemetryProperties, type AnalyticsStatus, type TelemetryEvents, type TelemetryName } from '../../shared/telemetry.js'
+import { TELEMETRY_DISCLOSURE, validTelemetryProperties, watchDailyBuckets, watchSlotBucket, type AnalyticsStatus, type TelemetryEvents, type TelemetryName, type TelemetrySummaryName } from '../../shared/telemetry.js'
 import type { SourceHealth } from '../../shared/types.js'
 import type { SourceId } from '../../shared/sources.js'
+import type { WatchSource } from '../../shared/projectWatch.js'
 
 export class TelemetryService {
   private consent: ConsentStore
@@ -159,9 +160,22 @@ export class TelemetryService {
   activity(kind: 'interface' | 'monitoring'): void {
     this.record('active_daily', { activity_kind: kind }, `active:${new Date().toISOString().slice(0, 10)}:${kind}`)
   }
-  counter(name: 'monitoring_hourly' | 'notification_summary', field: string): void {
+  counter(name: TelemetrySummaryName, field: string): void {
     if (!this.allowed() || !validTelemetryProperties(name, { [field]: 1 })) return
     this.post({ type: 'counter', generation: this.consent.snapshot().generation, name, field })
+  }
+  watchCounter(source: WatchSource, kind: 'ok' | 'blocked' | 'failed' | 'slowed' | 'preempted'): void {
+    this.counter('watch_hourly', `${source}_${kind}`)
+  }
+  watchSlot(source: WatchSource, slotMs: number): void {
+    const value = watchSlotBucket(slotMs)
+    const field = `${source}_slot`
+    if (!this.allowed() || !validTelemetryProperties('watch_hourly', { [field]: value })) return
+    this.post({ type: 'gauge', generation: this.consent.snapshot().generation, name: 'watch_hourly', field, value })
+  }
+  watchDaily(source: WatchSource, watched: number, waiting: number): void {
+    const buckets = watchDailyBuckets(watched, waiting)
+    this.record('watch_daily', { source, ...buckets }, `watch_daily:${new Date().toISOString().slice(0, 10)}:${source}`)
   }
   health(source: SourceId, h: SourceHealth): void {
     const previous = this.healthSeen.get(source)
