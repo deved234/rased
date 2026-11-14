@@ -106,3 +106,10 @@ export function watchSummaryTitle(count: number, lang: 'ar' | 'en'): string {
     ? `تغييرات في ${count} مشاريع تتابعها`
     : `Changes in ${count} projects you watch`
 }
+
+export function watchAwayTitle(count: number, lang: 'ar' | 'en'): string {
+  return lang === 'ar'
+    ? `حصل وأنت غايب: تغييرات في ${count} مشاريع`
+    : `While you were away: changes in ${count} projects`
+}
+

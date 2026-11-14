@@ -77,7 +77,7 @@ import {
   listClassificationWaits,
   listDiagnostics,
   listEventsByStatus,
-  listPendingWatchEvents,
+  suppressPendingWatchEvents,
   listSavedFilters,
   markAllRead,
   markEnrichmentPending,
@@ -120,8 +120,9 @@ import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import { WATCH_ENABLED } from '../shared/projectWatch.js'
-import { dispatchWatchPending } from './watchNotifier.js'
-import { watchSummaryTitle } from '../shared/watchNotificationText.js'
+import { startEpisode } from '../storage/projectWatch.js'
+import { dispatchWatchPending, dispatchWatchEpisode } from './watchNotifier.js'
+import { watchSummaryTitle, watchAwayTitle } from '../shared/watchNotificationText.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
 import { browserToastXml, supportsUrgentToasts } from './toast.js'
 import { NotificationActivationController } from './notifications/activation.js'
@@ -671,10 +672,15 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
         })
       }
       if (WATCH_ENABLED) {
-        const watchPend = listPendingWatchEvents(d)
-        if (watchPend.length > 0) {
-          markEvents(d, watchPend.map((p) => p.id), 'suppressed', null, nowIso)
-        }
+        suppressPendingWatchEvents(d, nowIso)
+        await dispatchWatchEpisode(
+          d,
+          { sessionId, nowIso, silent: true },
+          {
+            sendAway: async () => false,
+            eligible: () => false
+          }
+        )
       }
       return
     }
@@ -704,6 +710,73 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
   )
   let watchHappened = false
   if (WATCH_ENABLED) {
+    const watchEligible: Parameters<typeof dispatchWatchEpisode>[2]['eligible'] = (
+      event,
+      p
+    ) =>
+      notificationAllowed()
+      && getUserState(d, p.id).hiddenAt === null
+      && (p.source === 'mostaql'
+        ? settings.mostaqlEnabled && settings.mostaqlNotificationsEnabled
+        : p.source === 'nafezly'
+        ? settings.nafezlyEnabled && settings.nafezlyNotificationsEnabled
+        : p.source === 'kaf'
+        ? settings.kafEnabled && settings.kafNotificationsEnabled
+        : false)
+      && (event.kind === 'watch_status'
+        ? settings.watchNotifyStatus
+        : event.attribution === 'sure'
+        ? settings.watchNotifyContactSure
+        : settings.watchNotifyContactMaybe)
+
+    const watchOnBeep = (): void => {
+      if (notificationAllowed() && settings.soundEnabled) {
+        testHarness?.record('beep', true)
+        win?.webContents.send(IPC.playBeep)
+      }
+    }
+
+    const episodeOut = await dispatchWatchEpisode(
+      d,
+      { sessionId, nowIso, silent: false },
+      {
+        sendAway: (p) => {
+          const lang = settings.language
+          const n = p.projects.length
+          const lines = p.projects.slice(0, 3).map((x) => `• ${projectLine(x)}`)
+          if (n > 3) {
+            lines.push(lang === 'ar' ? `و ${n - 3} أخرى…` : `and ${n - 3} more…`)
+          }
+          const first = p.projects[0]
+          return showToast(
+            watchAwayTitle(n, lang),
+            lines.join('\n'),
+            () => {
+              if (first) {
+                if (watchActivationTarget({ url: first.url, projectId: first.id, origin: 'watch_notification' }, (pid) => Boolean(db?.isOpen && getProjectById(db, pid))) === 'app') {
+                  showMainWindowForWatch()
+                  return
+                }
+                void openProjectById(first.id, true, first.url).then((result) => {
+                  if (!result.ok) auditUi(`notification-browser-failed id=${first.id} ${result.error}`)
+                })
+                return
+              }
+              if (testHarness) testHarness.record('open-external', MOSTAQL_PROJECTS_URL)
+              else void shell.openExternal(MOSTAQL_PROJECTS_URL).catch((err) => auditUi(`summary-browser-failed ${String(err)}`))
+            },
+            first?.url ?? MOSTAQL_PROJECTS_URL,
+            undefined,
+            first?.id ?? null,
+            'watch_notification'
+          )
+        },
+        eligible: watchEligible,
+        onBeep: watchOnBeep
+      }
+    )
+    if (episodeOut.results.length > 0) watchHappened = true
+
     const watchOut = await dispatchWatchPending(
       d,
       { sessionId, nowIso, lang: settings.language },
@@ -759,27 +832,8 @@ async function flushPending(batchKeyForGap: string | null): Promise<void> {
             'watch_notification'
           )
         },
-        eligible: (event, p) =>
-          notificationAllowed()
-          && getUserState(d, p.id).hiddenAt === null
-          && (p.source === 'mostaql'
-            ? settings.mostaqlEnabled && settings.mostaqlNotificationsEnabled
-            : p.source === 'nafezly'
-            ? settings.nafezlyEnabled && settings.nafezlyNotificationsEnabled
-            : p.source === 'kaf'
-            ? settings.kafEnabled && settings.kafNotificationsEnabled
-            : false)
-          && (event.kind === 'watch_status'
-            ? settings.watchNotifyStatus
-            : event.attribution === 'sure'
-            ? settings.watchNotifyContactSure
-            : settings.watchNotifyContactMaybe),
-        onBeep: () => {
-          if (notificationAllowed() && settings.soundEnabled) {
-            testHarness?.record('beep', true)
-            win?.webContents.send(IPC.playBeep)
-          }
-        }
+        eligible: watchEligible,
+        onBeep: watchOnBeep
       }
     )
     if (watchOut.results.length > 0) watchHappened = true
@@ -2337,6 +2391,7 @@ async function boot(): Promise<void> {
   // Crash recovery for notification bookkeeping (never auto-resends).
   recordDiagnosticSafe()
   recoverPreviousSession(db, sessionId, new Date().toISOString())
+  if (WATCH_ENABLED && db?.isOpen) { try { startEpisode(db, { now: new Date().toISOString() }) } catch { auditUi('watch-episode-start-failed') } }
   // Rows stuck in details-loading can never complete; make them retryable.
   resetStaleLoadingDetails(db)
 
@@ -2410,6 +2465,7 @@ async function boot(): Promise<void> {
     }
   })
   powerMonitor.on('resume', () => {
+    if (WATCH_ENABLED && db?.isOpen) { try { startEpisode(db, { now: new Date().toISOString() }) } catch { auditUi('watch-episode-start-failed') } }
     searchCache?.suspend(false)
     telemetry?.resume()
     kaf?.wake()

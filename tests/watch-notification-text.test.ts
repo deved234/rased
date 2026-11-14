@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseWatchPayload,
+  watchAwayTitle,
   watchNotificationText,
   watchSummaryTitle,
   type ValidWatchPayload
@@ -223,3 +224,13 @@ describe('watchSummaryTitle', () => {
     expect(watchSummaryTitle(4, 'en')).toBe('Changes in 4 projects you watch')
   })
 })
+
+describe('watchAwayTitle', () => {
+  it('formats the away title with exact strings in Arabic and English', () => {
+    expect(watchAwayTitle(1, 'ar')).toBe('حصل وأنت غايب: تغييرات في 1 مشاريع')
+    expect(watchAwayTitle(1, 'en')).toBe('While you were away: changes in 1 projects')
+    expect(watchAwayTitle(3, 'ar')).toBe('حصل وأنت غايب: تغييرات في 3 مشاريع')
+    expect(watchAwayTitle(3, 'en')).toBe('While you were away: changes in 3 projects')
+  })
+})
+

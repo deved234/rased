@@ -844,16 +844,59 @@ export function saveSnapshotTx(
     newLastChangedAt = canonicalNow
   }
 
+  const unobservedMembers = db
+    .prepare(`
+      SELECT m.episode_id, e.summary_state
+      FROM watch_episode_member m
+      JOIN watch_episode e ON e.id = m.episode_id
+      WHERE m.project_id = ?
+        AND m.generation = ?
+        AND m.observed = 0
+      ORDER BY m.episode_id ASC;
+    `)
+    .all(projectId, generation) as unknown as { episode_id: number; summary_state: 'open' | 'reserved' | 'done' }[]
+
+  const targetMember =
+    unobservedMembers.find((r) => r.summary_state === 'open') ??
+    unobservedMembers.find((r) => r.summary_state === 'reserved') ??
+    unobservedMembers.find((r) => r.summary_state === 'done')
+
+  let eventStatus: 'pending' | 'suppressed' = 'pending'
+  let eventEpisodeId: number | null = null
+  if (targetMember) {
+    eventEpisodeId = targetMember.episode_id
+    eventStatus = targetMember.summary_state === 'open' ? 'pending' : 'suppressed'
+  }
+
+  if (unobservedMembers.length > 0) {
+    db.prepare(`
+      UPDATE watch_episode_member
+      SET observed = 1
+      WHERE project_id = ?
+        AND generation = ?
+        AND observed = 0;
+    `).run(projectId, generation)
+  }
+
   const emittedEvents: { id: number; kind: WatchEventKind }[] = []
   const insertEventStmt = db.prepare(`
     INSERT INTO notification_events (
-      project_id, kind, status, dedupe_key, payload, created_at, updated_at
-    ) VALUES (?, ?, 'pending', ?, ?, ?, ?);
+      project_id, kind, status, dedupe_key, payload, created_at, updated_at, episode_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
   `)
   for (const ev of eventsToEmit) {
     const dedupeKey = `${generation}:${newRevision}`
     const payloadJson = JSON.stringify(ev.payload)
-    const res = insertEventStmt.run(projectId, ev.kind, dedupeKey, payloadJson, canonicalNow, canonicalNow)
+    const res = insertEventStmt.run(
+      projectId,
+      ev.kind,
+      eventStatus,
+      dedupeKey,
+      payloadJson,
+      canonicalNow,
+      canonicalNow,
+      eventEpisodeId
+    )
     emittedEvents.push({ id: Number(res.lastInsertRowid), kind: ev.kind })
   }
 
@@ -1193,4 +1236,221 @@ export function saveWatchSourceStateTx(db: Db, state: WatchSourceState): void {
 export function saveWatchSourceState(db: Db, state: WatchSourceState): void {
   runInTransaction(db, () => saveWatchSourceStateTx(db, state))
 }
+
+export const WATCH_EPISODE_MS = 10 * 60 * 1000
+
+export interface WatchEpisodeStartResult {
+  episodeId: number | null
+  created: boolean
+}
+
+export function startEpisodeTx(
+  db: Db,
+  params: { now: string }
+): WatchEpisodeStartResult {
+  const canonicalNow = canonicalTime(params.now)
+
+  const reservedRows = db
+    .prepare("SELECT id FROM watch_episode WHERE summary_state = 'reserved';")
+    .all() as unknown as { id: number }[]
+
+  if (reservedRows.length > 0) {
+    db.prepare(`
+      UPDATE notification_events
+      SET status = 'suppressed', updated_at = ?
+      WHERE status = 'pending'
+        AND episode_id IN (SELECT id FROM watch_episode WHERE summary_state = 'reserved');
+    `).run(canonicalNow)
+
+    db.prepare(`
+      UPDATE notification_events
+      SET status = 'uncertain', updated_at = ?
+      WHERE status = 'dispatching'
+        AND episode_id IN (SELECT id FROM watch_episode WHERE summary_state = 'reserved');
+    `).run(canonicalNow)
+
+    db.prepare("UPDATE watch_episode SET summary_state = 'done' WHERE summary_state = 'reserved';").run()
+  }
+
+  const openRows = db
+    .prepare("SELECT id FROM watch_episode WHERE summary_state = 'open' ORDER BY id ASC;")
+    .all() as unknown as { id: number }[]
+
+  if (openRows.length > 0) {
+    const keepId = openRows[0]!.id
+    if (openRows.length > 1) {
+      const extraIds = openRows.slice(1).map((r) => r.id)
+      for (const extraId of extraIds) {
+        db.prepare(`
+          UPDATE notification_events
+          SET status = 'suppressed', updated_at = ?
+          WHERE status = 'pending' AND episode_id = ?;
+        `).run(canonicalNow, extraId)
+        db.prepare(`
+          UPDATE notification_events
+          SET status = 'uncertain', updated_at = ?
+          WHERE status = 'dispatching' AND episode_id = ?;
+        `).run(canonicalNow, extraId)
+        db.prepare("UPDATE watch_episode SET summary_state = 'done' WHERE id = ?;").run(extraId)
+      }
+    }
+    return { episodeId: keepId, created: false }
+  }
+
+  const activeWatches = db
+    .prepare("SELECT project_id, generation FROM project_watch WHERE state = 'active' ORDER BY project_id ASC;")
+    .all() as unknown as { project_id: number; generation: number }[]
+
+  if (activeWatches.length === 0) {
+    return { episodeId: null, created: false }
+  }
+
+  const deadlineIso = canonicalTime(new Date(Date.parse(canonicalNow) + WATCH_EPISODE_MS).toISOString())
+  const insertEpisodeStmt = db.prepare(`
+    INSERT INTO watch_episode (started_at, deadline_at, summary_state)
+    VALUES (?, ?, 'open');
+  `)
+  const episodeRes = insertEpisodeStmt.run(canonicalNow, deadlineIso)
+  const episodeId = Number(episodeRes.lastInsertRowid)
+
+  const insertMemberStmt = db.prepare(`
+    INSERT INTO watch_episode_member (episode_id, project_id, generation, observed)
+    VALUES (?, ?, ?, 0);
+  `)
+  for (const w of activeWatches) {
+    insertMemberStmt.run(episodeId, w.project_id, w.generation)
+  }
+
+  return { episodeId, created: true }
+}
+
+export function startEpisode(
+  db: Db,
+  params: { now: string }
+): WatchEpisodeStartResult {
+  canonicalTime(params.now)
+  return runInTransaction(db, () => startEpisodeTx(db, params))
+}
+
+export interface DueEpisodeEvent {
+  id: number
+  project_id: number
+  kind: 'watch_status' | 'watch_contact'
+  payload: string | null
+}
+
+export interface DueEpisodeResult {
+  episodeId: number
+  events: DueEpisodeEvent[]
+}
+
+export function takeDueEpisodeTx(
+  db: Db,
+  params: { now: string }
+): DueEpisodeResult | null {
+  const canonicalNow = canonicalTime(params.now)
+
+  const openEpisode = db
+    .prepare("SELECT id, deadline_at FROM watch_episode WHERE summary_state = 'open' ORDER BY id ASC LIMIT 1;")
+    .get() as { id: number; deadline_at: string } | undefined
+
+  if (!openEpisode) {
+    return null
+  }
+
+  let isDue = Date.parse(canonicalNow) >= Date.parse(openEpisode.deadline_at)
+
+  if (!isDue) {
+    interface MemberCheckRow {
+      project_id: number
+      generation: number
+      observed: number
+      state: string | null
+      pw_generation: number | null
+    }
+
+    const members = db
+      .prepare(`
+        SELECT m.project_id, m.generation, m.observed, pw.state, pw.generation AS pw_generation
+        FROM watch_episode_member m
+        LEFT JOIN project_watch pw ON pw.project_id = m.project_id
+        WHERE m.episode_id = ?;
+      `)
+      .all(openEpisode.id) as unknown as MemberCheckRow[]
+
+    const allFinished = members.every((m) => {
+      if (m.observed === 1) return true
+      if (m.state === null) return true
+      if (m.state !== 'active') return true
+      if (m.pw_generation !== m.generation) return true
+      return false
+    })
+
+    if (allFinished) {
+      isDue = true
+    }
+  }
+
+  if (!isDue) {
+    return null
+  }
+
+  const events = db
+    .prepare(`
+      SELECT id, project_id, kind, payload
+      FROM notification_events
+      WHERE episode_id = ? AND status = 'pending'
+      ORDER BY id ASC;
+    `)
+    .all(openEpisode.id) as unknown as DueEpisodeEvent[]
+
+  db.prepare("UPDATE watch_episode SET summary_state = 'reserved' WHERE id = ?;").run(openEpisode.id)
+
+  return {
+    episodeId: openEpisode.id,
+    events
+  }
+}
+
+export function takeDueEpisode(
+  db: Db,
+  params: { now: string }
+): DueEpisodeResult | null {
+  canonicalTime(params.now)
+  return runInTransaction(db, () => takeDueEpisodeTx(db, params))
+}
+
+export function finishEpisodeTx(
+  db: Db,
+  params: { episodeId: number; now: string }
+): boolean {
+  const canonicalNow = canonicalTime(params.now)
+
+  db.prepare(`
+    UPDATE notification_events
+    SET status = 'suppressed', updated_at = ?
+    WHERE episode_id = ? AND status = 'pending';
+  `).run(canonicalNow, params.episodeId)
+
+  db.prepare(`
+    UPDATE notification_events
+    SET status = 'uncertain', updated_at = ?
+    WHERE episode_id = ? AND status = 'dispatching';
+  `).run(canonicalNow, params.episodeId)
+
+  const res = db
+    .prepare("UPDATE watch_episode SET summary_state = 'done' WHERE id = ? AND summary_state = 'reserved';")
+    .run(params.episodeId)
+
+  return res.changes > 0
+}
+
+export function finishEpisode(
+  db: Db,
+  params: { episodeId: number; now: string }
+): boolean {
+  canonicalTime(params.now)
+  return runInTransaction(db, () => finishEpisodeTx(db, params))
+}
+
 

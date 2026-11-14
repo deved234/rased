@@ -387,6 +387,15 @@ export interface WatchEventRow {
   payload: string | null
 }
 
+export function suppressPendingWatchEvents(db: Db, now: string): number {
+  const res = db.prepare(`
+    UPDATE notification_events
+    SET status = 'suppressed', updated_at = ?
+    WHERE status = 'pending' AND kind IN ('watch_status', 'watch_contact');
+  `).run(now)
+  return Number(res.changes)
+}
+
 export function listPendingWatchEvents(db: Db): WatchEventRow[] {
   return db
     .prepare(
