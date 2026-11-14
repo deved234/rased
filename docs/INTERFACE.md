@@ -6,6 +6,8 @@ Select an opportunity title or Preview to open the side panel. Its fixed footer 
 
 Source controls pause/resume Mostaql, Nafezly, Khamsat and KAF independently. Applying a list filter does not silently change notification filtering. Saved filters retain their names when edited. KAF cards show platform status independently of your personal status, verified budgets and detection time. Full details are requested when opened; raw publication times have no assumed timezone. KAF alerts use title/excerpt keywords and only open projects qualify. [KAF guide](KAF.md).
 
+**Watch / متابعة** follows a Mostaql, Nafezly or KAF project (not Khamsat) from its card after Preview, the preview, full details or the compact window; up to 10 per platform, the rest wait for a slot. **Watched projects / متابعة المشاريع** in the sidebar, after Saved, lists active, waiting and recently stopped watches. [Project watch](PROJECT_WATCH.md).
+
 ## Settings and unsaved work
 
 Settings are grouped by monitoring, appearance, proposals, data and updates, and information. Language, theme, density and text size apply immediately. Quick Apply templates, AI settings/profile, proposal edits and source notification keywords have explicit saving. Before leaving edited work, choose Save and continue, Discard edits or Stay here. A failed save leaves the page and text available for retry. Forced termination and power loss cannot be protected by a navigation dialog.

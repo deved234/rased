@@ -1,5 +1,5 @@
-// Dormant contract for a future project-watch feature. Nothing schedules,
-// persists or calls it yet: these values only describe the intended policy.
+// Project-watch contract: constants and snapshot types shared by the watcher,
+// storage, notifications and UI. See docs/PROJECT_WATCH.md.
 
 export const WATCH_ENABLED = true
 export const WATCH_SLOT_MS = 10_000

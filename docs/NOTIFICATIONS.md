@@ -12,6 +12,16 @@ Source development repairs its own COM launch command after Electron finishes re
 
 **Quick apply** remains a separate action through the paired Chrome extension, for Mostaql/Nafezly only. Opening a project does not require the extension and never submits an offer.
 
+### Project watch notifications
+
+Notifications from project watch (individual project change toasts and the away summary) use the same persistent activation ticket path. When clicked, RASED resolves the ticket and checks whether the project still exists in local storage (`watchActivationTarget`):
+- If the project is present in RASED's database, RASED requests activation for your default browser and opens the project URL.
+- If the project is missing from local history (for example, after a history cleanup), RASED brings its own main window forward (`showMainWindowForWatch`) instead of opening the link, and audits `watch-notification-project-missing`.
+- Batch and away summaries open their first project.
+- If Windows activates the notification without a ticket (the HTTPS fallback), Windows delivers the stored URL to your default browser without involving RASED, even if the project was deleted locally.
+
+See [Project watch](PROJECT_WATCH.md) for alert triggers, baseline checks, and settings.
+
 ## Foreground behavior and limits
 
 RASED uses the Windows HTTPS association rather than choosing Chrome for everyone. When one default-browser window can be identified, it requests activation before delivering the URL and restores that window if minimized. With multiple windows/profiles it leaves window selection to the browser instead of guessing; it may grant activation to a verified common browser process. Foreground success and URL delivery are recorded separately.
@@ -34,3 +44,5 @@ The Windows adapter reads process executable paths/window handles transiently to
 اضغط الإشعار أو «عرض المشروع» لفتح الرابط في المتصفح الافتراضي. راصد يطلب إظهار المتصفح عند الضغطة فقط، ويحاول منع فتح تبويب مكرر. التقديم السريع مستقل عن عرض المشروع، ولا يحتاج عرض المشروع إضافة Chrome.
 
 صلاحية الإشعارات الجديدة سبعة أيام. بعد انتهاء الصلاحية افتح المشروع من داخل راصد. لو Windows منع ظهور المتصفح في المقدمة، قد يظل التبويب مفتوحًا في الخلفية؛ لن يكرر راصد فتح الرابط أو يغيّر إعدادات Windows لإجباره على الظهور.
+
+إشعارات متابعة المشاريع وملخص الغياب («حصل وأنت غايب») تستخدم نفس مسار تذاكر التفعيل. عند الضغط، يتحقق راصد من وجود المشروع محليًا: إذا كان موجودًا في قاعدة البيانات، يطلب راصد إظهار المتصفح الافتراضي ويفتح رابط المشروع. أمّا إذا حُذف المشروع من السجل المحلي، فيُظهر راصد نافذته الرئيسية بدلاً من فتح الرابط. إشعار الملخص يفتح أول مشروع فيه. وإذا فتح Windows الإشعار مباشرةً بدون تذكرة تفعيل، يفتح النظام الرابط المحفوظ في المتصفح الافتراضي دون المرور براصد، حتى لو حُذف المشروع محليًا. تفاصيل المتابعة في [PROJECT_WATCH.md](PROJECT_WATCH.md).

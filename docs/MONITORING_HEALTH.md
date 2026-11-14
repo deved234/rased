@@ -43,6 +43,18 @@ Each platform card explains whether in-app details, verified category filters, A
 
 **Copy monitoring report** copies a local JSON report with platform IDs, states, timestamps, timing/count information, issue categories and coverage warnings. It excludes raw error bodies, project text, API keys, notes, account data and device paths. Review it before sharing; RASED does not upload or send it automatically. About diagnostics lists all four public collector endpoints from the shared registry.
 
+## Project watch and monitoring health
+
+Project watch checks on Mostaql, Nafezly and KAF never compete with primary monitoring. Watch checks claim a platform slot with lower priority and immediately yield (or are preempted) when primary monitoring, detail enrichment or requested details need the slot.
+
+If a watch check encounters a block or protection challenge (such as 401, 429, 202, challenge page, or non-private 403), the platform cooldown is applied to primary monitoring as well, and the platform's watch pauses for at least 30 minutes (or longer if `Retry-After` specifies). Watch checks resume only after primary monitoring completes a successful check.
+
+Disabling and pausing have different effects on watches:
+- **Disabling a platform** stops all its active and waiting watches with the reason `source_disabled`, without promoting waiting ones; re-enabling the platform does not restart them automatically (you can watch them again).
+- **Pausing a platform** temporarily pauses watch checks alongside primary monitoring; watches keep their active or waiting state and resume when the platform is unpaused. The 14-day expiry keeps counting during a pause.
+
+See [Project watch](PROJECT_WATCH.md) for full watch scheduling and protection details.
+
 ## Verification
 
 Run `npm run build` followed by `npm run test:monitoring`. This uses fresh marked TEMP profiles and synthetic transport/clipboard boundaries with real main/preload/SQLite wiring. Unit regressions are in `tests/monitoring.test.ts`. These fixtures do not prove live platform availability or native tray clicks.
