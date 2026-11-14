@@ -51,3 +51,28 @@ it('discloses saved-draft transport in Arabic and English privacy text',()=>{
   expect(transport('ar')).toContain('القالب أو المسودة المحفوظة')
   expect(transport('en')).toContain('template or saved draft')
 })
+it('has Project watch sections at specified positions in both languages with 10 and 14',()=>{
+  const privKafAr = LEGAL_DOCUMENTS.ar.privacy.sections.findIndex(([title])=>title === 'اتصالات كاف')
+  const privKafEn = LEGAL_DOCUMENTS.en.privacy.sections.findIndex(([title])=>title === 'KAF connections')
+  expect(privKafAr).toBeGreaterThanOrEqual(0)
+  expect(privKafEn).toBeGreaterThanOrEqual(0)
+
+  const privWatchAr = LEGAL_DOCUMENTS.ar.privacy.sections[privKafAr + 1]
+  const privWatchEn = LEGAL_DOCUMENTS.en.privacy.sections[privKafEn + 1]
+  expect(privWatchAr?.[0]).toBe('متابعة المشاريع')
+  expect(privWatchEn?.[0]).toBe('Project watch')
+  expect(privWatchAr?.[1]).toContain('10')
+  expect(privWatchAr?.[1]).toContain('14')
+  expect(privWatchEn?.[1]).toContain('10')
+  expect(privWatchEn?.[1]).toContain('14')
+
+  const termsKafAr = LEGAL_DOCUMENTS.ar.terms.sections.findIndex(([title])=>title === 'رصد كاف (كفيل سابقًا)')
+  const termsKafEn = LEGAL_DOCUMENTS.en.terms.sections.findIndex(([title])=>title === 'KAF monitoring (formerly Kafiil)')
+  expect(termsKafAr).toBeGreaterThanOrEqual(0)
+  expect(termsKafEn).toBeGreaterThanOrEqual(0)
+
+  const termsWatchAr = LEGAL_DOCUMENTS.ar.terms.sections[termsKafAr + 1]
+  const termsWatchEn = LEGAL_DOCUMENTS.en.terms.sections[termsKafEn + 1]
+  expect(termsWatchAr?.[0]).toBe('متابعة المشاريع')
+  expect(termsWatchEn?.[0]).toBe('Project watch')
+})

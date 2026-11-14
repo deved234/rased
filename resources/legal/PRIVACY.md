@@ -1,10 +1,10 @@
 # الخصوصية
 
-2026-10-23 · RASED · david atef
+2026-11-14 · RASED · david atef
 
 ## شرط إحصائيات الاستخدام
 
-في البناء المهيأ فقط، تقبل صراحة من شاشة البدء إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة قبل القبول. القبول شرط لتشغيل الرصد والتنبيهات والميزات في هذه النسخة؛ عند الرفض يمكنك الخروج وتبقى بياناتك المحلية محفوظة. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة وعائلة Windows العامة، ونشاطًا يوميًا وملخصات رصد ونتائج ميزات من فئات محددة. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
+في البناء المهيأ فقط، تقبل صراحة من شاشة البدء إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة قبل القبول. القبول شرط لتشغيل الرصد والتنبيهات والميزات في هذه النسخة؛ عند الرفض يمكنك الخروج وتبقى بياناتك المحلية محفوظة. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة وعائلة Windows العامة، ونشاطًا يوميًا وملخصات رصد ونتائج ميزات من فئات محددة، وملخصات متابعة المشاريع: عدد المشاريع المتابَعة والمنتظرة في فئات تقريبية، ونجاح أو تعثر فحوصها، ونوع التغيير الذي رُصد ونتيجة إشعاره، ومن أين بدأت المتابعة وسبب انتهائها. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو هوية المشروع أو صاحبه أو أعداد العروض والتواصلات، أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
 
 ## الاحتفاظ وإيقاف الإحصائيات وطلب الحذف
 
@@ -16,7 +16,11 @@
 
 ## اتصالات كاف
 
-عند تفعيل كاف يتصل جهازك مباشرة بـ kafiil.com لقراءة قائمة المشاريع العامة، وبصفحة المشروع عند طلب التفاصيل، دون ملفات تعريف ارتباط أو تسجيل دخول. يستقبل الموقع عنوان IP وبيانات الطلب. تُخزّن العناوين والمقتطفات والميزانية والمهارات وحالة المنصة والتفاصيل والمدة والوقت الخام محليًا. لا تُرسل بيانات كاف إلى إضافة التقديم السريع. عند طلب مسودة يدويًا تُرسل بيانات المشروع العامة والملف المهني إلى مزود الذكاء الاصطناعي المختار بعد المعاينة والموافقة. يمكنك تعطيل رصده وتنبيهاته مستقلاً.
+عند تفعيل كاف يتصل جهازك مباشرة بـ kafiil.com لقراءة قائمة المشاريع العامة، وبصفحة المشروع عند طلب التفاصيل أو أثناء متابعته، دون ملفات تعريف ارتباط أو تسجيل دخول. يستقبل الموقع عنوان IP وبيانات الطلب. تُخزّن العناوين والمقتطفات والميزانية والمهارات وحالة المنصة والتفاصيل والمدة والوقت الخام محليًا. لا تُرسل بيانات كاف إلى إضافة التقديم السريع. عند طلب مسودة يدويًا تُرسل بيانات المشروع العامة والملف المهني إلى مزود الذكاء الاصطناعي المختار بعد المعاينة والموافقة. يمكنك تعطيل رصده وتنبيهاته مستقلاً.
+
+## متابعة المشاريع
+
+عند ضغط «متابعة» على مشروع من مستقل أو نفذلي أو كاف، أو اختيار «قدّمت» إذا كان هناك مكان، يطلب جهازك صفحة المشروع العامة مباشرة من المنصة بشكل دوري، دون تسجيل دخول أو ملفات تعريف ارتباط. الفحوص بالتناوب: فحص واحد كل 10 ثوانٍ على الأقل لكل منصة، وقد يتبع الفحص تحويلًا داخل نفس الموقع حتى 3 مرات، وحتى 10 مشاريع لكل منصة، وتقل إلى كل 10 دقائق للمشروع الذي لم تتغير حالته أو تواصلاته منذ يوم، وتتوقف المتابعة تلقائيًا بعد 14 يومًا أو عند إغلاق المشروع أو حذفه أو إلغائك لها. الرصد الأساسي للمشاريع الجديدة له الأولوية دائمًا؛ وعند حظر المنصة للطلب أو ظهور تحدي حماية تتوقف المتابعة 30 دقيقة على الأقل وتُطبق تهدئة المنصة. يُقرأ من الصفحة: حالة المشروع وعدد العروض، وفي مستقل عدد المشاريع المفتوحة وقيد التنفيذ عند صاحب المشروع و«التواصلات الجارية». تُحفظ هذه القيم محليًا فقط. تستقبل المنصة عنوان IP ووقت الطلب وبيانات الاتصال. لا تعمل المتابعة بعد الخروج من راصد، أما إغلاق النافذة فيبقيه افتراضيًا يعمل في Tray، ولا تشمل خمسات.
 
 ## قالب التقديم السريع وإزالة الجلسات القديمة
 
@@ -28,7 +32,7 @@
 
 ## الاتصالات الخارجية
 
-يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده وصفحات مشاريعه العامة عند طلب الميزانية والمدة من المعاينة أو التفاصيل. تُحفظ بيانات البطاقة مؤقتًا محليًا لتقليل الطلبات وتحترم الإيقاف والتهدئة. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا.
+يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده وصفحات مشاريعه العامة عند طلب الميزانية والمدة من المعاينة أو التفاصيل. تُحفظ بيانات البطاقة مؤقتًا محليًا لتقليل الطلبات وتحترم الإيقاف والتهدئة. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا. ويطلب صفحات المشاريع التي تتابعها دوريًا كما هو موضح في «متابعة المشاريع».
 
 ## مساعد العروض وGemini وOpenAI وClaude
 
@@ -66,11 +70,11 @@
 
 # Privacy
 
-2026-10-23 · RASED · david atef
+2026-11-14 · RASED · david atef
 
 ## Required usage analytics acceptance
 
-Only a configured build can send limited usage analytics to PostHog US Cloud after explicit startup acceptance. Sharing starts off; this distribution requires acceptance to use its features. Declining leaves an exit option and preserves local data. Data includes a random installation identifier, version, language, broad Windows family, daily activity, aggregated monitoring counters and allow-listed feature outcomes. No name, project content or links, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
+Only a configured build can send limited usage analytics to PostHog US Cloud after explicit startup acceptance. Sharing starts off; this distribution requires acceptance to use its features. Declining leaves an exit option and preserves local data. Data includes a random installation identifier, version, language, broad Windows family, daily activity, aggregated monitoring counters and allow-listed feature outcomes, and project-watch summaries: bucketed counts of watched and waiting projects, check success or failure, the kind of change detected and its notification result, where watching started and why it ended. No name, project content or links, project or client identity, offer or contact numbers, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
 
 ## Analytics retention, withdrawal and deletion requests
 
@@ -82,7 +86,11 @@ End-to-end verification of completed event deletion at PostHog is still pending.
 
 ## KAF connections
 
-When enabled, your device contacts kafiil.com directly for public project listings and requested detail pages, without cookies or sign-in. The site receives your IP and request metadata. Titles, excerpts, budgets, skills, platform status, details, duration and raw times are stored locally. KAF data is not sent to the Quick Apply extension. When you request a draft manually, the public project data and freelancer profile are sent to your selected AI provider after preview and approval. Monitoring and alerts can be disabled independently.
+When enabled, your device contacts kafiil.com directly for public project listings, requested detail pages and pages of projects you watch, without cookies or sign-in. The site receives your IP and request metadata. Titles, excerpts, budgets, skills, platform status, details, duration and raw times are stored locally. KAF data is not sent to the Quick Apply extension. When you request a draft manually, the public project data and freelancer profile are sent to your selected AI provider after preview and approval. Monitoring and alerts can be disabled independently.
+
+## Project watch
+
+When you press Watch on a Mostaql, Nafezly or KAF project, or choose Submitted while a slot is free, your device periodically requests that project's public page directly from the platform, without sign-in or cookies. Checks rotate: at most one check every 10 seconds per platform, and a check may follow up to 3 redirects within the same site, up to 10 projects per platform, slowing to every 10 minutes for a project whose status and contacts have not changed for a day. Watching stops automatically after 14 days, or when the project closes, disappears or you cancel it. New-project monitoring always has priority; if the platform blocks a request or shows a protection challenge, watching pauses for at least 30 minutes and the platform cooldown applies. RASED reads the project status and offer count and, on Mostaql, the client's open and in-progress project counts and "ongoing conversations". These values are stored locally only. The platform receives your IP address, request timing and connection metadata. Watching stops when you quit RASED; closing the window keeps it running in the tray by default. It does not cover Khamsat.
 
 ## Template and retired browser sessions
 
@@ -94,7 +102,7 @@ Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters
 
 ## External connections
 
-Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Previewing or opening a Nafezly project may also request its public page for budget and duration. Project-card data is cached locally to reduce requests and honors source pause and cooldowns. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally.
+Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Previewing or opening a Nafezly project may also request its public page for budget and duration. Project-card data is cached locally to reduce requests and honors source pause and cooldowns. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally. Pages of projects you watch are also requested periodically, as described in "Project watch".
 
 ## Proposal Assistant: Gemini, OpenAI and Claude
 

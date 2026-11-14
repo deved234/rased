@@ -1,6 +1,6 @@
 # شروط الاستخدام
 
-2026-10-23 · RASED · david atef
+2026-11-14 · RASED · david atef
 
 ## شرط إحصائيات النسخة المهيأة
 
@@ -9,6 +9,10 @@
 ## رصد كاف (كفيل سابقًا)
 
 يقرأ راصد قائمة المشاريع العامة على kafiil.com دون حساب، ويجلب تفاصيل المشروع عند فتحها. أول رصد صامت والتنبيهات للمشاريع المفتوحة المكتشفة حديثًا؛ المكتمل يبقى في السجل. الظهور في القائمة ليس إثباتًا لوقت النشر، والمنطقة الزمنية لوقت كاف غير مؤكدة. كاف وعلاماته ومحتوى المستخدمين تخص أصحابها؛ وصول القراءة لا يمنح إذن إعادة نشر أو جلب غير محدود. مساعد العروض اليدوي يدعم مشاريع مستقل ونفذلي وكاف؛ التقديم السريع والتقديم السريع بمساعد العروض لمستقل ونفذلي فقط.
+
+## متابعة المشاريع
+
+المتابعة تقرأ صفحة المشروع العامة دوريًا ولا تضمن رصد كل تغيير أو وقت حدوثه؛ قد يتأخر الإشعار أو لا يصل، وتغيير يُكتشف بعد غياب أو حظر طويل قد يظهر في القائمة بلا إشعار. إشعار التواصل استنتاج من رقم «التواصلات الجارية» الذي يعرضه مستقل لصاحب المشروع على كل مشاريعه، لا إثبات أنه يتواصل على مشروعك أو معك: الصياغة «المؤكدة» تعني أن مشروعك هو الوحيد المفتوح عنده ولا مشاريع قيد التنفيذ لديه، والصياغة «المحتملة» تعني أن الزيادة قد تخص مشروعًا آخر. شروط المنصة وحدودها تظل سارية.
 
 ## قالب التقديم السريع
 
@@ -46,7 +50,7 @@
 
 # Terms of use
 
-2026-10-23 · RASED · david atef
+2026-11-14 · RASED · david atef
 
 ## Configured distribution analytics requirement
 
@@ -55,6 +59,10 @@ The officially configured distribution requires explicit acceptance of the limit
 ## KAF monitoring (formerly Kafiil)
 
 RASED reads the public kafiil.com project listing without an account and fetches project details on demand. Initial monitoring is silent; newly detected open projects may trigger alerts, while completed projects stay in history. Listing visibility does not prove publication time; KAF timestamps have an unverified timezone. KAF marks and user content belong to their owners; public access does not authorize republication or unlimited fetching. The manual Proposal Assistant covers Mostaql, Nafezly and KAF projects. Quick Apply and Quick Apply with Assistant cover Mostaql and Nafezly only.
+
+## Project watch
+
+Watching reads a project's public page periodically and does not guarantee detecting every change or when it happened; alerts may be delayed or missed, and a change discovered after a long absence or block may appear in the list without an alert. Contact alerts are an inference from Mostaql's client-wide "ongoing conversations" number, not proof the client is talking about your project or to you: the "sure" wording means your project is the client's only open project and they have none in progress; the "maybe" wording means the increase may concern another project. Platform terms and limits still apply.
 
 ## Saved quick-apply template
 

@@ -837,10 +837,24 @@ export function saveSnapshotTx(
   const newOffersCapped =
     snapshot.offers !== null ? (snapshot.offersCapped ? 1 : 0) : (row.offersCapped ? 1 : 0)
 
+  const statusChanged =
+    row.status !== null &&
+    row.status !== 'unknown' &&
+    snapshot.status !== null &&
+    snapshot.status !== 'unknown' &&
+    snapshot.status !== row.status
+  const contactsChanged =
+    source === 'mostaql' &&
+    row.contacts !== null &&
+    snapshot.contacts !== null &&
+    snapshot.contacts !== row.contacts
+
   let newRevision = row.revision
   let newLastChangedAt = row.lastChangedAt
   if (eventsToEmit.length > 0) {
     newRevision = row.revision + 1
+    newLastChangedAt = canonicalNow
+  } else if (statusChanged || contactsChanged) {
     newLastChangedAt = canonicalNow
   }
 

@@ -2622,4 +2622,171 @@ describe('project watch storage', () => {
     ).toThrow('bad-watch-time')
     expect(getWatch(db, pBefore0)?.state).toBe('active')
   })
+
+  it('29. lastChangedAt: contact decrease or status to open sets lastChangedAt without event or revision bump; offers/baseline/unknown unchanged; contact increase emits event with revision+1', () => {
+    const p1 = seedProject(db, 'p29-1', 'mostaql')
+    const t0 = '2026-10-01T10:00:00.000Z'
+    setWatch(db, { projectId: p1, want: 'on', expectVersion: null, origin: 'list', now: t0 })
+
+    // Baseline: first snapshot with values does not set lastChangedAt
+    const t1 = '2026-10-01T10:00:01.000Z'
+    const rBaseline = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'open',
+        offers: 5,
+        offersCapped: false,
+        contacts: 7,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t1
+    })
+    expect(rBaseline.events).toHaveLength(0)
+    expect(rBaseline.row?.revision).toBe(0)
+    expect(rBaseline.row?.lastChangedAt).toBeNull()
+    expect(getWatch(db, p1)?.lastChangedAt).toBeNull()
+
+    // Null and unknown values: do not set lastChangedAt
+    const t2 = '2026-10-01T10:00:02.000Z'
+    const rUnknown = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'unknown',
+        offers: null,
+        offersCapped: false,
+        contacts: null,
+        clientOpen: null,
+        clientInProgress: null
+      },
+      now: t2
+    })
+    expect(rUnknown.events).toHaveLength(0)
+    expect(rUnknown.row?.revision).toBe(0)
+    expect(rUnknown.row?.lastChangedAt).toBeNull()
+
+    // Offers change only: lastChangedAt unchanged
+    const t3 = '2026-10-01T10:00:03.000Z'
+    const rOffers = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'open',
+        offers: 12,
+        offersCapped: true,
+        contacts: 7,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t3
+    })
+    expect(rOffers.events).toHaveLength(0)
+    expect(rOffers.row?.offers).toBe(12)
+    expect(rOffers.row?.offersCapped).toBe(true)
+    expect(rOffers.row?.revision).toBe(0)
+    expect(rOffers.row?.lastChangedAt).toBeNull()
+
+    // Contact decrease (7 -> 5): sets last_changed_at, creates no event, revision unchanged
+    const t4 = '2026-10-01T10:00:04.000Z'
+    const rContactDecrease = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'open',
+        offers: 12,
+        offersCapped: true,
+        contacts: 5,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t4
+    })
+    expect(rContactDecrease.events).toHaveLength(0)
+    expect(rContactDecrease.row?.contacts).toBe(5)
+    expect(rContactDecrease.row?.revision).toBe(0)
+    expect(rContactDecrease.row?.lastChangedAt).toBe(t4)
+    expect(getWatch(db, p1)?.lastChangedAt).toBe(t4)
+
+    // Move to in_progress (emits event, revision + 1, sets lastChangedAt)
+    const t5 = '2026-10-01T10:00:05.000Z'
+    const rInProgress = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'in_progress',
+        offers: 12,
+        offersCapped: true,
+        contacts: 5,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t5
+    })
+    expect(rInProgress.events).toHaveLength(1)
+    expect(rInProgress.row?.revision).toBe(1)
+    expect(rInProgress.row?.lastChangedAt).toBe(t5)
+
+    // Status in_progress -> open: sets last_changed_at, no event, revision unchanged
+    const t6 = '2026-10-01T10:00:06.000Z'
+    const rReturnToOpen = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'open',
+        offers: 12,
+        offersCapped: true,
+        contacts: 5,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t6
+    })
+    expect(rReturnToOpen.events).toHaveLength(0)
+    expect(rReturnToOpen.row?.status).toBe('open')
+    expect(rReturnToOpen.row?.revision).toBe(1)
+    expect(rReturnToOpen.row?.lastChangedAt).toBe(t6)
+    expect(getWatch(db, p1)?.lastChangedAt).toBe(t6)
+
+    // Null/unknown status afterwards: lastChangedAt preserved (not set to new now)
+    const t6b = '2026-10-01T10:00:06.500Z'
+    const rNullAfterwards = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'unknown',
+        offers: 12,
+        offersCapped: true,
+        contacts: 5,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t6b
+    })
+    expect(rNullAfterwards.events).toHaveLength(0)
+    expect(rNullAfterwards.row?.revision).toBe(1)
+    expect(rNullAfterwards.row?.lastChangedAt).toBe(t6)
+
+    // Contact increase: still emits its event and sets last_changed_at with revision + 1 (existing behaviour)
+    const t7 = '2026-10-01T10:00:07.000Z'
+    const rContactIncrease = saveSnapshot(db, {
+      projectId: p1,
+      generation: 1,
+      snapshot: {
+        status: 'open',
+        offers: 12,
+        offersCapped: true,
+        contacts: 8,
+        clientOpen: 1,
+        clientInProgress: 0
+      },
+      now: t7
+    })
+    expect(rContactIncrease.events).toHaveLength(1)
+    expect(rContactIncrease.row?.contacts).toBe(8)
+    expect(rContactIncrease.row?.revision).toBe(2)
+    expect(rContactIncrease.row?.lastChangedAt).toBe(t7)
+    expect(getWatch(db, p1)?.lastChangedAt).toBe(t7)
+  })
 })
