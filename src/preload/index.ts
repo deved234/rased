@@ -31,7 +31,7 @@ function sub<T>(channel: string, cb: (v: T) => void): () => void {
 
 const api: RasedApi = {
   databaseReady: () => ipcRenderer.invoke(IPC.databaseReady),
-  getSidebarCounts: () => (ipcRenderer.invoke(IPC.getSidebarCounts) as Promise<SearchReply<{ unread: number; saved: number }>>).then(unwrapSearchReply),
+  getSidebarCounts: () => (ipcRenderer.invoke(IPC.getSidebarCounts) as Promise<SearchReply<{ unread: number; saved: number; watching: number }>>).then(unwrapSearchReply),
   matchProjectIds: (definition, ids) => (ipcRenderer.invoke(IPC.matchProjectIds, { definition, ids }) as Promise<SearchReply<number[]>>).then(unwrapSearchReply),
   getAnalyticsStatus: () => ipcRenderer.invoke(IPC.getAnalyticsStatus),
   analyticsConsent: action => ipcRenderer.invoke(IPC.analyticsConsent, action),
@@ -99,6 +99,10 @@ const api: RasedApi = {
   requestProjectFacts: (id, force) => ipcRenderer.invoke(IPC.requestProjectFacts, { id, force: force === true }),
   requestProjectDetails: (id, force) => ipcRenderer.invoke(IPC.requestProjectDetails, { id, force: force === true }) as Promise<ProjectDetails | null>,
   updateProjectUserState: (id, patch) => ipcRenderer.invoke(IPC.updateProjectUserState, { id, patch }) as Promise<MutationResult>,
+  watchSet: params => ipcRenderer.invoke(IPC.watchSet, params),
+  watchReplace: params => ipcRenderer.invoke(IPC.watchReplace, params),
+  watchList: params => ipcRenderer.invoke(IPC.watchList, params),
+  watchCounts: () => ipcRenderer.invoke(IPC.watchCounts),
   getSavedFilters: () => ipcRenderer.invoke(IPC.getSavedFilters) as Promise<SavedFilter[]>,
   createSavedFilter: (name, definition) => ipcRenderer.invoke(IPC.createSavedFilter, { name, definition }) as Promise<MutationResult & { id?: string }>,
   updateSavedFilter: (id, name, definition) => ipcRenderer.invoke(IPC.updateSavedFilter, { id, name, definition }) as Promise<MutationResult>,

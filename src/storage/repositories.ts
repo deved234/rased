@@ -607,7 +607,8 @@ export function countPurgeable(db: Db, cutoffIso: string, kinds: string[]): numb
        AND (u.saved_at IS NULL OR u.project_id IS NULL)
        AND (u.note IS NULL OR u.note = '' OR u.project_id IS NULL)
        AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'))
-       AND d.project_id IS NULL;`
+       AND d.project_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM project_watch w WHERE w.project_id = p.id AND w.state IN ('active','waiting'));`
   ).get(...kinds, cutoffIso) as { n: number }
   return row.n
 }/** Destructive twin of countPurgeable: deletes + tombstones, returns deleted count. */
@@ -622,7 +623,8 @@ export function purgeHistory(db: Db, cutoffIso: string, kinds: string[]): { dele
        AND (u.saved_at IS NULL OR u.project_id IS NULL)
        AND (u.note IS NULL OR u.note = '' OR u.project_id IS NULL)
        AND (u.personal_status IS NULL OR u.personal_status NOT IN ('interested','submitted'))
-       AND d.project_id IS NULL;`
+       AND d.project_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM project_watch w WHERE w.project_id = p.id AND w.state IN ('active','waiting'));`
   ).all(...kinds, cutoffIso) as unknown as { source: string; external_id: string; id: number }[]
   if (rows.length === 0) return { deleted: 0 }
   const now = utcNowIso()

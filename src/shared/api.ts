@@ -10,6 +10,13 @@ import type { BackupPreferences, DataStatus, RestorePreview } from './data.js'
 import type { SourceId } from './sources.js'
 import type { ProjectFacts } from './projectFacts.js'
 import { type QuickTextSource, type QuickApplyResult, type QuickAssistantResult } from './quickApply.js'
+import type {
+  WatchOrigin,
+  WatchReplaceResult,
+  WatchRow,
+  WatchSetResult,
+  WatchSource
+} from './projectWatch.js'
 // Typed renderer<->main contract. Implemented in preload, consumed by the
 // renderer through `window.rased`. Keep in shared so both sides agree.
 
@@ -55,6 +62,13 @@ export interface PurgePreview {
   backupPath?: string | null
 }
 
+export interface WatchListResult {
+  rows: WatchRow[]
+  total: number
+}
+
+export type WatchCounts = Record<WatchSource, { active: number; waiting: number; cap: number }>
+
 export interface AppInfo {
   version: string
   platform: string
@@ -63,7 +77,7 @@ export interface AppInfo {
 
 export interface RasedApi {
   databaseReady(): Promise<boolean>
-  getSidebarCounts(): Promise<{ unread: number; saved: number }>
+  getSidebarCounts(): Promise<{ unread: number; saved: number; watching: number }>
   matchProjectIds(definition: FilterDefinition, ids: number[]): Promise<number[]>
   getAnalyticsStatus(): Promise<AnalyticsStatus | null>
   analyticsConsent(action: 'enable' | 'disable' | 'later' | 'forget'): Promise<MutationResult>
@@ -132,6 +146,20 @@ export interface RasedApi {
   requestProjectFacts(id: number, force?: boolean): Promise<ProjectFacts | null>
   requestProjectDetails(id: number, force?: boolean): Promise<ProjectDetails | null>
   updateProjectUserState(id: number, patch: Partial<Pick<ProjectUserState, 'status'>> & { saved?: boolean; hidden?: boolean; note?: string }): Promise<MutationResult>
+  watchSet(params: {
+    projectId: number
+    want: 'on' | 'off'
+    expectVersion: number | null
+    entry: WatchOrigin
+  }): Promise<WatchSetResult | { ok: false; error: 'disabled' | 'untrusted-sender' | 'no-db' | 'bad-request' }>
+  watchReplace(params: {
+    projectId: number
+    victimId: number
+    expectVersions: { project: number | null; victim: number }
+    entry: WatchOrigin
+  }): Promise<WatchReplaceResult | { ok: false; error: 'disabled' | 'untrusted-sender' | 'no-db' | 'bad-request' }>
+  watchList(params?: { source?: WatchSource }): Promise<WatchListResult | { ok: false; error: 'disabled' | 'untrusted-sender' | 'no-db' }>
+  watchCounts(): Promise<WatchCounts | { ok: false; error: 'disabled' | 'untrusted-sender' | 'no-db' }>
   getSavedFilters(): Promise<SavedFilter[]>
   createSavedFilter(name: string, definition: FilterDefinition): Promise<MutationResult & { id?: string }>
   updateSavedFilter(id: string, name: string, definition: FilterDefinition): Promise<MutationResult>

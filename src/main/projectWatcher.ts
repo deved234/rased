@@ -50,6 +50,7 @@ export interface ProjectWatcherDeps {
   onChanged: (projectIds: number[]) => void
   onEvents: (source: WatchSource, result: WatchSnapshotResult) => void
   onCounter?: (source: WatchSource, counter: WatchCounter) => void
+  onStopped?: (source: WatchSource, projectId: number, reason: 'gone' | 'expired') => void
 }
 
 const EXPIRY_INTERVAL_MS = 60_000
@@ -154,6 +155,14 @@ export class ProjectWatcher {
   private emitCounter(source: WatchSource, counter: WatchCounter): void {
     try {
       this.deps.onCounter?.(source, counter)
+    } catch {
+      // Callbacks must never break bookkeeping
+    }
+  }
+
+  private emitStopped(source: WatchSource, projectId: number, reason: 'gone' | 'expired'): void {
+    try {
+      this.deps.onStopped?.(source, projectId, reason)
     } catch {
       // Callbacks must never break bookkeeping
     }
@@ -354,6 +363,9 @@ export class ProjectWatcher {
           // ignore
         }
         if (expireRes) {
+          for (const id of expireRes.expired) {
+            this.emitStopped(source, id, 'expired')
+          }
           const expiredOrPromoted = [...expireRes.expired, ...expireRes.promoted]
           if (expiredOrPromoted.length > 0) {
             this.emitChanged([...new Set(expiredOrPromoted)])
@@ -578,6 +590,7 @@ export class ProjectWatcher {
             now: stepNowIso
           })
           if (res.changed) {
+            this.emitStopped(source, picked.row.projectId, 'gone')
             const ids = [picked.row.projectId]
             if (res.promoted !== null) ids.push(res.promoted)
             this.emitChanged(ids)
@@ -615,6 +628,7 @@ export class ProjectWatcher {
             now: stepNowIso
           })
           if (res.changed) {
+            this.emitStopped(source, picked.row.projectId, 'gone')
             const ids = [picked.row.projectId]
             if (res.promoted !== null) ids.push(res.promoted)
             this.emitChanged(ids)

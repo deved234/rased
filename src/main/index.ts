@@ -119,8 +119,26 @@ import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './poli
 import { isolatedTestHarness } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
-import { WATCH_ENABLED, WATCH_SOURCES, type WatchSource } from '../shared/projectWatch.js'
-import { startEpisode } from '../storage/projectWatch.js'
+import {
+  WATCH_CAP_PER_SOURCE,
+  WATCH_ENABLED,
+  WATCH_SOURCES,
+  type WatchSource
+} from '../shared/projectWatch.js'
+import {
+  autoStartOnSubmittedTx,
+  countActiveWatches,
+  getWatchSourceState,
+  listWatches,
+  replaceWatch,
+  setWatch,
+  startEpisode,
+  stopSource,
+  stopWatchTx
+} from '../storage/projectWatch.js'
+import { ProjectWatcher } from './projectWatcher.js'
+import { createWatchFetch } from './watchTransport.js'
+import { validateWatchReplacePayload, validateWatchSetPayload } from './watchIpc.js'
 import { dispatchWatchPending, dispatchWatchEpisode, watchChangeKind } from './watchNotifier.js'
 import { watchSummaryTitle, watchAwayTitle, parseWatchPayload } from '../shared/watchNotificationText.js'
 import { isAllowedProjectUrl, isAllowedTestUrl, MOSTAQL_PROJECTS_URL, resolveProjectUrl } from './links.js'
@@ -214,6 +232,9 @@ let nafezlyTimer: NodeJS.Timeout | null = null
 let nafezlyInFlight = false
 let nafezlyAbort: AbortController | null = null
 let kaf: KafController | null = null
+let watcher: ProjectWatcher | null = null
+let watchTimer: ReturnType<typeof setInterval> | null = null
+let lastWatchDailyDay = ''
 function snapshotKafHealth(): SourceHealth { return kaf?.health() ?? { state: 'initializing', paused: false, lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: null, lastError: null, consecutiveFailures: 0, lastDurationMs: null, lastItemCount: null, effectiveIntervalMs: 5500 } }
 let nafezlyNextAttemptMs: number | null = null
 let nafezlyLastDurationMs: number | null = null
@@ -360,6 +381,7 @@ function syncAnalyticsAccess(): void {
     enrichQueue.abortActive(); detailsFetcher.abortActive(); nafezlyFacts.abortActive()
     quickAssistant?.cancel(); aiService?.cancel(); extension?.cancel()
     compactWin?.close()
+    if (WATCH_ENABLED) watcher?.abort()
   }
   // The access gate is separate from per-source pauses/settings/backoff.
   scheduleNext(); scheduleKhamsat(0); scheduleNafezly(0); kaf?.settingsChanged()
@@ -410,9 +432,32 @@ function publishSettings(s: AppSettings): void {
   updateTray()
 }
 
+function handleWatchSourceDisabled(source: WatchSource): void {
+  if (!WATCH_ENABLED || !db?.isOpen) return
+  watcher?.abort(source)
+  const now = new Date().toISOString()
+  const rows = db.prepare(`
+    SELECT pw.project_id
+    FROM project_watch pw
+    JOIN projects p ON p.id = pw.project_id
+    WHERE p.source = ? AND pw.state IN ('active', 'waiting');
+  `).all(source) as { project_id: number }[]
+  const ids = rows.map(r => r.project_id)
+  stopSource(db, { source, now })
+  for (let i = 0; i < ids.length; i++) {
+    telemetry?.record('watch_stopped', { source, reason: 'source_disabled' })
+  }
+  if (ids.length > 0) {
+    emitProjects([], ids)
+  }
+}
+
 function applyMonitoringSettings(previous: AppSettings, next: AppSettings): void {
   if (previous.mostaqlEnabled !== next.mostaqlEnabled || previous.pollIntervalMs !== next.pollIntervalMs) {
-    if (!next.mostaqlEnabled) { activeRss?.abort(); enrichQueue.abortActive(); detailsFetcher.abortActive() }
+    if (!next.mostaqlEnabled) {
+      activeRss?.abort(); enrichQueue.abortActive(); detailsFetcher.abortActive()
+      handleWatchSourceDisabled('mostaql')
+    }
     scheduleNext()
   }
   if (previous.khamsatEnabled !== next.khamsatEnabled) {
@@ -420,8 +465,16 @@ function applyMonitoringSettings(previous: AppSettings, next: AppSettings): void
     scheduleKhamsat(0)
   }
   if (previous.nafezlyEnabled !== next.nafezlyEnabled) {
-    if (!next.nafezlyEnabled) { nafezlyAbort?.abort(); nafezlyFacts.abortActive() }
+    if (!next.nafezlyEnabled) {
+      nafezlyAbort?.abort(); nafezlyFacts.abortActive()
+      handleWatchSourceDisabled('nafezly')
+    }
     scheduleNafezly(0)
+  }
+  if (previous.kafEnabled !== next.kafEnabled) {
+    if (!next.kafEnabled) {
+      handleWatchSourceDisabled('kaf')
+    }
   }
 }
 
@@ -1288,20 +1341,22 @@ const detailsFetcher = new DetailsFetcher(() => db, {
   onSettled: (projectId: number) => emitDetails([projectId])
 })
 
+function nafezlyDetailFailure(result: { status?: number | null; retryAfterMs?: number | null; kind?: string }): void {
+  if (!db || quitRequested) return
+  const previous = getSourceState(db, NAFEZLY_SOURCE), failures = previous.consecutiveFailures + 1
+  const blocked = result.status === 401 || result.status === 403 || result.status === 429
+  const wait = Math.max(result.retryAfterMs ?? 0, blocked ? Math.min(2 * 60 * 60_000, 15 * 60_000 * 2 ** Math.min(failures - 1, 3)) : Math.min(5 * 60_000, 15_000 * 2 ** Math.min(failures, 5)))
+  if (blocked) { nafezlyBaseIntervalMs = 60_000; nafezlyRecoverySuccesses = 0; nafezlyAbort?.abort() }
+  saveSourceState(db, { ...previous, lastError: result.kind === 'http' ? `http-${result.status}` : result.kind ?? 'invalid_content', consecutiveFailures: failures, backoffUntil: new Date(Math.max(Date.parse(previous.backoffUntil ?? '') || 0, Date.now() + wait)).toISOString() })
+  scheduleNafezly()
+}
+
 const nafezlyFacts = new ProjectFactsFetcher({
   db: () => db, fetchImpl: testHarness?.fetchImpl,
   budget: arbiterBudget(nafezlyArbiter, 'details'),
   gateOpen: () => applicationAccessAllowed() && !!db && !quitRequested && settings.nafezlyEnabled && !nafezlyPaused && !nafezlyInFlight && !(getSourceState(db, NAFEZLY_SOURCE).backoffUntil && Date.parse(getSourceState(db, NAFEZLY_SOURCE).backoffUntil!) > Date.now()),
   settled: id => { emitProjects([], [id]); emitDetails([id]) },
-  failure: result => {
-    if (!db || quitRequested) return
-    const previous = getSourceState(db, NAFEZLY_SOURCE), failures = previous.consecutiveFailures + 1
-    const blocked = result.status === 401 || result.status === 403 || result.status === 429
-    const wait = Math.max(result.retryAfterMs ?? 0, blocked ? Math.min(2 * 60 * 60_000, 15 * 60_000 * 2 ** Math.min(failures - 1, 3)) : Math.min(5 * 60_000, 15_000 * 2 ** Math.min(failures, 5)))
-    if (blocked) { nafezlyBaseIntervalMs = 60_000; nafezlyRecoverySuccesses = 0; nafezlyAbort?.abort() }
-    saveSourceState(db, { ...previous, lastError: result.kind === 'http' ? `http-${result.status}` : result.kind ?? 'invalid_content', consecutiveFailures: failures, backoffUntil: new Date(Math.max(Date.parse(previous.backoffUntil ?? '') || 0, Date.now() + wait)).toISOString() })
-    scheduleNafezly()
-  }
+  failure: nafezlyDetailFailure
 })
 
 function snapshotProjectFacts(id: number): ProjectFacts | null {
@@ -1486,7 +1541,11 @@ function updateTray(): void {
     mostaql: () => { void (paused ? doResume() : doPause()) },
     khamsat: () => { void (khamsatPaused ? doResumeKhamsat() : doPauseKhamsat()) },
     nafezly: () => { void (nafezlyPaused ? doResumeNafezly() : doPauseNafezly()) },
-    kaf: () => { kaf?.setPaused(!kaf.health().paused) }
+    kaf: () => {
+      const willPause = !kaf?.health().paused
+      if (willPause && WATCH_ENABLED) watcher?.abort('kaf')
+      kaf?.setPaused(willPause)
+    }
   }
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -1606,6 +1665,7 @@ function openCompact(): void {
 
 async function doPause(): Promise<SourceHealth> {
   paused = true
+  if (WATCH_ENABLED) watcher?.abort('mostaql')
   activeRss?.abort()
   enrichQueue.abortActive()
   detailsFetcher.abortActive()
@@ -1646,6 +1706,7 @@ async function doResumeKhamsat(): Promise<SourceHealth> {
 
 async function doPauseNafezly(): Promise<SourceHealth> {
   nafezlyPaused = true
+  if (WATCH_ENABLED) watcher?.abort('nafezly')
   nafezlyFacts.abortActive()
   nafezlyAbort?.abort()
   if (nafezlyTimer) clearTimeout(nafezlyTimer)
@@ -1668,9 +1729,56 @@ function doQuit(): void {
   else void shutdown()
 }
 
+function startWatchPump(): void {
+  if (!WATCH_ENABLED || !watcher) return
+  if (watchTimer) clearInterval(watchTimer)
+  watchTimer = setInterval(() => {
+    if (!watcher || !db?.isOpen || quitRequested) return
+    for (const source of WATCH_SOURCES) {
+      try {
+        void trackWork(watcher.pump(source).catch(err => auditUi(`watch-pump-error ${source}: ${String(err).slice(0, 100)}`)))
+      } catch (err) {
+        auditUi(`watch-pump-error ${source}: ${String(err).slice(0, 100)}`)
+      }
+    }
+    const today = new Date().toISOString().slice(0, 10)
+    if (today !== lastWatchDailyDay) {
+      lastWatchDailyDay = today
+      for (const source of WATCH_SOURCES) {
+        try {
+          if (db?.isOpen) {
+            const active = countActiveWatches(db, source)
+            const waitingRow = db.prepare(`
+              SELECT COUNT(*) AS c
+              FROM project_watch pw
+              JOIN projects p ON p.id = pw.project_id
+              WHERE pw.state = 'waiting' AND p.source = ?;
+            `).get(source) as { c: number } | undefined
+            const waiting = waitingRow ? Number(waitingRow.c) : 0
+            telemetry?.watchDaily(source, active, waiting)
+          }
+        } catch {
+          // ignore telemetry read failures
+        }
+      }
+    }
+  }, 1000)
+  watchTimer.unref?.()
+}
+
+function clearWatchPump(): void {
+  if (watchTimer) {
+    clearInterval(watchTimer)
+    watchTimer = null
+  }
+}
+
 async function shutdown(): Promise<void> {
   if (shutdownWork) return shutdownWork
   quitRequested = true
+  clearWatchPump()
+  // KAF must close only after the watcher has released its KAF slot (see shutdownWork).
+  const closingWatcher = watcher?.close().catch(err => auditUi(`watcher-close-failed ${String(err)}`))
   notificationActivation.close()
   const closingTelemetry = telemetry?.close()
   paused = true
@@ -1679,7 +1787,6 @@ async function shutdown(): Promise<void> {
   activeRss?.abort()
   khamsatAbort?.abort()
   nafezlyAbort?.abort()
-  const closingKaf = kaf?.close()
   const closingFacts = nafezlyFacts.close()
   quickAssistant?.dispose()
   const closingAi = aiService?.close()
@@ -1703,6 +1810,8 @@ async function shutdown(): Promise<void> {
   extension?.dispose()
   shutdownWork = (async () => {
   try {
+    await closingWatcher
+    const closingKaf = kaf?.close()
     await closingTelemetry
     while (work.size) await Promise.allSettled([...work])
     if (flushing) await Promise.allSettled([flushing])
@@ -1734,10 +1843,14 @@ function registerIpc(): void {
   ipcMain.handle(IPC.databaseReady, event => !!(localSender(event) && db?.prepare('SELECT id FROM projects LIMIT 1').all()))
   ipcMain.handle(IPC.getSidebarCounts, async event => {
     if (!localSender(event) || !searchService) throw new Error('search-unavailable')
+    let watching = 0
+    if (WATCH_ENABLED && db?.isOpen) {
+      for (const s of WATCH_SOURCES) watching += countActiveWatches(db, s)
+    }
     return searchReply(Promise.all([
       searchService.page(`${event.sender.id}:sidebar:all`, sanitizeFilterDefinition(legacyToFilterDef({ displayFilter: settings.displayFilter })), 0, 0),
       searchService.page(`${event.sender.id}:sidebar:saved`, { ...defaultFilterDefinition(), scope: 'saved' }, 0, 0)
-    ]).then(([all, saved]) => ({ unread: all.unread, saved: saved.total })))
+    ]).then(([all, saved]) => ({ unread: all.unread, saved: saved.total, watching })))
   })
   ipcMain.handle(IPC.matchProjectIds, (event, v) => {
     if (!localSender(event) || !searchService || !Array.isArray(v?.ids) || v.ids.length > 200 || !v.ids.every((id: unknown) => Number.isSafeInteger(id) && Number(id) > 0)) throw new Error('bad-search-request')
@@ -1965,7 +2078,7 @@ function registerIpc(): void {
     else clipboard.writeText(report)
     return { ok: true }
   })
-  ipcMain.handle(IPC.pauseKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); return kaf?.setPaused(true) })
+  ipcMain.handle(IPC.pauseKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); if (WATCH_ENABLED) watcher?.abort('kaf'); return kaf?.setPaused(true) })
   ipcMain.handle(IPC.resumeKaf, e => { if (!localSender(e)) throw Error('untrusted-sender'); return kaf?.setPaused(false) })
   ipcMain.handle(IPC.pause, () => doPause())
   ipcMain.handle(IPC.resume, () => doResume())
@@ -2032,12 +2145,196 @@ function registerIpc(): void {
     const patch = sanitizeUserStatePatch(v.patch)
     if (!patch || Object.keys(patch).length === 0) return { ok: false, error: 'bad-patch' } satisfies MutationResult
     const d: Db = db
-    const applied = runInTransaction(d, () => updateUserState(d, v.id, patch))
+    let applied: boolean
+    let promoted: number | null = null
+    let autoStarted: { source: WatchSource; result: 'active' | 'waiting' } | null = null
+    let watchStoppedSource: WatchSource | null = null
+    if (WATCH_ENABLED) {
+      const nowIso = new Date().toISOString()
+      applied = runInTransaction(d, () => {
+        const before = getUserState(d, v.id).status
+        const ok = updateUserState(d, v.id, patch)
+        if (!ok) return false
+        if (patch.status === 'submitted' && before !== 'submitted') {
+          const res = autoStartOnSubmittedTx(d, v.id, nowIso)
+          if (res.ok && res.changed && res.row) {
+            try {
+              const p = getProjectById(d, v.id)
+              if (p && (WATCH_SOURCES as readonly string[]).includes(p.source)) {
+                autoStarted = {
+                  source: p.source as WatchSource,
+                  result: res.row.state === 'active' ? 'active' : 'waiting'
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (res.ok && res.promoted !== null) {
+            promoted = res.promoted
+          }
+        }
+        if (patch.status === 'ignored' || patch.hidden === true) {
+          const res = stopWatchTx(d, { projectId: v.id, reason: 'ignored', now: nowIso })
+          if (res.changed) {
+            try {
+              const p = getProjectById(d, v.id)
+              if (p && (WATCH_SOURCES as readonly string[]).includes(p.source)) {
+                watchStoppedSource = p.source as WatchSource
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (res.promoted !== null) {
+            promoted = res.promoted
+          }
+        }
+        return true
+      })
+    } else {
+      applied = runInTransaction(d, () => updateUserState(d, v.id, patch))
+    }
     if (!applied) return { ok: false, error: 'unknown-project' } satisfies MutationResult
     if ('saved' in patch && patch.saved) telemetry?.record('feature_used', { feature: 'bookmark', outcome: 'success' })
+    const started = autoStarted as { source: WatchSource; result: 'active' | 'waiting' } | null
+    if (started) {
+      telemetry?.record('watch_started', {
+        source: started.source,
+        entry: 'auto_submitted',
+        result: started.result
+      })
+    }
+    const stoppedSource = watchStoppedSource as WatchSource | null
+    if (stoppedSource) {
+      telemetry?.record('watch_stopped', {
+        source: stoppedSource,
+        reason: 'ignored'
+      })
+    }
     auditUi(`user-state id=${v.id} ${Object.keys(patch).join(',')}`)
-    emitProjects([], [v.id])
+    const changedIds = [v.id]
+    if (promoted !== null) changedIds.push(promoted)
+    emitProjects([], changedIds)
     return { ok: true } satisfies MutationResult
+  })
+  ipcMain.handle(IPC.watchSet, (event, raw) => {
+    if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
+    if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
+    if (!db) return { ok: false, error: 'no-db' }
+    const payload = validateWatchSetPayload(raw)
+    if (!payload) return { ok: false, error: 'bad-request' }
+    const now = new Date().toISOString()
+    const res = setWatch(db, {
+      projectId: payload.projectId,
+      want: payload.want,
+      expectVersion: payload.expectVersion,
+      origin: payload.entry,
+      now
+    })
+    if (res.ok) {
+      auditUi(`watch-set id=${payload.projectId} want=${payload.want} origin=${payload.entry}`)
+      const changedIds = [payload.projectId]
+      if (res.promoted !== null) changedIds.push(res.promoted)
+      emitProjects([], changedIds)
+      if (res.changed) {
+        let source: WatchSource | null = null
+        try {
+          const p = getProjectById(db, payload.projectId)
+          if (p && (WATCH_SOURCES as readonly string[]).includes(p.source)) {
+            source = p.source as WatchSource
+          }
+        } catch {
+          // ignore
+        }
+        if (source) {
+          if (payload.want === 'on' && res.row) {
+            telemetry?.record('watch_started', {
+              source,
+              entry: payload.entry,
+              result: res.row.state === 'active' ? 'active' : 'waiting'
+            })
+          } else if (payload.want === 'off') {
+            telemetry?.record('watch_stopped', {
+              source,
+              reason: 'manual'
+            })
+          }
+        }
+      }
+    }
+    return res
+  })
+  ipcMain.handle(IPC.watchReplace, (event, raw) => {
+    if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
+    if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
+    if (!db) return { ok: false, error: 'no-db' }
+    const payload = validateWatchReplacePayload(raw)
+    if (!payload) return { ok: false, error: 'bad-request' }
+    const now = new Date().toISOString()
+    const res = replaceWatch(db, {
+      projectId: payload.projectId,
+      victimId: payload.victimId,
+      expectVersion: payload.expectVersions.project,
+      expectVictimVersion: payload.expectVersions.victim,
+      origin: payload.entry,
+      now
+    })
+    if (res.ok) {
+      auditUi(`watch-replace project=${payload.projectId} victim=${payload.victimId} origin=${payload.entry}`)
+      emitProjects([], [payload.projectId, payload.victimId])
+      let source: WatchSource | null = null
+      try {
+        const p = getProjectById(db, payload.projectId)
+        if (p && (WATCH_SOURCES as readonly string[]).includes(p.source)) {
+          source = p.source as WatchSource
+        }
+      } catch {
+        // ignore
+      }
+      if (source) {
+        telemetry?.record('watch_started', {
+          source,
+          entry: payload.entry,
+          result: 'replaced_other'
+        })
+        telemetry?.record('watch_stopped', {
+          source,
+          reason: 'replaced'
+        })
+      }
+    }
+    return res
+  })
+  ipcMain.handle(IPC.watchList, (event, raw: { source?: unknown } | undefined) => {
+    if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
+    if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
+    if (!db) return { ok: false, error: 'no-db' }
+    const source = typeof raw?.source === 'string' && (WATCH_SOURCES as readonly string[]).includes(raw.source)
+      ? (raw.source as WatchSource)
+      : undefined
+    return listWatches(db, source ? { source } : undefined)
+  })
+  ipcMain.handle(IPC.watchCounts, event => {
+    if (!WATCH_ENABLED) return { ok: false, error: 'disabled' }
+    if (!localSender(event)) return { ok: false, error: 'untrusted-sender' }
+    if (!db) return { ok: false, error: 'no-db' }
+    const counts = {} as Record<WatchSource, { active: number; waiting: number; cap: number }>
+    for (const s of WATCH_SOURCES) {
+      const active = countActiveWatches(db, s)
+      const waitingRow = db.prepare(`
+        SELECT COUNT(*) AS c
+        FROM project_watch pw
+        JOIN projects p ON p.id = pw.project_id
+        WHERE pw.state = 'waiting' AND p.source = ?;
+      `).get(s) as { c: number } | undefined
+      counts[s] = {
+        active,
+        waiting: waitingRow ? Number(waitingRow.c) : 0,
+        cap: WATCH_CAP_PER_SOURCE
+      }
+    }
+    return counts
   })
   ipcMain.handle(IPC.getSavedFilters, () => (db ? listSavedFilters(db) : []))
   ipcMain.handle(IPC.createSavedFilter, (_e, v: { name: unknown; definition: unknown }) => {
@@ -2221,8 +2518,9 @@ function registerIpc(): void {
       return { ok: false, error: 'backup-failed' } satisfies PurgePreview
     }
     if (quitRequested || !db) return { ok: false, error: 'busy' }
+    if (WATCH_ENABLED) watcher?.abort()
     const iso = new Date(v.cutoffIso).toISOString()
-    const victims = d.prepare(`SELECT p.id FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id WHERE p.first_seen_at < ? AND u.saved_at IS NULL AND COALESCE(u.note,'')='' AND COALESCE(u.personal_status,'none') NOT IN ('interested','submitted')`).all(iso) as unknown as { id: number }[]
+    const victims = d.prepare(`SELECT p.id FROM projects p LEFT JOIN project_user_state u ON u.project_id=p.id WHERE p.first_seen_at < ? AND u.saved_at IS NULL AND COALESCE(u.note,'')='' AND COALESCE(u.personal_status,'none') NOT IN ('interested','submitted') AND NOT EXISTS (SELECT 1 FROM project_watch w WHERE w.project_id = p.id AND w.state IN ('active','waiting'))`).all(iso) as unknown as { id: number }[]
     for (const { id } of victims) { detailsFetcher.drop(id); enrichQueue.drop(id); uncertainWaits.delete(id) }
     const { deleted } = runInTransaction(d, () => purgeHistory(d, iso, PURGE_KINDS))
     auditUi(`purge deleted=${deleted} backup=${backupPath}`)
@@ -2447,6 +2745,54 @@ async function boot(): Promise<void> {
     health: h => { telemetry?.health('kaf', h); broadcast(IPC.kafHealthChanged, h); updateTray() },
     projects: emitProjects, details: id => emitDetails([id]), flush: () => flushNotifications(null).then(() => undefined)
   })
+  if (WATCH_ENABLED) {
+    watcher = new ProjectWatcher({
+      db: () => db,
+      now: () => Date.now(),
+      arbiter: source => source === 'mostaql' ? mostaqlArbiter : source === 'nafezly' ? nafezlyArbiter : kaf!.watchSlot(),
+      fetch: createWatchFetch({ fetchImpl: testHarness?.fetchImpl }),
+      gateOpen: source => {
+        if (!WATCH_ENABLED || !applicationAccessAllowed() || quitRequested || !db?.isOpen) return false
+        if (source === 'mostaql') return settings.mostaqlEnabled && !paused && !isBackingOff(sched, Date.now())
+        if (source === 'nafezly') {
+          const backoff = getSourceState(db, NAFEZLY_SOURCE).backoffUntil
+          const isBackingOffNafezly = backoff ? Date.parse(backoff) > Date.now() : false
+          return settings.nafezlyEnabled && !nafezlyPaused && !isBackingOffNafezly
+        }
+        if (source === 'kaf') return settings.kafEnabled && !!kaf && !kaf.health().paused
+        return false
+      },
+      pollSucceededSince: (source, sinceMs) => {
+        if (!db?.isOpen) return false
+        return Date.parse(getSourceState(db, source).lastSuccessAt ?? '') > sinceMs
+      },
+      onBlock: (source, r) => {
+        if (source === 'mostaql') detailTransportFailure(r.status === 429 ? 'rate_limited' : 'forbidden', r.retryAfterMs)
+        else if (source === 'nafezly') nafezlyDetailFailure({ kind: 'http', status: r.status === 401 || r.status === 429 ? r.status : 403, retryAfterMs: r.retryAfterMs })
+        else if (source === 'kaf') kaf?.applyWatchBlock(r.status === 202 ? 403 : (r.status ?? 403), r.retryAfterMs)
+      },
+      onEvents: (source, res) => {
+        void trackWork(flushNotifications(null))
+        if (res.stopped === 'closed') telemetry?.record('watch_stopped', { source, reason: 'closed' })
+      },
+      onChanged: ids => emitProjects([], ids),
+      onCounter: (source, c) => {
+        telemetry?.watchCounter(source, c)
+        if (c === 'ok' || c === 'blocked' || c === 'slowed') {
+          try {
+            if (db?.isOpen) telemetry?.watchSlot(source, getWatchSourceState(db, source).slotMs)
+          } catch {
+            // ignore
+          }
+        }
+      },
+      onStopped: (source, projectId, reason) => {
+        telemetry?.record('watch_stopped', { source, reason })
+        emitProjects([], [projectId])
+      }
+    })
+    startWatchPump()
+  }
   registerIpc()
   kaf.start(!!testHarness)
   createWindow()
@@ -2469,6 +2815,10 @@ async function boot(): Promise<void> {
     else win?.show()
   })
   powerMonitor.on('suspend', () => {
+    if (WATCH_ENABLED) {
+      watcher?.abort()
+      clearWatchPump()
+    }
     searchCache?.suspend(true)
     telemetry?.suspend()
     nafezlyFacts.abortActive()
@@ -2489,6 +2839,9 @@ async function boot(): Promise<void> {
   })
   powerMonitor.on('resume', () => {
     if (WATCH_ENABLED && db?.isOpen) { try { startEpisode(db, { now: new Date().toISOString() }) } catch { auditUi('watch-episode-start-failed') } }
+    if (WATCH_ENABLED) {
+      startWatchPump()
+    }
     searchCache?.suspend(false)
     telemetry?.resume()
     kaf?.wake()

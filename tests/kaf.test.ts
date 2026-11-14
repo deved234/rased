@@ -446,4 +446,56 @@ describe('KAF watch slot arbiter', () => {
     const provider: WatchSlotProvider = arbiter
     expect(provider.claim).toBeTypeOf('function')
   })
+
+  it('after a watch release with a queued detail, the detail starts ~5 s later without any poll (fake clock)', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(100000)
+    database()
+    const fetchedUrls: string[] = []
+    const f = vi.fn(async (url: string | URL | Request) => {
+      const s = String(url)
+      fetchedUrls.push(s)
+      return htmlResponse(s.includes('/project/') ? detail : page([300]))
+    })
+    // Schedule next poll far into the future (random: () => 60 gives 65s interval)
+    // so no primary poll runs during the ~5 s watch release retry window.
+    const c = new KafController({
+      db: () => db,
+      settings: () => defaultSettings(),
+      health: () => {},
+      projects: () => {},
+      details: () => {},
+      flush: async () => {},
+      runId: 'test',
+      fetchImpl: f,
+      random: () => 60
+    })
+    await c.poll()
+    const p = getProjectById(db, 1)!
+    expect(p).toBeDefined()
+
+    const slot = c.watchSlot().claim('watch')
+    expect(slot).not.toBeNull()
+
+    c.requestDetails(p.id, true)
+    expect(c.isDetailsPending(p.id)).toBe(true)
+
+    fetchedUrls.length = 0
+    slot!.release()
+
+    expect(fetchedUrls.some(u => u.includes(`/project/${p.externalId}`))).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(fetchedUrls).toHaveLength(0)
+
+    await vi.advanceTimersByTimeAsync(101)
+
+    // Queued detail started ~5 s after release, without any list request occurring
+    expect(fetchedUrls.some(u => u.includes('/projects'))).toBe(false)
+    expect(fetchedUrls.some(u => u.includes(`/project/${p.externalId}`))).toBe(true)
+    const detailsRow = getProjectDetailsRow(db, p.id)
+    expect(detailsRow.status).toBe('ready')
+
+    await c.close()
+  })
 })

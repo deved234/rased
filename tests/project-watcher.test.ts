@@ -39,6 +39,7 @@ let blockedCalls: { source: WatchSource; result: WatchFetchResult }[]
 let changedCalls: number[][]
 let eventsCalls: { source: WatchSource; result: WatchSnapshotResult }[]
 let counterCalls: { source: WatchSource; counter: WatchCounter }[]
+let stoppedCalls: { source: WatchSource; projectId: number; reason: 'gone' | 'expired' }[]
 let fetchFn: (source: WatchSource, url: string, signal: AbortSignal) => Promise<WatchFetchResult>
 
 function seedProject(database: Db, id: string, source: string = 'mostaql'): number {
@@ -124,6 +125,7 @@ beforeEach(() => {
   changedCalls = []
   eventsCalls = []
   counterCalls = []
+  stoppedCalls = []
 
   fetchFn = async () => ({
     kind: 'ok',
@@ -153,7 +155,8 @@ function makeWatcher(): ProjectWatcher {
     onBlock: (source: WatchSource, result: WatchFetchResult) => blockedCalls.push({ source, result }),
     onChanged: (ids: number[]) => changedCalls.push(ids),
     onEvents: (source: WatchSource, result: WatchSnapshotResult) => eventsCalls.push({ source, result }),
-    onCounter: (source: WatchSource, counter: WatchCounter) => counterCalls.push({ source, counter })
+    onCounter: (source: WatchSource, counter: WatchCounter) => counterCalls.push({ source, counter }),
+    onStopped: (source: WatchSource, projectId: number, reason: 'gone' | 'expired') => stoppedCalls.push({ source, projectId, reason })
   })
 }
 
@@ -1593,6 +1596,121 @@ describe('ProjectWatcher', () => {
       // Both 'blocked' and 'slowed' must have been invoked
       expect(counters).toContain('blocked')
       expect(counters).toContain('slowed')
+    })
+
+    it('onStopped is called for gone/private stops and for expired watches with the right reason and id', async () => {
+      const watcher = makeWatcher()
+      // 1. 404 response -> gone
+      const p1 = seedProject(db, 'p-gone-404', 'mostaql')
+      setWatch(db, { projectId: p1, want: 'on', expectVersion: null, origin: 'list', now: new Date(nowMs).toISOString() })
+      fetchFn = async () => ({
+        kind: 'http',
+        status: 404,
+        finalUrl: null,
+        html: null,
+        retryAfterMs: null
+      })
+      nowMs += WATCH_SLOT_MS + 1
+      await watcher.pump('mostaql')
+      expect(stoppedCalls).toContainEqual({ source: 'mostaql', projectId: p1, reason: 'gone' })
+
+      // 2. 403 private -> gone
+      stoppedCalls = []
+      const p2 = seedProject(db, 'p-gone-private', 'kaf')
+      setWatch(db, { projectId: p2, want: 'on', expectVersion: null, origin: 'list', now: new Date(nowMs).toISOString() })
+      fetchFn = async () => ({
+        kind: 'http',
+        status: 403,
+        finalUrl: null,
+        html: '<html><body><div class="help-center"><p class="about-desc">403 | غير مصرح لك بإتخاذ هذا الإجراء أو الدخول إلى هذه الصفحة</p></div></body></html>',
+        retryAfterMs: null
+      })
+      nowMs += WATCH_SLOT_MS + 1
+      await watcher.pump('kaf')
+      expect(stoppedCalls).toContainEqual({ source: 'kaf', projectId: p2, reason: 'gone' })
+
+      // 3. expired watch
+      stoppedCalls = []
+      const p3 = seedProject(db, 'p-expired', 'nafezly')
+      setWatch(db, { projectId: p3, want: 'on', expectVersion: null, origin: 'list', now: new Date(nowMs).toISOString() })
+      // Advance past 14 days + expiry interval
+      nowMs += 15 * 24 * 60 * 60 * 1000
+      await watcher.pump('nafezly')
+      expect(stoppedCalls).toContainEqual({ source: 'nafezly', projectId: p3, reason: 'expired' })
+    })
+
+    it('a throwing onStopped does not break the check', async () => {
+      const watcher = new ProjectWatcher({
+        db: () => db,
+        now: () => nowMs,
+        arbiter: source => arbiters[source],
+        fetch: (source, url, signal) => fetchFn(source, url, signal),
+        gateOpen: source => gateOpenState[source] ?? false,
+        pollSucceededSince: (source, sinceMs) => (pollSuccessSinceTimes[source] ?? 0) >= sinceMs,
+        onBlock: (source, result) => blockedCalls.push({ source, result }),
+        onChanged: ids => changedCalls.push(ids),
+        onEvents: (source, result) => eventsCalls.push({ source, result }),
+        onStopped: () => {
+          throw new Error('boom in onStopped callback')
+        }
+      })
+
+      const p1 = seedProject(db, 'p-throwing-onstopped', 'mostaql')
+      setWatch(db, { projectId: p1, want: 'on', expectVersion: null, origin: 'list', now: new Date(nowMs).toISOString() })
+
+      fetchFn = async () => ({
+        kind: 'http',
+        status: 404,
+        finalUrl: null,
+        html: null,
+        retryAfterMs: null
+      })
+
+      nowMs += WATCH_SLOT_MS + 1
+      await expect(watcher.pump('mostaql')).resolves.toBeUndefined()
+      const row = getWatch(db, p1)
+      expect(row?.state).toBe('stopped')
+      expect(row?.stopReason).toBe('gone')
+    })
+
+    it('abort(source) aborts only that source', async () => {
+      const watcher = makeWatcher()
+      const pMostaql = seedProject(db, 'p-abort-mostaql', 'mostaql')
+      const pNafezly = seedProject(db, 'p-abort-nafezly', 'nafezly')
+      setWatch(db, { projectId: pMostaql, want: 'on', expectVersion: null, origin: 'list', now: new Date(nowMs).toISOString() })
+      setWatch(db, { projectId: pNafezly, want: 'on', expectVersion: null, origin: 'list', now: new Date(nowMs).toISOString() })
+
+      let mostaqlAborted = false
+      let nafezlyAborted = false
+      let resolveMostaql!: () => void
+      let resolveNafezly!: () => void
+
+      fetchFn = async (source, _url, signal) => {
+        if (source === 'mostaql') {
+          signal.addEventListener('abort', () => { mostaqlAborted = true })
+          return new Promise<WatchFetchResult>(resolve => {
+            resolveMostaql = () => resolve({ kind: 'cancelled', status: null, finalUrl: null, html: null, retryAfterMs: null })
+          })
+        }
+        signal.addEventListener('abort', () => { nafezlyAborted = true })
+        return new Promise<WatchFetchResult>(resolve => {
+          resolveNafezly = () => resolve({ kind: 'ok', status: 200, finalUrl: null, html: NAFEZLY_HTML_OPEN, retryAfterMs: null })
+        })
+      }
+
+      nowMs += WATCH_SLOT_MS + 1
+      const pumpM = watcher.pump('mostaql')
+      const pumpN = watcher.pump('nafezly')
+
+      // Abort only mostaql
+      watcher.abort('mostaql')
+
+      expect(mostaqlAborted).toBe(true)
+      expect(nafezlyAborted).toBe(false)
+
+      resolveMostaql()
+      resolveNafezly()
+      await Promise.all([pumpM, pumpN])
     })
   })
 })

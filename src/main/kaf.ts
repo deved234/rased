@@ -44,6 +44,7 @@ export class KafController {
   private count: number | null = null
   private watchActive: { onPreempt?: () => void } | null = null
   private watchFinished = 0
+  private watchRetry: ReturnType<typeof setTimeout> | null = null
   constructor(private readonly deps: Deps) {}
   private now(): number { return this.deps.now?.() ?? Date.now() }
   private available(): boolean { return (this.deps.accessAllowed?.() ?? true) && !this.closed && !this.sleeping && !this.paused && this.deps.settings().kafEnabled && !!this.deps.db() }
@@ -62,6 +63,7 @@ export class KafController {
   sleep(): void { this.sleeping = true; this.cancel() }
   wake(): void { this.sleeping = false; this.schedule(2000) }
   private cancel(): void {
+    if (this.watchRetry) clearTimeout(this.watchRetry); this.watchRetry = null
     if (this.timer) clearTimeout(this.timer); this.timer = null; this.next = null; this.abort?.abort(); this.detailAbort?.abort(); this.queue = []
     if (this.watchActive) {
       const active = this.watchActive
@@ -70,7 +72,7 @@ export class KafController {
       try { active.onPreempt?.() } catch { /* ignore */ }
     }
   }
-  async close(): Promise<void> { this.closed = true; this.cancel(); await Promise.allSettled([this.work, this.detailWork].filter(Boolean) as Promise<void>[]) }
+  async close(): Promise<void> { this.closed = true; if (this.watchRetry) clearTimeout(this.watchRetry); this.watchRetry = null; this.cancel(); await Promise.allSettled([this.work, this.detailWork].filter(Boolean) as Promise<void>[]) }
   private schedule(delay?: number): void {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null; this.next = null
@@ -127,6 +129,8 @@ export class KafController {
               this.watchActive = null
               this.watchFinished = this.now()
               void this.pumpDetails()
+              if (this.watchRetry) clearTimeout(this.watchRetry)
+              this.watchRetry = setTimeout(() => { this.watchRetry = null; void this.pumpDetails() }, 5050)
             }
           }
         }

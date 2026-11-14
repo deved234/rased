@@ -7,6 +7,7 @@ import { SCHEMA_VERSION, applyMigrations } from '../src/storage/migrations.js'
 import { downgradeToSchema10, removeSearchSchema } from './helpers/oldSchema.js'
 import {
   countProjects,
+  countPurgeable,
   createPendingEvents,
   getEventsByIds,
   getProjectById,
@@ -18,6 +19,7 @@ import {
   markAllRead,
   markEvents,
   markStaleDispatchingUncertain,
+  purgeHistory,
   recordBatch,
   recordDiagnostic,
   runInTransaction,
@@ -28,6 +30,7 @@ import {
   upsertProjectsBatch,
   type UpsertInput
 } from '../src/storage/repositories.js'
+import { getWatch, setWatch } from '../src/storage/projectWatch.js'
 
 let dir = ''
 let db: Db
@@ -371,4 +374,93 @@ describe('diagnostics', () => {
     expect(rows[0]?.detail?.length).toBeLessThanOrEqual(500)
     // Hundreds of durable writes can exceed the default timeout on Windows CI.
   }, 90_000)
+})
+
+describe('purge with project watch', () => {
+  it('purge preview and purge apply keep a project with an active or waiting watch (status none), keep a project watched between preview and apply, and still purge a project whose watch is stopped', () => {
+    const cutoffIso = '2026-09-24T15:00:00.000Z'
+    const purgeKinds = ['live']
+
+    upsertProjectsBatch(db, [item('p-active')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const pActive = getProjectById(db, 1)!
+    expect(pActive).toBeDefined()
+    setWatch(db, {
+      projectId: pActive.id,
+      want: 'on',
+      expectVersion: null,
+      origin: 'list',
+      now: '2026-09-24T14:00:00.000Z'
+    })
+
+    // Stop pStopped BEFORE inserting pWaiting so promoteOldestTx does not promote pWaiting
+    upsertProjectsBatch(db, [item('p-stopped')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const pStopped = getProjectById(db, 2)!
+    setWatch(db, {
+      projectId: pStopped.id,
+      want: 'on',
+      expectVersion: null,
+      origin: 'list',
+      now: '2026-09-24T14:00:00.000Z'
+    })
+    setWatch(db, {
+      projectId: pStopped.id,
+      want: 'off',
+      expectVersion: 1,
+      origin: 'list',
+      now: '2026-09-24T14:01:00.000Z'
+    })
+
+    upsertProjectsBatch(db, [item('p-waiting')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const pWaiting = getProjectById(db, 3)!
+    db.prepare(`
+      INSERT INTO project_watch (
+        project_id, state, origin, version, generation, revision,
+        waiting_since, started_at, stopped_at, stop_reason, auto_start_blocked,
+        status, offers, offers_capped, contacts, client_open, client_in_progress,
+        status_seen_at, detail_seen_at, last_attempt_at, last_changed_at,
+        next_due_at, failures, last_error
+      ) VALUES (
+        ?, 'waiting', 'list', 1, 0, 0,
+        '2026-09-24T14:00:00.000Z', NULL, NULL, NULL, 0,
+        NULL, NULL, 0, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL,
+        NULL, 0, NULL
+      );
+    `).run(pWaiting.id)
+
+    upsertProjectsBatch(db, [item('p-nowatch')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const pNoWatch = getProjectById(db, 4)!
+
+    upsertProjectsBatch(db, [item('p-between')], { now: '2026-09-24T14:00:00.000Z', discoveryKind: 'live' })
+    const pBetween = getProjectById(db, 5)!
+
+    // Assert pWaiting is still 'waiting' immediately before preview
+    expect(getWatch(db, pWaiting.id)?.state).toBe('waiting')
+
+    const purgeableCount = countPurgeable(db, cutoffIso, purgeKinds)
+    expect(purgeableCount).toBe(3) // pStopped, pNoWatch, pBetween
+
+    // Start watch on pBetween between preview and apply
+    setWatch(db, {
+      projectId: pBetween.id,
+      want: 'on',
+      expectVersion: null,
+      origin: 'list',
+      now: '2026-09-24T14:02:00.000Z'
+    })
+
+    // Assert pWaiting is still 'waiting' and pBetween is 'active' immediately before apply
+    expect(getWatch(db, pWaiting.id)?.state).toBe('waiting')
+    expect(getWatch(db, pBetween.id)?.state).toBe('active')
+
+    const { deleted } = purgeHistory(db, cutoffIso, purgeKinds)
+    expect(deleted).toBe(2) // pStopped and pNoWatch deleted; pBetween kept
+
+    expect(getProjectById(db, pActive.id)).not.toBeNull()
+    expect(getProjectById(db, pWaiting.id)).not.toBeNull()
+    expect(getProjectById(db, pBetween.id)).not.toBeNull()
+
+    expect(getProjectById(db, pStopped.id)).toBeNull()
+    expect(getProjectById(db, pNoWatch.id)).toBeNull()
+  })
 })
