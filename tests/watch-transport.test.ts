@@ -208,7 +208,8 @@ describe('watchTransport', () => {
 
     it('returns too_large when 200 body exceeds 2 MiB', async () => {
       let cancelled = false
-      const stream = makeStream([new Uint8Array(2 * 1024 * 1024 + 10)], {
+      // A trailing chunk keeps the body open, as a real oversized response would be.
+      const stream = makeStream([new Uint8Array(2 * 1024 * 1024 + 10), new Uint8Array(16)], {
         onCancel: () => {
           cancelled = true
         }
@@ -457,7 +458,8 @@ describe('watchTransport', () => {
 
     it('returns kind http status 403 with null html when 403 body exceeds 512 KB', async () => {
       let cancelled = false
-      const stream = makeStream([new Uint8Array(512 * 1024 + 10)], {
+      // A trailing chunk keeps the body open, as a real oversized response would be.
+      const stream = makeStream([new Uint8Array(512 * 1024 + 10), new Uint8Array(16)], {
         onCancel: () => {
           cancelled = true
         }
