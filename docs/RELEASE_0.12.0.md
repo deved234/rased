@@ -42,9 +42,9 @@ On 0.2.5 or later you can update from inside the app: Settings → RASED updates
 
 ## Validation and known limits
 
-- **Automated tests:** before release, the source passed typecheck, lint, 965 unit tests and real Electron suites with synthetic profiles, including the new `test:watch` suite (42 checks: buttons, limits and swaps, the watched screen, blocks and cooldowns, away summaries, Do Not Disturb, consent gate and quitting during a check).
+- **Automated tests:** before release, the source passed typecheck, lint, 965 unit tests and real Electron suites with synthetic profiles, including the new `test:watch` suite (42 checks: buttons, limits and swaps, the watched screen, blocks and cooldowns, away summaries, Do Not Disturb, consent gate and quitting during a check). Windows CI passed, and the configured installer was built and checked on GitHub Actions, including the packaged-app suites.
 - **Manual check:** a one-hour real run with three watched projects per platform; no client changed a watched project during it, so no real watch notification was seen yet.
-- **Not tested:** a physical click on a real watch notification, and every live page variation of the three platforms.
+- **Not tested:** a manual upgrade of a real 0.11.0 installation with the configured installer, a physical click on a real watch notification, and every live page variation of the three platforms.
 - **Still pending:** cloud-event deletion completion is **unverified**.
 
 [Privacy](https://github.com/deved234/rased/blob/v0.12.0/PRIVACY.md) · [Terms](https://github.com/deved234/rased/blob/v0.12.0/TERMS.md) · [Update guide](https://github.com/deved234/rased/blob/v0.12.0/docs/UPDATES.md) · [Changelog](https://github.com/deved234/rased/blob/v0.12.0/CHANGELOG.md).
