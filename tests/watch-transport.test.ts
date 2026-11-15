@@ -224,7 +224,8 @@ describe('watchTransport', () => {
         html: null,
         retryAfterMs: null
       })
-      expect(cancelled).toBe(true)
+      // The transport cancels without awaiting, so the stream callback may run a tick later.
+      await vi.waitFor(() => expect(cancelled).toBe(true))
     })
 
     it('returns network when 200 body stream errors', async () => {
@@ -472,7 +473,7 @@ describe('watchTransport', () => {
         html: null,
         retryAfterMs: null
       })
-      expect(cancelled).toBe(true)
+      await vi.waitFor(() => expect(cancelled).toBe(true))
     })
 
     it('handles 202 empty and 202 with body', async () => {
