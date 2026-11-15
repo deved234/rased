@@ -1,6 +1,6 @@
 # الخصوصية
 
-2026-11-14 · RASED · david atef
+2026-11-15 · RASED · david atef
 
 ## شرط إحصائيات الاستخدام
 
@@ -70,7 +70,7 @@
 
 # Privacy
 
-2026-11-14 · RASED · david atef
+2026-11-15 · RASED · david atef
 
 ## Required usage analytics acceptance
 

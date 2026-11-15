@@ -141,5 +141,5 @@
     "test:startup": "node scripts/test-database-startup.mjs",
     "test:watch": "node scripts/project-watch-e2e.mjs"
   },
-  "version": "0.11.0"
+  "version": "0.12.0"
 }

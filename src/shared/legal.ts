@@ -1,6 +1,6 @@
 // Offline, versioned product disclosures. Distribution policy does not alter the MIT license.
 type LegalDocument = { title: string; sections: [string, string][] }
-export const LEGAL_UPDATED_AT = '2026-11-14'
+export const LEGAL_UPDATED_AT = '2026-11-15'
 export const LEGAL_DOCUMENTS: Record<'ar'|'en', Record<'terms'|'privacy'|'licenses',LegalDocument>> = {
   ar: {
     terms: {title:'شروط الاستخدام',sections:[

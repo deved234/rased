@@ -55,7 +55,7 @@ describe('release selection with fixture versions', () => {
     expect(selectWhatsNew(null, '1.3.0', [entry('bad')])).toEqual([])
   })
   it('authors bilingual releases with two to five highlights', () => {
-    expect(WHATS_NEW).toHaveLength(1)
+    expect(WHATS_NEW.map(release => release.version)).toEqual(['0.12.0', '0.11.0'])
     for (const release of WHATS_NEW) {
       expect(release.highlights.length).toBeGreaterThanOrEqual(2)
       expect(release.highlights.length).toBeLessThanOrEqual(5)

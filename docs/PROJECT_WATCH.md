@@ -1,6 +1,6 @@
 # متابعة المشاريع · Project watch
 
-متابعة المشاريع متاحة بدءًا من الإصدار القادم (the next release) لمشاريع مستقل ونفذلي وكاف (خمسات غير مشمولة).
+متابعة المشاريع متاحة بدءًا من إصدار راصد 0.12.0 لمشاريع مستقل ونفذلي وكاف (خمسات غير مشمولة).
 
 ## الاستخدام
 
@@ -101,7 +101,7 @@
 
 # Project watch (Developer & Architecture Guide)
 
-Project watch is available starting with the next release for Mostaql, Nafezly and KAF. Khamsat is not supported.
+Project watch is available starting with RASED 0.12.0 for Mostaql, Nafezly and KAF. Khamsat is not supported.
 
 ## Overview & Limits
 

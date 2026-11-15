@@ -2,7 +2,7 @@
 
 RASED monitors Mostaql, Nafezly, Khamsat and KAF on Windows. Reliability, accessibility, Arabic/English usability and reproducible tests are welcome contributions.
 
-Current release: **0.11.0** — one-click Quick Apply, optional Assistant generation or saved-draft reuse, multiple freelancer profiles, Nafezly/KAF Assistant support and a What's New screen. Chrome preparation remains Mostaql/Nafezly only; KAF offers copy and open only, and Khamsat is excluded. See the [release notes](docs/RELEASE_0.11.0.md) for consent, updated legal wording and downgrade limits. Analytics disclosure v4 and analytics fields are unchanged; the configured-build acceptance requirement applies since 0.10.0.
+Current release: **0.12.0** — project watch for Mostaql, Nafezly and KAF: a Watch button, a Watched projects screen, Mostaql contact and status alerts and a "While you were away" summary, always yielding to primary monitoring. See the [release notes](docs/RELEASE_0.12.0.md) and [project watch guide](docs/PROJECT_WATCH.md). Analytics disclosure `2026-11-15-v5` adds watch events and requires renewed acceptance; the configured-build acceptance requirement applies since 0.10.0.
 
 ## Get started
 

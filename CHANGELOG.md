@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.12.0 — 2026-11-15
+
+- Watch individual Mostaql, Nafezly and KAF projects from the list (after Preview), the preview, full details or the compact window. RASED tells you when contacts start on Mostaql ("sure" or "maybe" wording, both an inference), when a project moves to in progress, and when it closes. The first check is silent; offer-count changes alone do not notify. Khamsat is not supported.
+- A Watched projects screen in the sidebar lists active, waiting and recently stopped watches with an N / 10 counter per platform. Up to 10 active per platform; the rest wait or swap. Marking a project Submitted starts watching it unless you stopped it yourself; Ignore or hiding stops it. Watches expire 14 days after becoming active.
+- Watching never competes with primary monitoring: one check per platform per 10-second slot at most, slower after blocks. A block pauses that platform's watching for at least 30 minutes, applies its primary cooldown, and resumes only after primary monitoring succeeds.
+- Three new notification toggles for watch alerts; Do Not Disturb suppresses without replaying later. A single "While you were away" summary after startup or resume when the first checks find changes.
+- Migration 11 adds watch tables; 0.11.0 cannot open a database upgraded by 0.12.0. Active and waiting watched projects are protected from history cleanup.
+- Updated Terms and Privacy dated 2026-11-15 and analytics disclosure `2026-11-15-v5`, which adds project watch events. The official build asks for acceptance again.
+
 ## 0.11.0 — 2026-10-23
 
 - Save up to ten freelancer profiles, each with an optional Quick Apply template. Choose a default for Quick Apply buttons, notifications and Assistant generation under standing consent, or select another profile for a manual request with a refreshed preview and renewed approval. Existing drafts stay unchanged.

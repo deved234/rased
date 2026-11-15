@@ -12,10 +12,10 @@
 
 ## التحميل والتشغيل
 
-حمّل **RASED-Setup-0.11.0.exe** من قسم **Assets** في صفحة الإصدار، ثم شغّل المثبت على **Windows x64**. لا تحتاج Node.js أو SQLite؛ ملفات Source code للمبرمجين فقط. المثبت غير موقّع حاليًا، وقد يعرض Windows تحذيرًا. تأكد من مصدر التحميل وقارن البصمة بملف `SHA256SUMS.txt`:
+حمّل **RASED-Setup-0.12.0.exe** من قسم **Assets** في صفحة الإصدار، ثم شغّل المثبت على **Windows x64**. لا تحتاج Node.js أو SQLite؛ ملفات Source code للمبرمجين فقط. المثبت غير موقّع حاليًا، وقد يعرض Windows تحذيرًا. تأكد من مصدر التحميل وقارن البصمة بملف `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.11.0.exe'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.12.0.exe'
 ```
 
 أول فحص ناجح لكل منصة يحفظ الموجود دون تنبيهات قديمة. بعدها ينبهك بالجديد بحسب فلاترك. إغلاق النافذة يبقي الرصد في الخلفية؛ للخروج الكامل استخدم قائمة أيقونة راصد بجوار الساعة. النقر على إشعار المشروع يفتح رابطه في المتصفح الافتراضي.
@@ -28,6 +28,7 @@ Get-FileHash -Algorithm SHA256 -LiteralPath '.\RASED-Setup-0.11.0.exe'
 - **كاف:** رصد القائمة العامة وتنبيهات الفرص المفتوحة، متاح بدءًا من 0.7.0، مع إيقاف وتنبيهات مستقلة وتفاصيل عند الطلب. [دليل كاف](docs/KAF.md).
 - بحث وفلاتر محفوظة ومعاينة جانبية وتفاصيل المشروع وملاحظات ومحفوظات محلية.
 - واجهة عربية RTL وإنجليزية LTR، وضع داكن وفاتح، ونافذة متابعة صغيرة.
+- **متابعة المشاريع:** تابع حتى 10 مشاريع لكل منصة في مستقل ونفذلي وكاف، وتنبيه عند بدء التواصل على مستقل أو دخول المشروع التنفيذ أو إغلاقه، مع شاشة «متابعة المشاريع». الرصد الأساسي له الأولوية دائمًا. [دليل المتابعة](docs/PROJECT_WATCH.md).
 - **مساعد العروض:** Gemini وOpenAI وClaude بمفتاحك الخاص، واختيار الموديل ومعاينة البيانات قبل إنشاء مسودة قابلة للتعديل. لمشاريع مستقل ونفذلي وكاف؛ كاف للنسخ وفتح الرابط فقط، وخمسات غير مشمول. [دليل المساعد](docs/AI_ASSISTANT.md).
 - **التقديم السريع:** إضافة Chrome مجانية تُحمّل يدويًا مرة واحدة، وتعبئ قالبك والسعر والمدة في مستقل ونفذلي. تراجع وتضغط تقديم بنفسك؛ خمسات وكاف غير مشمولين بتجهيز Chrome. [التركيب والاستخدام](docs/QUICK_APPLY.md).
 
@@ -64,7 +65,7 @@ npm run dist
 
 `dist` ينشئ المثبت داخل `release/` دون نشر. اختبارات التكامل تستخدم ملفات مؤقتة وبيانات وهمية؛ لا تستخدم حساباتك أو مفاتيحك. [دليل المساهمة](CONTRIBUTING.md) يشرح الاختبارات الإضافية و[المعمارية](docs/ARCHITECTURE.md) تشرح تنظيم الكود. خطط العمل والمراجعات الداخلية وأدلة QA المولّدة ليست جزءًا من المستودع العام.
 
-إصدار **0.11.0** يضيف التقديم السريع بضغطة واحدة، وإعادة استخدام المسودة أو توليدها بموافقة AI اختيارية قابلة للسحب، وحتى عشرة ملفات مهنية مع ملف افتراضي. يدعم مساعد العروض مستقل ونفذلي وكاف؛ كاف للنسخ وفتح الرابط فقط، وتجهيز Chrome لمستقل ونفذلي فقط، وخمسات غير مشمول. يتضمن شاشة «الجديد» وأخطاء أوضح وشروطًا وخصوصية بتاريخ 2026-10-23. إفصاح الإحصائيات v4 لم يتغير ولا توجد حقول إحصائية جديدة؛ منذ 0.10.0 تبقى الموافقة شرطًا لاستخدام النسخة الرسمية، والتحقق من الحذف السحابي ما زال معلّقًا. ملفات الإعدادات v3 والنسخ التي تتضمن مجموعة ملفات مهنية لا تُستورد في 0.10.0؛ راجع حدود الرجوع في [تفاصيل الإصدار](docs/RELEASE_0.11.0.md) و[دليل حماية البيانات](docs/BACKUP_AND_RESTORE.md). [دليل الإحصائيات](docs/ANALYTICS.md) · [سجل التغييرات](CHANGELOG.md).
+إصدار **0.12.0** يضيف متابعة المشاريع لمستقل ونفذلي وكاف: زر «متابعة»، وشاشة «متابعة المشاريع»، وتنبيهات التواصل على مستقل وتغيّر الحالة، وملخص «حصل وأنت غايب»، مع حد 10 مشاريع لكل منصة وأولوية دائمة للرصد الأساسي. الشروط والخصوصية بتاريخ 2026-11-15، وإفصاح الإحصائيات الجديد `2026-11-15-v5` يضيف أحداث المتابعة وتُطلب الموافقة عليه من جديد؛ والتحقق من الحذف السحابي ما زال معلّقًا. الإصدار 0.11.0 لا يفتح قاعدة بيانات رقّاها 0.12.0. راجع [تفاصيل الإصدار](docs/RELEASE_0.12.0.md) و[دليل المتابعة](docs/PROJECT_WATCH.md). [دليل الإحصائيات](docs/ANALYTICS.md) · [سجل التغييرات](CHANGELOG.md).
 
 تفاصيل نقل الإعدادات والنسخ الاحتياطي والاستعادة موجودة في [دليل حماية البيانات](docs/BACKUP_AND_RESTORE.md).
 
@@ -86,7 +87,7 @@ npm run dist
 
 RASED is a local Windows desktop app monitoring freelance opportunities on Mostaql, Nafezly, Khamsat and KAF. It offers Arabic/English UI, independent source controls, desktop alerts, filters, previews and local notes.
 
-Download **RASED-Setup-0.11.0.exe** from [Releases](https://github.com/deved234/rased/releases/latest). End users need neither Node.js nor SQLite. The installer is unsigned; verify its source and SHA-256 checksum. Existing users on 0.2.5+ can update inside Settings → RASED updates. Since 0.10.0 the official build requires accepting limited usage analytics (**Agree & use RASED** or **Exit**) before monitoring or any feature starts. 0.9.1 participants accept again, and earlier declines stay declined. Development builds are exempt and send nothing. Cloud-deletion verification is still pending. Version **0.11.0** adds one-click Quick Apply, saved-draft reuse or generation under optional revocable AI consent, up to ten freelancer profiles with a default, Nafezly/KAF Proposal Assistant support, a What's New screen and clearer extension guidance. Terms and Privacy are dated 2026-10-23; analytics disclosure v4 and analytics fields are unchanged. Settings v3 and backups containing profile sets cannot be imported by 0.10.0. See the [0.11.0 release notes](docs/RELEASE_0.11.0.md) for downgrade limits and the [analytics guide](docs/ANALYTICS.md).
+Download **RASED-Setup-0.12.0.exe** from [Releases](https://github.com/deved234/rased/releases/latest). End users need neither Node.js nor SQLite. The installer is unsigned; verify its source and SHA-256 checksum. Existing users on 0.2.5+ can update inside Settings → RASED updates. Since 0.10.0 the official build requires accepting limited usage analytics (**Agree & use RASED** or **Exit**) before monitoring or any feature starts. 0.9.1 participants accept again, and earlier declines stay declined. Development builds are exempt and send nothing. Cloud-deletion verification is still pending. Version **0.12.0** adds project watch for Mostaql, Nafezly and KAF: a Watch button, a Watched projects screen, Mostaql contact and status alerts and a "While you were away" summary, up to 10 per platform, always yielding to primary monitoring. Terms and Privacy are dated 2026-11-15; the new analytics disclosure `2026-11-15-v5` adds watch events and must be accepted again. 0.11.0 cannot open a database upgraded by 0.12.0. See the [0.12.0 release notes](docs/RELEASE_0.12.0.md), the [project watch guide](docs/PROJECT_WATCH.md) and the [analytics guide](docs/ANALYTICS.md).
 
 The optional [Proposal Assistant](docs/AI_ASSISTANT.md) supports Gemini, OpenAI and Claude with your own API keys and model selection, for Mostaql, Nafezly and KAF projects; KAF offers copy and open only, and Khamsat is excluded. [Quick Apply](docs/QUICK_APPLY.md) uses a manually installed Chrome extension for Mostaql/Nafezly only. It fills a draft using your normal browser session and **never submits it**. Monitoring needs no platform login; browser form filling does.
 

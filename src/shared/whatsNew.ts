@@ -28,8 +28,16 @@ export function selectLatestWhatsNew(currentVersion: string, entries: readonly W
   return selectWhatsNew(null, currentVersion, entries).slice(0, 1)
 }
 
-// Upcoming release: the owner chooses the final version/date before publishing.
+// Newest release first; the owner confirms version and date before publishing.
 export const WHATS_NEW: readonly WhatsNewEntry[] = [{
+  version: '0.12.0',
+  date: '2026-11-15',
+  highlights: [
+    { icon: 'bell', title: { ar: 'تابع مشاريعك', en: 'Watch your projects' }, body: { ar: 'اضغط «متابعة» على مشروع في مستقل أو نفذلي أو كاف، وسينبّهك راصد عند بدء التواصل على مستقل أو دخول المشروع التنفيذ أو إغلاقه.', en: 'Press Watch on a Mostaql, Nafezly or KAF project to be told when contacts start on Mostaql, or when it moves to in progress or closes.' } },
+    { icon: 'eye', title: { ar: 'شاشة متابعة المشاريع', en: 'Watched projects screen' }, body: { ar: 'حتى 10 مشاريع لكل منصة، والباقي ينتظر مكانًا أو يبدّل مشروعًا. اختيار «قدّمت» يبدأ المتابعة تلقائيًا ما لم توقفها بنفسك، والرصد الأساسي له الأولوية دائمًا.', en: 'Up to 10 projects per platform; the rest wait for a slot or swap one. Marking a project Submitted starts watching it unless you stopped it yourself; primary monitoring always comes first.' } },
+    { icon: 'edit', title: { ar: 'خصوصية وشروط محدّثة', en: 'Updated privacy and terms' }, body: { ar: 'تحديث 2026-11-15 يشرح متابعة المشاريع وما يُرسل عنها في الإحصائيات؛ ستُطلب موافقتك على الإفصاح المحدّث.', en: 'The 2026-11-15 update explains project watch and what analytics it sends; you will be asked to accept the updated disclosure.' } }
+  ]
+}, {
   version: '0.11.0',
   date: '2026-10-23',
   highlights: [

@@ -1,7 +1,7 @@
 import type { SourceId } from './sources.js'
 import type { WatchSource } from './projectWatch.js'
 
-export const TELEMETRY_DISCLOSURE = '2026-11-14-v5'
+export const TELEMETRY_DISCLOSURE = '2026-11-15-v5'
 export const ANALYTICS_SUPPORT = 'https://wa.me/201201780258'
 // Type-only import above: scripts load this file directly in Node, so no runtime import of projectWatch.
 const WATCH_TELEMETRY_SOURCES: readonly WatchSource[] = ['mostaql', 'nafezly', 'kaf']
