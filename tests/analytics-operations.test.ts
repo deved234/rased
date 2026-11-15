@@ -120,7 +120,7 @@ describe('Administrative analytics boundaries', () => {
   })
   it('keeps all four dashboards private-production metrics separate from downloads', () => {
     const definitions = dashboardDefinitions() as { name: string; insights: { name: string; sql: string }[] }[]
-    expect(definitions).toHaveLength(4)
+    expect(definitions).toHaveLength(5)
     for (const d of definitions) for (const i of d.insights) {
       expect(i.sql).toContain('production')
       if (!i.name.startsWith('GitHub') && !i.name.includes('GitHub')) expect(i.sql).toContain("record_type")
@@ -133,6 +133,25 @@ describe('Administrative analytics boundaries', () => {
     const adoption = definitions.flatMap(d => d.insights).find(i => i.name === 'Latest observed version among active installations')!
     expect(adoption.sql).toContain('distinct_id IN (SELECT distinct_id')
     for (const source of ['mostaql', 'khamsat', 'nafezly', 'kaf']) expect(definitions.flatMap(d => d.insights).find(i => i.name === source + ' monitoring')!.sql).toContain(`coalesce(toInt(properties.${source}_success),0)`)
+  })
+  it('adds a project watch dashboard with deduplicated counters and bucketed adoption', () => {
+    const watch = (dashboardDefinitions() as { name: string; insights: { name: string; sql: string }[] }[]).find(d => d.name === 'RASED — Project watch')!
+    expect(watch.insights.map(i => i.name)).toEqual(['Installations using project watch', 'Watch load yesterday by platform', 'mostaql watch checks', 'nafezly watch checks', 'kaf watch checks', 'Installation-hours with slowed watch pace', 'Watch starts by entry point', 'Change notification outcomes', 'Watch stop reasons', 'Opening projects from watch notifications'])
+    for (const source of ['mostaql', 'nafezly', 'kaf']) {
+      const checks = watch.insights.find(i => i.name === source + ' watch checks')!.sql
+      for (const field of ['ok', 'blocked', 'failed', 'slowed', 'preempted']) expect(checks).toContain(`coalesce(toInt(properties.${source}_${field}),0)`)
+      expect(checks).toContain('GROUP BY raw.uuid) WHERE')
+    }
+    for (const name of ['Watch starts by entry point', 'Change notification outcomes', 'Watch stop reasons', 'Opening projects from watch notifications']) expect(watch.insights.find(i => i.name === name)!.sql).toContain('GROUP BY raw.uuid) WHERE')
+    const adoption = watch.insights[0]!.sql
+    expect(adoption).toContain("event='rased.app.watch_daily'")
+    expect(adoption).toContain('uniqExact(distinct_id)')
+    expect(adoption).not.toContain('event_count')
+    expect(watch.insights.every(i => !/khamsat/.test(i.sql))).toBe(true)
+    expect(watch.insights.find(i => i.name === 'Change notification outcomes')!.sql).toContain('AS change_kind')
+    expect(watch.insights.find(i => i.name === 'Opening projects from watch notifications')!.sql).toContain("properties.entry='watch_notification'")
+    const qa = (dashboardDefinitions('qa') as { name: string }[]).map(d => d.name)
+    expect(qa).toContain('RASED QA — Project watch')
   })
   it('builds separately named QA dashboards with no production queries and rejects free-form environments', () => {
     const qa = dashboardDefinitions('qa') as { name: string; insights: { sql: string }[] }[]
@@ -152,7 +171,7 @@ describe('Administrative analytics boundaries', () => {
   it('deduplicates UUIDs before summing workflow or source counters', () => {
     const cards = dashboardDefinitions().flatMap((d: { insights: { name: string; sql: string }[] }) => d.insights)
     const summed = cards.filter((c: { sql: string }) => c.sql.includes('sum(toInt(properties.event_count))') || c.sql.includes('sum(coalesce(toInt(properties.'))
-    expect(summed).toHaveLength(9)
+    expect(summed).toHaveLength(16)
     for (const card of summed) {
       expect(card.sql).toContain('GROUP BY raw.uuid) WHERE')
       expect(card.sql).toContain('argMax(raw.properties,raw.timestamp) AS properties')
