@@ -5,6 +5,9 @@ import type { WatchSource } from '../shared/projectWatch.js'
 import type { WatchFetchResult } from './projectWatcher.js'
 
 const PROJECT_PATH_REGEX = /^\/project\/[1-9]\d*(?:-[^/]*)?\/?$/
+// Mostaql RSS links are stored as /go/<id>; the site answers with a 301 to /project/<id>-<slug>.
+// A bare /project/<id> without a slug is redirected to /projects, so it must not be built by hand.
+const MOSTAQL_GO_PATH_REGEX = /^\/go\/[1-9]\d*$/
 const WATCH_USER_AGENT = 'RASED/0.1 (+local Windows watcher)'
 const PRIVATE_BODY_MAX_BYTES = 512 * 1024
 
@@ -35,7 +38,10 @@ function isValidWatchUrl(source: WatchSource, rawUrl: string): boolean {
     return false
   }
   if (source === 'mostaql') {
-    return u.origin === 'https://mostaql.com' && PROJECT_PATH_REGEX.test(u.pathname)
+    return (
+      u.origin === 'https://mostaql.com' &&
+      (PROJECT_PATH_REGEX.test(u.pathname) || MOSTAQL_GO_PATH_REGEX.test(u.pathname))
+    )
   }
   if (source === 'nafezly') {
     return u.origin === 'https://nafezly.com' && PROJECT_PATH_REGEX.test(u.pathname)

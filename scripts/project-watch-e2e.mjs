@@ -181,7 +181,7 @@ function initDatabase(profileDir) {
   for (let i = 1; i <= 18; i++) {
     const ext = String(10000 + i)
     const itemStamp = new Date(Date.now() - 50000 + i * 1000).toISOString()
-    insertProject.run(i, 'mostaql', ext, `https://mostaql.com/project/${ext}-mostaql-${i}`, `مشروع مستقل ${i}`, 'وصف تجريبي', itemStamp, itemStamp, itemStamp, itemStamp, null)
+    insertProject.run(i, 'mostaql', ext, `https://mostaql.com/go/${ext}`, `مشروع مستقل ${i}`, 'وصف تجريبي', itemStamp, itemStamp, itemStamp, itemStamp, null)
     insertDetail.run(i, stamp)
   }
 
@@ -229,6 +229,10 @@ const watchPages = {
   'https://mostaql.com/project/10003-mostaql-3': { status: 302, location: 'https://mostaql.com/projects' },
   'https://nafezly.com/project/20021-nafezly-21': { status: 403, file: 'nafezly-private-403.html' },
   'https://nafezly.com/project/20022-nafezly-22': { status: 403 }
+}
+// Real Mostaql rows are stored as /go/<id> (from the RSS feed); the site answers with a 301 to the slugged project page.
+for (let i = 1; i <= 18; i++) {
+  watchPages[`https://mostaql.com/go/${10000 + i}`] = { status: 301, location: `https://mostaql.com/project/${10000 + i}-mostaql-${i}` }
 }
 for (let i = 1; i <= 18; i++) {
   const url = `https://mostaql.com/project/${10000 + i}-mostaql-${i}`
@@ -948,12 +952,12 @@ try {
     ...watchPages,
     'https://mostaql.com/project/10006-mostaql-6': { status: 200, delayMs: 20000, file: 'mostaql-base.html' }
   })
-  const fetchesBeforeK = traces().filter(t => t.kind === 'fetch' && t.data.includes('10006')).length
+  const fetchesBeforeK = traces().filter(t => t.kind === 'fetch' && t.data.includes('/project/10006-')).length
   await setWatchState(6, 'on')
 
   // Wait for the fetch of project 6 to be recorded as in flight
   await eventually(() => {
-    return traces().filter(t => t.kind === 'fetch' && t.data.includes('10006')).length > fetchesBeforeK
+    return traces().filter(t => t.kind === 'fetch' && t.data.includes('/project/10006-')).length > fetchesBeforeK
   }, Boolean, 25000)
 
   // Assert request is in flight and no result yet

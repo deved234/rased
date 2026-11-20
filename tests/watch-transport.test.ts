@@ -89,6 +89,10 @@ describe('watchTransport', () => {
         'https://mostaql.com/project/0',
         'https://mostaql.com/project/',
         'https://mostaql.com/project/12345/offers',
+        'https://mostaql.com/go/0',
+        'https://mostaql.com/go/abc',
+        'https://mostaql.com/go/12345/offers',
+        'https://mostaql.com/go/',
         'not-a-valid-url'
       ]
 
@@ -287,6 +291,75 @@ describe('watchTransport', () => {
         html: null,
         retryAfterMs: null
       })
+    })
+  })
+
+  describe('Mostaql /go/ links stored from the RSS feed', () => {
+    it('follows the /go/ redirect to the project page and returns its html', async () => {
+      const requested: string[] = []
+      const fetchImpl = vi.fn(async (url: string) => {
+        requested.push(url)
+        if (url === 'https://mostaql.com/go/1213000') {
+          return new Response(null, {
+            status: 301,
+            headers: { location: 'https://mostaql.com/project/1213000-%D8%AA%D8%B5%D9%85%D9%8A%D9%85' }
+          })
+        }
+        return new Response('<html>project page</html>', { status: 200 })
+      })
+      const fetchWatch = createWatchFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
+      const res = await fetchWatch('mostaql', 'https://mostaql.com/go/1213000', new AbortController().signal)
+
+      expect(requested).toEqual([
+        'https://mostaql.com/go/1213000',
+        'https://mostaql.com/project/1213000-%D8%AA%D8%B5%D9%85%D9%8A%D9%85'
+      ])
+      expect(res).toEqual({
+        kind: 'ok',
+        status: 200,
+        finalUrl: 'https://mostaql.com/project/1213000-%D8%AA%D8%B5%D9%85%D9%8A%D9%85',
+        html: '<html>project page</html>',
+        retryAfterMs: null
+      })
+    })
+
+    it('keeps a removed project visible as a redirect chain ending on /projects', async () => {
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (url === 'https://mostaql.com/go/1213001') {
+          return new Response(null, { status: 301, headers: { location: '/project/1213001-gone' } })
+        }
+        if (url === 'https://mostaql.com/project/1213001-gone') {
+          return new Response(null, { status: 302, headers: { location: '/projects' } })
+        }
+        return new Response('<html>Projects list</html>', { status: 200 })
+      })
+      const fetchWatch = createWatchFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
+      const res = await fetchWatch('mostaql', 'https://mostaql.com/go/1213001', new AbortController().signal)
+
+      expect(res.kind).toBe('ok')
+      expect(res.finalUrl).toBe('https://mostaql.com/projects')
+      expect(fetchImpl).toHaveBeenCalledTimes(3)
+    })
+
+    it('does not follow a /go/ redirect to another origin or to a non-project path', async () => {
+      for (const location of ['https://evil.com/project/1', 'https://mostaql.com/login']) {
+        const fetchImpl = vi.fn(async () => new Response(null, { status: 301, headers: { location } }))
+        const fetchWatch = createWatchFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
+        const res = await fetchWatch('mostaql', 'https://mostaql.com/go/1213002', new AbortController().signal)
+
+        expect(res).toEqual({ kind: 'http', status: 301, finalUrl: null, html: null, retryAfterMs: null })
+        expect(fetchImpl).toHaveBeenCalledTimes(1)
+      }
+    })
+
+    it('does not accept /go/ links for Nafezly', async () => {
+      const fetchImpl = vi.fn()
+      const fetchWatch = createWatchFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
+      const res = await fetchWatch('nafezly', 'https://nafezly.com/go/12345', new AbortController().signal)
+
+      expect(res.kind).toBe('http')
+      expect(res.status).toBeNull()
+      expect(fetchImpl).not.toHaveBeenCalled()
     })
   })
 
