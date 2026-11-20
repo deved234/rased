@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { call, evaluate, eventually, newProfile, pageWs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
 
 export async function testWhatsNew() {
-  const version = '0.12.0' // Injected through the marked TEMP harness, independent of package.json.
+  const version = '0.12.1' // Injected through the marked TEMP harness, independent of package.json.
   const port = 9394, output = resolve('.local/whats-new/screenshots')
   mkdirSync(output, { recursive: true })
   let child, ws, session, passed = 0
@@ -71,7 +71,7 @@ export async function testWhatsNew() {
     await wait('!document.querySelector(".analytics-consent-actions .primary").disabled')
     await ev('document.querySelector(".analytics-consent-actions .primary").click()')
     await wait('!!document.querySelector(".whats-new-dialog")')
-    check('0.12.0 leads with project watch and still includes 0.11.0 profiles',await ev('(()=>{const d=document.querySelector(".whats-new-dialog").textContent;return d.indexOf("تابع مشاريعك")>=0 && d.indexOf("تابع مشاريعك")<d.indexOf("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length===8})()'))
+    check('0.12.1 fixes lead, then 0.12.0 project watch and 0.11.0 profiles',await ev('(()=>{const d=document.querySelector(".whats-new-dialog").textContent;return d.indexOf("متابعة مستقل تعمل الآن")>=0 && d.indexOf("متابعة مستقل تعمل الآن")<d.indexOf("تابع مشاريعك") && d.indexOf("تابع مشاريعك")<d.indexOf("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length===10})()'))
     check('acceptance reveals the upgrade dialog over the inert workspace', await ev('!document.querySelector(".analytics-access") && document.querySelector(".app").inert && document.querySelector(".whats-new-dialog").getAttribute("aria-modal")==="true" && document.querySelector(".whats-new-dialog").getAttribute("role")==="dialog"'))
     await ev('window.rased.openCompact()')
     const compact = await pageWs(port, target => target.url.includes('compact'))

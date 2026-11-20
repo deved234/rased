@@ -178,7 +178,7 @@ Users can watch individual projects from Mostaql, Nafezly, and KAF to track clie
 - `src/shared/projectWatch.ts`: Constants, snapshot interfaces, attribution logic.
 - `src/collector/projectWatch.ts`: HTML fragment parsers for Mostaql, Nafezly, and KAF.
 - `src/main/projectWatcher.ts`: Scheduler, arbiter integration, backoff, slot pacing, and preemption.
-- `src/main/watchTransport.ts`: HTTP fetch implementation with redirect limits and abort signals.
+- `src/main/watchTransport.ts`: HTTP fetch implementation with redirect limits and abort signals. Mostaql rows store `https://mostaql.com/go/<id>`; it is accepted (Mostaql only) and its 301 to `/project/<id>-<slug>` is followed under the same-origin, allowed-path rules. A bare `/project/<id>` without its slug redirects to `/projects` on the live site, so it is never built by hand. Before 0.12.1 `/go/` was rejected and Mostaql watch never checked a page. Requests use the proxy-aware collector fetch (`src/main/systemFetch.ts`).
 - `src/main/watchNotifier.ts`: Notification dispatching, threshold batching, and away episodes.
 - `src/shared/watchNotificationText.ts`: Localized notification strings.
 - `src/storage/projectWatch.ts`: SQLite operations, transactions and snapshot persistence. The tables are created by migration 11 in `src/storage/migrations.ts`.

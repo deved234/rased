@@ -2,7 +2,9 @@
 
 ## User flow
 
-Version **0.12.0** adds project watch for Mostaql, Nafezly and KAF (Watch button, Watched projects screen, contact and status alerts, away summary). Terms and Privacy are dated 2026-11-15; analytics disclosure `2026-11-15-v5` adds watch events, so previously enabled participants accept again. Migration 11 means **0.11.0 cannot open a database upgraded by 0.12.0**; keep a pre-upgrade backup if you may go back. See the [0.12.0 release notes](RELEASE_0.12.0.md). The installer is **RASED-Setup-0.12.0.exe**.
+Version **0.12.1** fixes Mostaql project watch, follows the Windows proxy/PAC settings (including VPNs in system-proxy mode) for monitoring, details and project watch and reads Arabic dual durations; it has no migration, analytics or legal change, so 0.12.0 can still open its database. See the [0.12.1 release notes](RELEASE_0.12.1.md). The installer is **RASED-Setup-0.12.1.exe**.
+
+Version **0.12.0** adds project watch for Mostaql, Nafezly and KAF (Watch button, Watched projects screen, contact and status alerts, away summary). Terms and Privacy are dated 2026-11-15; analytics disclosure `2026-11-15-v5` adds watch events, so previously enabled participants accept again. Migration 11 means **0.11.0 cannot open a database upgraded by 0.12.0**; keep a pre-upgrade backup if you may go back. See the [0.12.0 release notes](RELEASE_0.12.0.md).
 
 0.2.5 is the first updater-capable release. Install it manually once if you are coming from 0.2.4 or earlier. Future stable versions can be downloaded and installed from Settings → RASED updates. Check runs about 10 seconds after launch and every 6 hours while the process is running. Manual check is also available. No forced download or install; ordinary tray quit does not install a downloaded update.
 

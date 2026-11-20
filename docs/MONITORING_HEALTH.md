@@ -25,6 +25,8 @@ Slow responses and cooldowns extend these intervals. Low project volume does not
 
 Each source shows its last successful check, last newly stored opportunity and next attempt, or **Checking…** during a request. Discovery timestamps start being recorded with the first successful poll after this change; older timestamps are not invented. Health descriptions distinguish connection failures, timeouts, restricted access, rate limiting and unexpected content. A browser login does not remove a collector restriction.
 
+From 0.12.1, monitoring, project details and project watch use Chromium's network stack on a separate in-memory session, so they follow the Windows proxy settings (manual proxy, PAC/automatic configuration and VPNs in system-proxy mode) like the browser. Before 0.12.1 these requests ignored such settings, so a system-proxy VPN or a network that only allows traffic through a proxy made every source time out while the browser still worked. If every source still shows connection failures or timeouts, check that the browser can open the same sites, then the VPN or antivirus web filtering. A proxy that asks for a username and password is not supported: RASED never answers authentication prompts.
+
 ## Possible gaps and catch-up
 
 A successful check does not prove complete historical coverage. Limited RSS feeds and lists may lose older entries while RASED is stopped.

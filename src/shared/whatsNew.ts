@@ -30,6 +30,13 @@ export function selectLatestWhatsNew(currentVersion: string, entries: readonly W
 
 // Newest release first; the owner confirms version and date before publishing.
 export const WHATS_NEW: readonly WhatsNewEntry[] = [{
+  version: '0.12.1',
+  date: '2026-11-20',
+  highlights: [
+    { icon: 'eye', title: { ar: 'متابعة مستقل تعمل الآن', en: 'Mostaql watch now works' }, body: { ar: 'في 0.12.0 لم تكن متابعة مشاريع مستقل تفحص أي صفحة، فلم تصل تنبيهاتها. أُصلح ذلك، والمشاريع التي تتابعها تكمل وحدها بعد التحديث.', en: 'In 0.12.0, watched Mostaql projects were never checked, so their alerts never came. This is fixed, and projects you already watch continue on their own after the update.' } },
+    { icon: 'globe', title: { ar: 'يتبع إعدادات Proxy', en: 'Follows your proxy settings' }, body: { ar: 'يتبع الرصد وجلب التفاصيل ومتابعة المشاريع الآن إعدادات Proxy في Windows مثل متصفحك، بما فيها VPN بوضع «System proxy»، بدل تجاهلها وانتهاء المهلة في كل المصادر.', en: 'Monitoring, project details and project watch now follow the Windows proxy settings like your browser, including VPNs in system-proxy mode, instead of ignoring them and timing out on every source.' } }
+  ]
+}, {
   version: '0.12.0',
   date: '2026-11-15',
   highlights: [

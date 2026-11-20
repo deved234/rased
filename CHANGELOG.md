@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.12.1 — 2026-11-20
+
+- Mostaql project watch now works. In 0.12.0 every Mostaql check was rejected before any request because stored Mostaql links use `/go/<id>`; watch now follows that link's redirect to the project page under the same same-site rules. Existing Mostaql watches resume on their own after updating; their first successful check is a silent baseline. Nafezly and KAF watch were not affected.
+- Monitoring, project details and project watch now follow the Windows proxy settings (manual proxy, PAC/automatic configuration and VPNs in system-proxy mode) like the browser, instead of timing out on every source. Requests still use no cookies, no sign-in and the same limits and cooldowns. Proposal Assistant requests and analytics are unchanged.
+- Mostaql durations written in the Arabic dual («2 يومين», «2 أسبوعين») are now read as 2 days and 14 days.
+- No database migration, analytics disclosure or legal change: the disclosure stays `2026-11-15-v5`, Terms and Privacy stay dated 2026-11-15, and 0.12.0 can still open the database.
+
 ## 0.12.0 — 2026-11-15
 
 - Watch individual Mostaql, Nafezly and KAF projects from the list (after Preview), the preview, full details or the compact window. RASED tells you when contacts start on Mostaql ("sure" or "maybe" wording, both an inference), when a project moves to in progress, and when it closes. The first check is silent; offer-count changes alone do not notify. Khamsat is not supported.
