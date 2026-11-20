@@ -28,7 +28,7 @@ On 0.2.5 or later you can update from inside the app: Settings → RASED updates
 
 ## Validation and known limits
 
-- **Automated tests:** typecheck, lint, the unit tests and the real Electron suites with synthetic profiles. `test:watch` now uses `/go/` links like real data, and the new `npm run test:network` checks the network adapter in real Electron against a local server and a fake proxy: redirects, no cookies, cancellation, abort and that requests go through the proxy.
+- **Automated tests:** typecheck, lint, the unit tests and the real Electron suites with synthetic profiles. `test:watch` now uses `/go/` links like real data, and the new `npm run test:network` checks the network adapter in real Electron against a local server and a fake proxy: redirects, no cookies, cancellation, abort and that requests go through the proxy. Windows CI passed, and the configured installer was built and checked on GitHub Actions, including the packaged-app suites.
 - **Live check:** a built development app on a temporary profile collected from all four sources through the new network path, and a live Mostaql `/go/` watch check reached the project page.
 - **Not tested:** a machine behind a real proxy or system-proxy VPN (only a fake proxy in tests), a manual upgrade of a real 0.12.0 installation, and a physical click on a real watch notification.
 
