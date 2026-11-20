@@ -60,6 +60,8 @@ try{
  check('restore reset records exactly one new restore outcome',rows().filter(e=>e.name==='feature_used'&&e.properties.feature==='restore_requested').length===1)
  check('pre-restore monitoring counters were cleared',!rows().some(e=>e.name==='monitoring_hourly'))
  check('fixture sink remains separate from the app data and no automatic cloud sending occurs',sink().every(e=>e.environment==='qa'))
- await graceful()
+ // applyRestore quits the app by itself 150 ms later; asking it to close again over CDP races that exit.
+ await eventually(()=>child.exitCode,code=>code!==null,15000)
+ check('restore quits the application by itself',existsSync(join(profile,'test-trace.jsonl'))&&readFileSync(join(profile,'test-trace.jsonl'),'utf8').includes('"kind":"restore-restart"'))
  console.log(`TELEMETRY LIFECYCLE PASSED (${passed} assertions). TEMP profile: ${profile}`)
 }finally{if(child&&child.exitCode===null)await stopApp(child)}
