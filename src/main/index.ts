@@ -141,6 +141,7 @@ import {
 } from '../storage/projectWatch.js'
 import { ProjectWatcher } from './projectWatcher.js'
 import { createWatchFetch } from './watchTransport.js'
+import { createSystemFetch } from './systemFetch.js'
 import { validateWatchReplacePayload, validateWatchSetPayload } from './watchIpc.js'
 import { dispatchWatchPending, dispatchWatchEpisode, watchChangeKind } from './watchNotifier.js'
 import { watchSummaryTitle, watchAwayTitle, parseWatchPayload } from '../shared/watchNotificationText.js'
@@ -263,6 +264,8 @@ let updateStartupTimer: NodeJS.Timeout | null = null
 let updateTimer: NodeJS.Timeout | null = null
 let notificationCleanupTimer: NodeJS.Timeout | null = null
 const testHarness = isolatedTestHarness(app.getPath('userData'), process.argv)
+// Collectors use Chromium networking so Windows proxy/VPN settings apply; isolated tests keep their fixture fetch.
+const collectorFetch: typeof fetch = testHarness?.fetchImpl ?? createSystemFetch()
 let telemetry: TelemetryService | null = null
 let lastQuickTelemetry = ''
 let quickTelemetryStarted = Date.now()
@@ -945,7 +948,7 @@ async function runKhamsatCycle(): Promise<void> {
   emitKhamsatHealth()
   try {
     saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
-    const result = await fetchKhamsatRequests(khamsatAbort.signal, testHarness?.fetchImpl)
+    const result = await fetchKhamsatRequests(khamsatAbort.signal, collectorFetch)
     if (!applicationAccessAllowed() || !db || khamsatPaused || quitRequested || !settings.khamsatEnabled || khamsatAbort.signal.aborted) return
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
@@ -1010,7 +1013,7 @@ async function runNafezlyCycle(): Promise<void> {
   try {
     pollClaim = nafezlyArbiter.claim('poll')
     saveSourceState(db, { ...stored, lastAttemptAt: new Date().toISOString() })
-    const result = await fetchNafezlyFeed(nafezlyAbort.signal, testHarness?.fetchImpl)
+    const result = await fetchNafezlyFeed(nafezlyAbort.signal, collectorFetch)
     if (!applicationAccessAllowed() || !db || nafezlyPaused || quitRequested || !settings.nafezlyEnabled || nafezlyAbort.signal.aborted) return
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
@@ -1102,7 +1105,7 @@ async function runCycle(): Promise<RefreshResult> {
   try {
     pollClaim = mostaqlArbiter.claim('poll')
     saveSourceState(db, { ...getSourceState(db, SOURCE), lastAttemptAt: new Date(lastStartMs).toISOString() })
-    const res = await fetchRss(RSS_URL, { signal: activeRss.signal, fetchImpl: testHarness?.fetchImpl })
+    const res = await fetchRss(RSS_URL, { signal: activeRss.signal, fetchImpl: collectorFetch })
     lastDurationMs = res.durationMs
     if (!applicationAccessAllowed() || !settings.mostaqlEnabled || activeRss.signal.aborted || paused || quitRequested || (!res.ok && res.kind === 'cancelled')) return { ok: false, started: true, reason: 'paused' }
     const nowMs = Date.now()
@@ -1233,7 +1236,7 @@ function persistScheduler(): void {
 // ---------------------------------------------------------------- enrichment
 
 const enrichQueue = new EnrichmentQueue({
-  fetchImpl: testHarness?.fetchImpl,
+  fetchImpl: collectorFetch,
   budget: arbiterBudget(mostaqlArbiter, 'enrichment'),
   gateOpen: () => applicationAccessAllowed() && settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()),
   onTransportFailure: (kind: DetailFetchKind | 'http5xx' | 'forbidden' | 'rate_limited', retryAfterMs: number | null) => {
@@ -1324,7 +1327,7 @@ function detailTransportFailure(kind: DetailFetchKind | 'http5xx' | 'forbidden' 
 }
 
 const detailsFetcher = new DetailsFetcher(() => db, {
-  fetchImpl: testHarness?.fetchImpl,
+  fetchImpl: collectorFetch,
   budget: arbiterBudget(mostaqlArbiter, 'details'),
   gateOpen: () => applicationAccessAllowed() && settings.mostaqlEnabled && !paused && !quitRequested && !inFlight && !isBackingOff(sched, Date.now()) && db !== null,
   onMetadata: (projectId, data) => {
@@ -1355,7 +1358,7 @@ function nafezlyDetailFailure(result: { status?: number | null; retryAfterMs?: n
 }
 
 const nafezlyFacts = new ProjectFactsFetcher({
-  db: () => db, fetchImpl: testHarness?.fetchImpl,
+  db: () => db, fetchImpl: collectorFetch,
   budget: arbiterBudget(nafezlyArbiter, 'details'),
   gateOpen: () => applicationAccessAllowed() && !!db && !quitRequested && settings.nafezlyEnabled && !nafezlyPaused && !nafezlyInFlight && !(getSourceState(db, NAFEZLY_SOURCE).backoffUntil && Date.parse(getSourceState(db, NAFEZLY_SOURCE).backoffUntil!) > Date.now()),
   settled: id => { emitProjects([], [id]); emitDetails([id]) },
@@ -2773,7 +2776,7 @@ async function boot(): Promise<void> {
     updateTimer.unref()
   }
   kaf = new KafController({
-    db: () => db, settings: () => settings, accessAllowed: applicationAccessAllowed, runId, fetchImpl: testHarness?.fetchImpl,
+    db: () => db, settings: () => settings, accessAllowed: applicationAccessAllowed, runId, fetchImpl: collectorFetch,
     health: h => { telemetry?.health('kaf', h); broadcast(IPC.kafHealthChanged, h); updateTray() },
     projects: emitProjects, details: id => emitDetails([id]), flush: () => flushNotifications(null).then(() => undefined)
   })
@@ -2782,7 +2785,7 @@ async function boot(): Promise<void> {
       db: () => db,
       now: () => Date.now(),
       arbiter: source => source === 'mostaql' ? mostaqlArbiter : source === 'nafezly' ? nafezlyArbiter : kaf!.watchSlot(),
-      fetch: createWatchFetch({ fetchImpl: testHarness?.fetchImpl }),
+      fetch: createWatchFetch({ fetchImpl: collectorFetch }),
       gateOpen: source => {
         if (!WATCH_ENABLED || !applicationAccessAllowed() || quitRequested || !db?.isOpen) return false
         if (source === 'mostaql') return settings.mostaqlEnabled && !paused && !isBackingOff(sched, Date.now())
