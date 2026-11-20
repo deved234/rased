@@ -37,6 +37,11 @@ describe('Authoritative project-card fields', () => {
     expect(parseFactBudget('50 USD')).toEqual({ budgetMin: 50, budgetMax: 50, currency: 'USD' })
     expect(parseFactDuration('٢ أسابيع')).toBe(14)
     expect(parseFactDuration('۷ يوماً')).toBe(7)
+    // Mostaql writes the Arabic dual after the number: «2 يومين», «2 أسبوعين».
+    expect(parseFactDuration('2 يومين')).toBe(2)
+    expect(parseFactDuration('٢ يومان')).toBe(2)
+    expect(parseFactDuration('2 أسبوعين')).toBe(14)
+    expect(parseFactDuration('2 اسبوعان')).toBe(14)
     expect(parseProjectFacts(mostaql.replace('5 أيام', '&#x665; أيام'), 'mostaql')?.durationDays).toBe(5)
   })
   it('does not invent currency, reverse ranges, free-text durations or missing labels', () => {

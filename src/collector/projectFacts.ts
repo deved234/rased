@@ -14,7 +14,7 @@ const digits = (value: string): string => value.replace(/[٠-٩۰-۹]/g, ch => S
 export function parseFactDuration(raw: string | null): number | null {
   if (!raw) return null
   const value = digits(raw).replace(/[ًٌٍَُِّْ]/g, '')
-  const match = /^(\d+)\s*(يوم|يوما|أيام|ايام|days?|أسبوع|اسبوع|أسابيع|اسابيع|weeks?)$/i.exec(value)
+  const match = /^(\d+)\s*(يوم|يوما|يومين|يومان|أيام|ايام|days?|أسبوع|اسبوع|أسبوعين|اسبوعين|أسبوعان|اسبوعان|أسابيع|اسابيع|weeks?)$/i.exec(value)
   if (!match) return null
   const days = Number(match[1]) * (/أسبوع|اسبوع|أسابيع|اسابيع|week/i.test(match[2]!) ? 7 : 1)
   return Number.isSafeInteger(days) && days > 0 && days <= 3650 ? days : null
