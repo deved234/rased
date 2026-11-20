@@ -6,9 +6,30 @@ on:
 permissions:
   contents: read
 jobs:
-  check:
+  static:
+    name: Typecheck, lint and suite coverage
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # Fails when a test:* script in package.json is not assigned to a group below.
+      - run: node scripts/ci-coverage-check.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+
+  unit:
+    name: Unit tests ${{ matrix.shard }}/2
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -17,21 +38,61 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/ensure-electron.mjs
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
+      - run: npm test -- --shard=${{ matrix.shard }}/2
+
+  electron:
+    name: Electron suites ${{ matrix.group }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every test:* script except the documented exclusions in scripts/ci-coverage-check.mjs
+        # must appear in exactly one group. Groups are balanced by measured CI duration.
+        include:
+          - group: A
+            suites: test:e2e test:search test:notification-activation test:startup test:project-facts test:network
+          - group: B
+            suites: test:telemetry test:ai test:kaf
+          - group: C
+            suites: test:ui test:data
+          - group: D
+            suites: test:quick-apply test:monitoring test:extension
+            chromium: true
+          - group: E
+            suites: test:watch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
       - run: npm run build
-      - run: npm run test:e2e
-      - run: npm run test:search
-      - run: npm run test:notification-activation
-      - run: npm run test:telemetry
-      - run: npm run test:startup
-      - run: npm run test:ai
-      - run: npm run test:quick-apply
-      - run: npm run test:ui
-      - run: npm run test:kaf
-      - run: npm run test:data
-      - run: npm run test:monitoring
-      - run: npm run test:project-facts
-      - run: npx playwright-core install chromium
-      - run: npm run test:extension
+      - if: ${{ matrix.chromium }}
+        run: npx playwright-core install chromium
+      # Run every suite of the group even after a failure, then fail with the list.
+      - name: Run ${{ matrix.suites }}
+        shell: bash
+        run: |
+          failed=()
+          for suite in ${{ matrix.suites }}; do
+            echo "::group::npm run $suite"
+            if npm run "$suite"; then echo "::endgroup::"; else echo "::endgroup::"; echo "::error::$suite failed"; failed+=("$suite"); fi
+          done
+          if [ ${#failed[@]} -gt 0 ]; then echo "Failed suites: ${failed[*]}"; exit 1; fi
+
+  all:
+    # Single required status for branch protection and the commit badge.
+    name: All checks
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [static, unit, electron]
+    steps:
+      - name: Require every job to succeed
+        run: |
+          echo 'static=${{ needs.static.result }} unit=${{ needs.unit.result }} electron=${{ needs.electron.result }}'
+          test '${{ needs.static.result }}' = success
+          test '${{ needs.unit.result }}' = success
+          test '${{ needs.electron.result }}' = success

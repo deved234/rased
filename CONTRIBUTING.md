@@ -44,7 +44,7 @@ Check Arabic RTL, English LTR, keyboard focus, both themes and unsaved edits for
 
 Use an imperative commit subject, for example `Preserve selected provider after restart`. Conventional Commit prefixes are optional. Explain the problem, resulting behavior, checks and remaining limits; link relevant issues. Keep unrelated changes separate.
 
-See [Architecture](docs/ARCHITECTURE.md) for code ownership and [Updates](docs/UPDATES.md) for release commands. CI checks types, lint, unit tests, builds and Electron integration on Windows. Packaging and installer QA remain explicit local checks.
+See [Architecture](docs/ARCHITECTURE.md) for code ownership and [Updates](docs/UPDATES.md) for release commands. CI checks types, lint, unit tests (two shards) and every Electron integration suite on Windows, in parallel groups. `scripts/ci-coverage-check.mjs` fails CI when a `test:*` script is not assigned to a group in `.github/workflows/ci.yml`; `test:update-install` is the only documented exclusion. Packaging and installer QA remain explicit local checks.
 
 ## Safety and repository hygiene
 
