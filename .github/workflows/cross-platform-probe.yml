@@ -1,0 +1,91 @@
+name: macOS and Linux probe
+# Temporary 0.14.0 discovery run (.local plan, phase 1): shows what already works
+# on macOS and Ubuntu before any platform code changes. Steps keep going after a
+# failure so one run reports everything. Replaced by real CI groups in phase 4.
+on:
+  push:
+    branches: [cross-platform]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cross-platform-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  probe:
+    name: Probe ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - if: runner.os == 'Linux'
+        name: Prepare a headless display and Electron's sandbox on the runner
+        # Ubuntu 24.04 blocks unprivileged user namespaces through AppArmor, which
+        # Electron's sandbox needs. This only relaxes the disposable CI runner.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - id: install
+        continue-on-error: true
+        run: npm ci && node scripts/ensure-electron.mjs
+      - id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+      - id: lint
+        continue-on-error: true
+        run: npm run lint
+      - id: unit
+        continue-on-error: true
+        run: npx vitest run --reporter=default --reporter=json --outputFile=probe-unit.json
+      - id: build
+        continue-on-error: true
+        run: npm run build
+      - id: suites
+        name: Electron suites (Windows-only suites skipped)
+        continue-on-error: true
+        shell: bash
+        # Skipped as Windows-only by design: test:startup (WAL file mapping),
+        # test:notification-activation (COM toasts), test:quick-apply,
+        # test:extension (Quick Apply deferred) and test:update-install (NSIS).
+        run: |
+          exe="$(node -p "require('electron')")"
+          run() { if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a "$@"; else "$@"; fi; }
+          failed=()
+          for suite in test:e2e test:search test:project-facts test:network test:telemetry test:ai test:kaf test:ui test:data test:monitoring test:watch; do
+            echo "::group::$suite"
+            if run npm run "$suite" -- --exe="$exe"; then echo "::endgroup::"; echo "PASS $suite" >> probe-suites.txt
+            else echo "::endgroup::"; echo "FAIL $suite" >> probe-suites.txt; failed+=("$suite"); fi
+          done
+          if [ ${#failed[@]} -gt 0 ]; then exit 1; fi
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## ${{ matrix.os }}"
+            echo "| Step | Result |"; echo "|---|---|"
+            echo "| install | ${{ steps.install.outcome }} |"
+            echo "| typecheck | ${{ steps.typecheck.outcome }} |"
+            echo "| lint | ${{ steps.lint.outcome }} |"
+            echo "| unit tests | ${{ steps.unit.outcome }} |"
+            echo "| build | ${{ steps.build.outcome }} |"
+            echo "| Electron suites | ${{ steps.suites.outcome }} |"
+            echo; [ -f probe-suites.txt ] && sed 's/^/- /' probe-suites.txt
+            if [ -f probe-unit.json ]; then
+              echo; echo "### Failing unit test files"
+              node -e "const r=require('./probe-unit.json');const f=r.testResults.filter(t=>t.status!=='passed');console.log(f.length?f.map(t=>'- '+require('path').relative(process.cwd(),t.name)+': '+t.assertionResults.filter(a=>a.status==='failed').map(a=>a.title).slice(0,5).join(' | ')).join('\n'):'None')"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # A probe with any failed step must not look green.
+          for outcome in ${{ steps.install.outcome }} ${{ steps.typecheck.outcome }} ${{ steps.lint.outcome }} ${{ steps.unit.outcome }} ${{ steps.build.outcome }} ${{ steps.suites.outcome }}; do
+            [ "$outcome" = success ] || exit 1
+          done

@@ -18,7 +18,8 @@ function gather(name, base = process.cwd()) {
   parts.push(id + '\n' + (p.homepage ?? p.repository?.url ?? '') + '\n\n' + text)
   for (const dependency of Object.keys(p.dependencies ?? {})) gather(dependency, dir)
 }
-for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-sans-arabic', 'electron-updater', 'koffi', '@koromix/koffi-win32-x64']) gather(name)
+// koffi's prebuilt binary package is installed per platform; only Windows loads and ships it.
+for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-sans-arabic', 'electron-updater', 'koffi', ...(process.platform === 'win32' ? ['@koromix/koffi-win32-x64'] : [])]) gather(name)
 writeFileSync('resources/legal/THIRD_PARTY_NOTICES.txt', parts.join('\n\n' + '='.repeat(72) + '\n\n'))
 writeFileSync('resources/legal/LICENSE', readFileSync('LICENSE'))
 for (const [key, file] of [['terms', 'TERMS.md'], ['privacy', 'PRIVACY.md']]) {

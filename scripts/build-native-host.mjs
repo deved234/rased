@@ -4,7 +4,9 @@ import { mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync } from
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-if(process.platform!=='win32'||process.arch!=='x64')throw Error('Native host build requires Windows x64')
+// Quick Apply is Windows-only for now (docs/QUICK_APPLY.md); other systems build without its bridge.
+if(process.platform!=='win32'){console.log('Quick Apply bridge is Windows-only; skipped on '+process.platform+'.');process.exit(0)}
+if(process.arch!=='x64')throw Error('Native host build requires Windows x64')
 const work=resolve('out/native-host-build'),dest=resolve('resources/chrome-bridge')
 mkdirSync(work,{recursive:true});mkdirSync(dest,{recursive:true})
 const inputs=['native-host/src/index.ts','src/main/extension/framing.ts','src/shared/extension/protocol.ts','src/shared/extension/identity.ts','src/shared/quickApply.ts']
