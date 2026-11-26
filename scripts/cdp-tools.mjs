@@ -1,7 +1,12 @@
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+
+export function electronPath() {
+  return createRequire(import.meta.url)('electron')
+}
 
 export function parseArgs(argv) {
   const out = {}
@@ -42,7 +47,10 @@ export function startApp({ exe, app, profile, port, url, test = true, captureOut
   if (app) args.unshift(resolve(app))
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL
   if (url) env.ELECTRON_RENDERER_URL = url
-  const child = spawn(resolve(exe), args, { env, windowsHide: true, stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' })
+  const spawnOpts = process.platform === 'win32'
+    ? { env, windowsHide: true, stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' }
+    : { env, windowsHide: true, detached: true, stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' }
+  const child = spawn(resolve(exe), args, spawnOpts)
   child.on('error', err => { console.error(err.message) })
   return child
 }
@@ -71,12 +79,19 @@ export async function evaluate(ws, expression) {
 }
 export async function stopApp(child) {
   if (child.exitCode !== null) return
-  await new Promise(resolve => {
-    // The root may exit before taskkill finishes closing its renderer/worker
-    // descendants. Wait for the whole tree before reopening its SQLite files.
-    const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
-    killer.once('close', resolve)
-  })
+  if (process.platform === 'win32') {
+    await new Promise(resolve => {
+      // The root may exit before taskkill finishes closing its renderer/worker
+      // descendants. Wait for the whole tree before reopening its SQLite files.
+      const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+      killer.once('close', resolve)
+    })
+  } else {
+    if (child.signalCode !== null || !child.pid) return
+    // Kill the entire process group (spawned with detached: true).
+    try { process.kill(-child.pid, 'SIGKILL') } catch (e) { if (e.code !== 'ESRCH') throw e }
+    if (child.exitCode === null && child.signalCode === null) await new Promise(resolve => child.once('close', resolve))
+  }
 }
 
 // Keep the CDP session alive for emulation: Chromium resets it on disconnect.

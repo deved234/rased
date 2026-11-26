@@ -5,13 +5,13 @@ import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(args.profile)
 const profilesToClean = [profile]
 const port = Number(args.port ?? 9495)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe'
+const exe = args.exe ?? electronPath()
 const app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const output = resolve('.local/project-watch-2026-11-11/mock')
 mkdirSync(output, { recursive: true })

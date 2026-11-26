@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9502)
 const output = resolve('.local/project-facts-2026-10-15'), shots = join(output, 'screenshots')
 mkdirSync(shots, { recursive: true })
@@ -28,7 +28,7 @@ for (const [file, source, link] of [['rss-fixture.xml', 'Mostaql', urls[0]], ['n
 writeFileSync(join(profile, 'khamsat-fixture.html'), '<html>Disabled fixture</html>')
 writeFileSync(join(profile, 'kaf-list-1.html'), '<div id="projects"><div class="project-box"><a href="https://kafiil.com/project/789-sample">Facts kaf<span class="tag">مفتوح</span></a><span><i class="far fa-clock"></i>منذ دقيقة</span><p class="price">$25 - $50</p><p class="info-content">Synthetic</p></div></div>')
 writeFileSync(join(profile, 'kaf-detail.html'), readFileSync('tests/fixtures/kaf-detail.html', 'utf8'))
-const child = startApp({ exe: args.exe ?? 'node_modules/electron/dist/electron.exe', app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port })
+const child = startApp({ exe: args.exe ?? electronPath(), app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port })
 let ws, session, passed = 0
 const checks = [], check = (label, value) => { assert.ok(value, label); checks.push(label); passed++; console.log('PASS ' + label) }
 const ev = expression => evaluate(ws, expression)

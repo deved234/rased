@@ -7,12 +7,12 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const profile = newProfile()
 const port = 9377
 const args = parseArgs(process.argv.slice(2))
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe'
+const exe = args.exe ?? electronPath()
 const app = args.app ?? (args.exe ? undefined : 'out/main/index.js')
 const db = new DatabaseSync(join(profile, 'rased.db'))
 const schema = readFileSync('src/storage/migrations.ts', 'utf8')

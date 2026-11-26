@@ -4,12 +4,12 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(), port = Number(args.port ?? 9394), output = resolve('.local/kaf-research-2026-10-14/implementation')
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
+const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 mkdirSync(output, { recursive: true })
 const fixture = readFileSync('tests/fixtures/kaf-list.html', 'utf8')
 const writeList = (text = fixture) => writeFileSync(join(profile, 'kaf-list-1.html'), text)

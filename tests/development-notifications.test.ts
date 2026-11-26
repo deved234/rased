@@ -23,7 +23,8 @@ function fixture() {
   }
   return { dir, config, state, port, file: join(dir, 'notifications', 'development-activation.json') }
 }
-describe('Development native notification startup', () => {
+// Windows-only COM registration: the module only runs under process.platform === 'win32'.
+describe.skipIf(process.platform !== 'win32')('Development native notification startup', () => {
   it('registers an explicit relay entry and retains source/profile paths with spaces', async () => {
     const f = fixture()
     const result = await ensureDevelopmentComRegistration(f.config, f.file, f.dir, f.port)

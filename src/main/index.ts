@@ -2716,10 +2716,12 @@ async function boot(): Promise<void> {
   } catch {
     recordDiagnostic(db, { at: new Date().toISOString(), endpointKind: 'quick-apply', status: 'retirement-failed', durationMs: 0, itemCount: null, errorCategory: 'legacy-browser-cleanup-failed', detail: null })
   }
-  try{
-    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>applicationAccessAllowed() ? settings : { ...settings, quickApply: { ...settings.quickApply, enabled: false } },extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
-    await extension.start()
-  }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
+  if (process.platform === 'win32') {
+    try{
+      extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>applicationAccessAllowed() ? settings : { ...settings, quickApply: { ...settings.quickApply, enabled: false } },extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
+      await extension.start()
+    }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
+  }
   if(extension&&aiService)quickAssistant=new QuickAssistant(db,aiService,extension,applicationAccessAllowed,extensionChanged)
   if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
   if(!testHarness){
@@ -3094,6 +3096,7 @@ void boot().catch(async (error: unknown) => {
   // Surface them and exit instead of leaving an invisible, unusable process.
   const failure = recordStartupFailure(app.getPath('userData'), startupStage, error)
   console.error('RASED startup failed', failure)
+  if (testHarness) console.error('RASED startup error (test profile):', error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}`.slice(0, 2000) : String(error).slice(0, 2000))
   const code = error && typeof error === 'object' && 'errcode' in error ? Number(error.errcode) : null
   if (testHarness) testHarness.record('boot-failed', { ...failure, sqliteCode: code })
   else {

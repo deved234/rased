@@ -4,10 +4,10 @@ import assert from 'node:assert/strict'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9581)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
+const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const fixture = join(profile, 'telemetry-fixture.json'), eventsFile = join(profile, 'telemetry-fixture-sink/fixture-events.jsonl')
 writeFileSync(fixture, JSON.stringify({ flush: false }))
 const db = new DatabaseSync(join(profile, 'rased.db'))

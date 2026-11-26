@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
-export async function testWhatsNew() {
+export async function testWhatsNew(exeOverride) {
   const version = '0.12.1' // Injected through the marked TEMP harness, independent of package.json.
   const port = 9394, output = resolve('.local/whats-new/screenshots')
   mkdirSync(output, { recursive: true })
@@ -40,7 +40,7 @@ export async function testWhatsNew() {
     return profile
   }
   const boot = async profile => {
-    child = startApp({ exe: 'node_modules/electron/dist/electron.exe', app: 'out/main/index.js', profile, port })
+    child = startApp({ exe: exeOverride ?? electronPath(), app: 'out/main/index.js', profile, port })
     ws = await pageWs(port)
     await wait('!!window.rased && !!document.querySelector(".splash")')
     await wait('document.querySelector(".splash")?.dataset.phase === "ready"')

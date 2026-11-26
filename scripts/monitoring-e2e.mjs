@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2)), port = Number(args.port ?? 9498)
 let profile = newProfile()
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
+const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const output = resolve(args.output ?? '.local/phase-2-monitoring-2026-10-15'), shots = join(output, 'screenshots')
 mkdirSync(shots, { recursive: true })
 const db = new DatabaseSync(join(profile, 'rased.db')), migrations = [...readFileSync('src/storage/migrations.ts', 'utf8').matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]

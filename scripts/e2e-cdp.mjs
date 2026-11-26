@@ -6,13 +6,13 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(args.profile)
 const port = Number(args.port ?? 9361)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe'
+const exe = args.exe ?? electronPath()
 const app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const schema = readFileSync('src/storage/migrations.ts', 'utf8')
 const db = new DatabaseSync(join(profile, 'rased.db'))
@@ -39,6 +39,21 @@ const nafezlyFeed = items => `\n<?xml version="1.0" encoding="UTF-8"?><rss versi
 const writeNafezly = items => writeFileSync(join(profile, 'nafezly-fixture.xml'), nafezlyFeed(items))
 writeNafezly([{id:50001,slug:'baseline',title:'Old Nafezly project',description:'Baseline description',publishedAt:Date.now()-3600000}])
 let child, ws, viewportSession, passed = 0
+const MAX_OUTPUT_CHARS = 65536
+let childOutput = ''
+const appendChildOutput = chunk => {
+  childOutput += chunk
+  if (childOutput.length > MAX_OUTPUT_CHARS) childOutput = childOutput.slice(-MAX_OUTPUT_CHARS)
+}
+const launchApp = () => {
+  childOutput = ''
+  const proc = startApp({ exe, app, profile, port, captureOutput: true })
+  proc.stdout?.setEncoding('utf8')
+  proc.stderr?.setEncoding('utf8')
+  proc.stdout?.on('data', appendChildOutput)
+  proc.stderr?.on('data', appendChildOutput)
+  return proc
+}
 const check = (label, condition, detail = '') => { assert.ok(condition, `${label}: ${detail}`); passed++; console.log(`PASS ${label}${detail ? ' — ' + detail : ''}`) }
 const ev = expression => evaluate(ws, expression)
 const wait = expression => eventually(() => ev(expression))
@@ -55,7 +70,7 @@ const fill = async (selector, value) => {
 }
 const traces = () => existsSync(join(profile, 'test-trace.jsonl')) ? readFileSync(join(profile, 'test-trace.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(s=>JSON.parse(s)) : []
 try {
-  child = startApp({ exe, app, profile, port })
+  child = launchApp()
   ws = await pageWs(port)
   // Attach before observing bootstrap: executable startup may finish the short
   // splash before CDP connects on a busy Windows runner. Reload the renderer
@@ -326,7 +341,7 @@ try {
   // As in telemetry-e2e, an exited root can briefly retain its old CDP endpoint.
   // Wait for it to disappear before reusing the port for the restarted process.
   await eventually(async () => { try { await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) }); return false } catch { return true } })
-  child = startApp({exe,app,profile,port}); ws=await pageWs(port)
+  child = launchApp(); ws=await pageWs(port)
   await call(ws, 'Page.reload')
   await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
   check('restart splash uses persisted English preferences', await ev('document.documentElement.lang === "en" && document.documentElement.dir === "ltr" && (document.querySelector(".splash-enter")?.textContent === "Explore opportunities" || !!document.querySelector(".app"))'))
@@ -396,6 +411,8 @@ try {
   try { console.error('Renderer failure state:', await ev('({phase:document.querySelector(".splash")?.dataset.phase,text:document.querySelector(".splash")?.textContent,rows:document.querySelectorAll("[data-row]").length})')) } catch { /* process may already have exited */ }
   console.error(`E2E FAILED after ${passed} assertions:`,err.stack); console.error('Profile retained:',profile); process.exitCode=1
   console.error('Child exit state:', { exitCode: child?.exitCode, signalCode: child?.signalCode })
+  const outputTail = childOutput.trim().split(/\r?\n/).slice(-40).join('\n')
+  if (outputTail) console.error('Child output (last 40 lines):\n' + outputTail)
   const startupLog = join(profile, 'startup-failure.log')
   if (existsSync(startupLog)) console.error('Sanitized startup failures:', readFileSync(startupLog, 'utf8').slice(-8192))
 } finally { viewportSession?.close(); db.close(); if(child) await stopApp(child) }

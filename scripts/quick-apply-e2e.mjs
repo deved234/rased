@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path'
 import {createConnection} from 'node:net'
 import {createHash} from 'node:crypto'
 import {spawn,spawnSync} from 'node:child_process'
-import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call,sleep,persistentSession} from './cdp-tools.mjs'
+import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call,sleep,persistentSession,electronPath} from './cdp-tools.mjs'
 const args=parseArgs(process.argv.slice(2)), profile=newProfile(),port=9366
 writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
 const db=new DatabaseSync(join(profile,'rased.db'))
@@ -18,7 +18,7 @@ for(const [id,source] of [[1,'mostaql'],[2,'nafezly'],[3,'khamsat']])db.prepare(
 db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({khamsatEnabled:false,nafezlyEnabled:false,quickApply:{enabled:true,template:'Preserved template',budgetPositionPercent:50,extraDays:1}}))
 db.prepare('INSERT INTO quick_apply_tickets(ticket,project_id,expires_at) VALUES(?,?,?)').run('a'.repeat(32),1,Date.now()+60000)
 for(const name of ['rased-quick-apply-mostaql','rased-quick-apply-nafezly','unrelated-profile']){const path=join(profile,'Partitions',name);mkdirSync(path,{recursive:true});writeFileSync(join(path,'Cookies'),'fixture')}
-const child=startApp({exe:args.exe??'node_modules/electron/dist/electron.exe',app:args.app??(args.exe?undefined:'out/main/index.js'),profile,port})
+const child=startApp({exe:args.exe??electronPath(),app:args.app??(args.exe?undefined:'out/main/index.js'),profile,port})
 let checks=0
 let bridgeSocket
 const check=(name,value)=>{assert.ok(value,name);checks++;console.log('PASS '+name)}
@@ -112,7 +112,7 @@ try {
  const notificationTicket='f'.repeat(32),notificationRequest='c'.repeat(32)
  db.prepare('INSERT INTO extension_jobs(ticket,request_id,project_id,expires_at,updated_at) VALUES(?,?,1,?,?)').run(notificationTicket,notificationRequest,Date.now()+60000,Date.now())
  const notificationEnv={...process.env};delete notificationEnv.ELECTRON_RUN_AS_NODE;delete notificationEnv.ELECTRON_RENDERER_URL
- const second=spawn(resolve(args.exe??'node_modules/electron/dist/electron.exe'),[...(args.app??(args.exe?undefined:'out/main/index.js')?[resolve(args.app??'out/main/index.js')]:[]),'--user-data-dir='+profile,'--rased-test','rased-dev://quick-apply-v2?ticket='+notificationTicket],{env:notificationEnv,windowsHide:true,stdio:'ignore'})
+ const second=spawn(resolve(args.exe??electronPath()),[...(args.app??(args.exe?undefined:'out/main/index.js')?[resolve(args.app??'out/main/index.js')]:[]),'--user-data-dir='+profile,'--rased-test','rased-dev://quick-apply-v2?ticket='+notificationTicket],{env:notificationEnv,windowsHide:true,stdio:'ignore'})
  await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('notification handoff timeout')),10000);second.once('exit',()=>{clearTimeout(timeout);resolve()});second.once('error',reject)})
  await eventually(()=>db.prepare('SELECT error FROM extension_jobs WHERE request_id=?').get(notificationRequest)?.error==='text-empty')
  await eventually(()=>ev("location.hash==='#/settings/ai'"))

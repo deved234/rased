@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9570)
 const output = resolve('.local/phase-3-search-performance-2026-10-21/integration'); mkdirSync(output, { recursive: true })
 const file = join(profile, 'rased.db'), db = new DatabaseSync(file)
@@ -16,7 +16,7 @@ for (let id = 1; id <= 260; id++) insert.run(id, String(id), 'https://mostaql.co
 db.exec("INSERT INTO project_details(project_id,description_text,status) VALUES(1,'BodyOnly café','ready')")
 db.prepare("INSERT INTO settings VALUES('app',?)").run(JSON.stringify({ language: 'en', mostaqlEnabled: false, nafezlyEnabled: false, khamsatEnabled: false, kafEnabled: false, autoRevealNewAtTop: false }))
 db.close()
-const child = startApp({ exe: args.exe ?? 'node_modules/electron/dist/electron.exe', app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port, captureOutput: true })
+const child = startApp({ exe: args.exe ?? electronPath(), app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port, captureOutput: true })
 let electronOutput = ''
 child.stdout.on('data', data => { electronOutput += data.toString() })
 child.stderr.on('data', data => { electronOutput += data.toString() })
