@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9502)
 const output = resolve('.local/project-facts-2026-10-15'), shots = join(output, 'screenshots')
 mkdirSync(shots, { recursive: true })
@@ -28,7 +28,7 @@ for (const [file, source, link] of [['rss-fixture.xml', 'Mostaql', urls[0]], ['n
 writeFileSync(join(profile, 'khamsat-fixture.html'), '<html>Disabled fixture</html>')
 writeFileSync(join(profile, 'kaf-list-1.html'), '<div id="projects"><div class="project-box"><a href="https://kafiil.com/project/789-sample">Facts kaf<span class="tag">مفتوح</span></a><span><i class="far fa-clock"></i>منذ دقيقة</span><p class="price">$25 - $50</p><p class="info-content">Synthetic</p></div></div>')
 writeFileSync(join(profile, 'kaf-detail.html'), readFileSync('tests/fixtures/kaf-detail.html', 'utf8'))
-const child = startApp({ exe: args.exe ?? 'node_modules/electron/dist/electron.exe', app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port })
+const child = startApp({ exe: args.exe ?? electronPath(), app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port })
 let ws, session, passed = 0
 const checks = [], check = (label, value) => { assert.ok(value, label); checks.push(label); passed++; console.log('PASS ' + label) }
 const ev = expression => evaluate(ws, expression)
@@ -75,7 +75,7 @@ try {
   await eventually(async () => (await invoke('getProjectFacts', 1)).status === 'failed')
   check('changed markup keeps prior facts and returns a real failure', (await invoke('getProjectFacts', 1)).budgetMin === 25 && (await invoke('getProjectFacts', 1)).durationDays === 5)
   await nav('#/project/1'); await eventually(() => ev('document.querySelector(".project-facts-status")?.dataset.status==="failed"'))
-  check('failure is visible alongside cached values and retry control', await ev('document.querySelector(".project-facts-status").textContent.includes("cached") && !!document.querySelector(".project-facts-status button")'))
+  check('failure is visible alongside cached values and retry control', await settles(() => ev('document.querySelector(".project-facts-status").textContent.includes("cached") && !!document.querySelector(".project-facts-status button")')))
   await shot('en-cached-after-failure')
   writeFileSync(join(profile, 'nafezly-detail-fixture.html'), nafezly)
   writeFileSync(join(profile, 'facts-config.json'), JSON.stringify({ nafezly: { status: 429, retryAfter: '300' } }))
@@ -86,13 +86,13 @@ try {
   check('detail-page rate limiting applies source cooldown and blocks forced retry', detailCalls(1) === limitedCount && (await invoke('getProjectFacts', 2)).status === 'deferred')
   check('rate limiting preserves cached Nafezly data', (await invoke('getProjectFacts', 2)).budgetMin === 10)
   await nav('#/project/2'); await eventually(() => ev('document.querySelector(".project-facts-status")?.dataset.status==="deferred"'))
-  check('cooldown is explained and refresh control is disabled', await ev('document.querySelector(".project-facts-status").textContent.includes("cooldown") && document.querySelector(".project-facts-status button").disabled'))
+  check('cooldown is explained and refresh control is disabled', await settles(() => ev('document.querySelector(".project-facts-status").textContent.includes("cooldown") && document.querySelector(".project-facts-status button").disabled')))
   session = await persistentSession(ws)
   for (const language of ['ar', 'en']) for (const theme of ['dark', 'light']) {
     await invoke('updateSettings', { language, ui: { theme, textScale: 125 } })
     await session.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 650, mobile: false, deviceScaleFactor: 1 })
     await sleep(150)
-    check(language + '/' + theme + ' full-page facts fit at 900px/125%', await ev('(()=>{const p=document.querySelector(".detail-article"),b=p.getBoundingClientRect();return [...p.querySelectorAll("[data-fact],.project-facts-status, .project-facts-status button")].every(e=>{const r=e.getBoundingClientRect();return r.left>=b.left-1&&r.right<=b.right+1&&e.scrollWidth<=e.clientWidth+1})})()'))
+    check(language + '/' + theme + ' full-page facts fit at 900px/125%', await settles(() => ev('(()=>{const p=document.querySelector(".detail-article"),b=p.getBoundingClientRect();return [...p.querySelectorAll("[data-fact],.project-facts-status, .project-facts-status button")].every(e=>{const r=e.getBoundingClientRect();return r.left>=b.left-1&&r.right<=b.right+1&&e.scrollWidth<=e.clientWidth+1})})()')))
     await ev('document.querySelector(".facts").scrollIntoView({block:"start"})'); await shot(language + '-' + theme + '-nafezly-cooldown')
   }
   console.log(`Project facts integration: ${passed} checks passed; profile=${profile}`)

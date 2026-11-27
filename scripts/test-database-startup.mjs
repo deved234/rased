@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import koffi from 'koffi'
-import { evaluate, eventually, newProfile, pageWs, startApp, stopApp, parseArgs } from './cdp-tools.mjs'
+import { evaluate, eventually, newProfile, pageWs, startApp, stopApp, parseArgs, electronPath } from './cdp-tools.mjs'
 
 if (process.platform !== 'win32') throw Error('Windows-only startup regression')
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9589)
@@ -34,7 +34,7 @@ try {
   mapping = createMapping(fileHandle,null,4,0,0,null); assert.ok(mapping,'Create synthetic shm mapping')
   view = mapView(mapping,2,0,0,0); assert.ok(view,'Hold a real Windows shm mapping')
   const exited = new Promise(resolve=>writer.once('exit',resolve)); writer.kill(); await exited
-  const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
+  const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
   child = startApp({exe,app,profile,port,captureOutput:true})
   let output = ''
   child.stderr.on('data', chunk => {

@@ -1,4 +1,4 @@
-name: Windows checks
+name: Checks
 on:
   push:
     branches: [main]
@@ -79,20 +79,164 @@ jobs:
           failed=()
           for suite in ${{ matrix.suites }}; do
             echo "::group::npm run $suite"
-            if npm run "$suite"; then echo "::endgroup::"; else echo "::endgroup::"; echo "::error::$suite failed"; failed+=("$suite"); fi
+            if (set -o pipefail; npm run "$suite" 2>&1 | tee suite.log); then echo "::endgroup::"; else echo "::endgroup::"; node scripts/ci-failure-note.mjs "$suite" suite.log; failed+=("$suite"); fi
           done
           if [ ${#failed[@]} -gt 0 ]; then echo "Failed suites: ${failed[*]}"; exit 1; fi
+
+  unix-unit:
+    name: Unit tests ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
+      - run: npm test
+
+  unix-electron:
+    name: Electron suites ${{ matrix.os }} ${{ matrix.group }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        group: [core, data, ui]
+        # Every test:* script except the Windows-only and excluded ones in
+        # scripts/ci-coverage-check.mjs must appear in exactly one group.
+        include:
+          - group: core
+            suites: test:e2e test:network test:monitoring test:watch
+          - group: data
+            suites: test:telemetry test:kaf test:data
+          - group: ui
+            suites: test:ui test:ai test:search test:project-facts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - if: runner.os == 'Linux'
+        name: Prepare a headless display, Electron's sandbox and a keyring
+        # Ubuntu 24.04 blocks unprivileged user namespaces through AppArmor, which
+        # Electron's sandbox needs; this only relaxes the disposable runner. Chromium
+        # refuses its basic_text password store, so key-saving suites need a secret service.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb gnome-keyring dbus-x11
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          echo "XDG_CURRENT_DESKTOP=GNOME" >> "$GITHUB_ENV"
+          echo -n 'rased-ci' | gnome-keyring-daemon --unlock --components=secrets | tee -a "$GITHUB_ENV"
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
+      - run: npm run build
+      - name: Run ${{ matrix.suites }}
+        shell: bash
+        run: |
+          run() { if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a "$@"; else "$@"; fi; }
+          failed=()
+          for suite in ${{ matrix.suites }}; do
+            echo "::group::npm run $suite"
+            if (set -o pipefail; run npm run "$suite" 2>&1 | tee suite.log); then echo "::endgroup::"; else echo "::endgroup::"; node scripts/ci-failure-note.mjs "$suite" suite.log; failed+=("$suite"); fi
+          done
+          if [ ${#failed[@]} -gt 0 ]; then echo "Failed suites: ${failed[*]}"; exit 1; fi
+
+  unix-package:
+    # Unconfigured (no analytics token) dmg/zip and AppImage/deb, verified and smoke-tested.
+    name: Package ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            exe: release/mac-universal/RASED.app/Contents/MacOS/RASED
+          - os: ubuntu-latest
+            platform: linux
+            exe: release/linux-unpacked/rased
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - if: runner.os == 'Linux'
+        name: Prepare a headless display, Electron's sandbox and a keyring
+        # Ubuntu 24.04 blocks unprivileged user namespaces through AppArmor, which
+        # Electron's sandbox needs; this only relaxes the disposable runner. Chromium
+        # refuses its basic_text password store, so key-saving suites need a secret service.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb gnome-keyring dbus-x11
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          echo "XDG_CURRENT_DESKTOP=GNOME" >> "$GITHUB_ENV"
+          echo -n 'rased-ci' | gnome-keyring-daemon --unlock --components=secrets | tee -a "$GITHUB_ENV"
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
+      - name: Build, verify and smoke-test the ${{ matrix.platform }} packages
+        shell: bash
+        run: |
+          run() { if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a "$@"; else "$@"; fi; }
+          step() { local name=$1; shift; if ! (set -o pipefail; "$@" 2>&1 | tee step.log); then node scripts/ci-failure-note.mjs "package $name" step.log; exit 1; fi; }
+          step build npm run dist:${{ matrix.platform }}
+          step verify node scripts/verify-release-files.mjs --platform=${{ matrix.platform }}
+          step smoke run node scripts/e2e-cdp.mjs --exe=${{ matrix.exe }} --app=
+      - if: matrix.platform == 'linux'
+        name: Launch the AppImage and the installed deb with Ubuntu's default AppArmor restriction
+        # Earlier steps relax unprivileged user namespaces for the test harness. A desktop
+        # Ubuntu 24.04 keeps them restricted, which can stop Electron's sandbox; check the
+        # shipped AppImage and the deb exactly as users run them.
+        shell: bash
+        run: |
+          step() { local name=$1; shift; if ! (set -o pipefail; "$@" 2>&1 | tee step.log); then node scripts/ci-failure-note.mjs "package $name" step.log; return 1; fi; }
+          sudo apt-get install -y libfuse2t64
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          failed=0
+          step appimage-apparmor xvfb-run -a node scripts/launch-smoke.mjs --exe="$(ls release/RASED-*-linux-x86_64.AppImage)" --label=AppImage || failed=1
+          sudo apt-get install -y ./release/RASED-*-linux-amd64.deb
+          step deb-apparmor xvfb-run -a node scripts/launch-smoke.mjs --exe=/opt/RASED/rased --label=deb || failed=1
+          exit $failed
+      - name: Upload test packages (7 days, not a release)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rased-test-package-${{ matrix.platform }}
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            release/RASED-*-mac.dmg
+            release/RASED-*-linux-x86_64.AppImage
+            release/RASED-*-linux-amd64.deb
 
   all:
     # Single required status for branch protection and the commit badge.
     name: All checks
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [static, unit, electron]
+    needs: [static, unit, electron, unix-unit, unix-electron, unix-package]
     steps:
       - name: Require every job to succeed
         run: |
           echo 'static=${{ needs.static.result }} unit=${{ needs.unit.result }} electron=${{ needs.electron.result }}'
+          echo 'unix-unit=${{ needs.unix-unit.result }} unix-electron=${{ needs.unix-electron.result }} unix-package=${{ needs.unix-package.result }}'
           test '${{ needs.static.result }}' = success
           test '${{ needs.unit.result }}' = success
           test '${{ needs.electron.result }}' = success
+          test '${{ needs.unix-unit.result }}' = success
+          test '${{ needs.unix-electron.result }}' = success
+          test '${{ needs.unix-package.result }}' = success

@@ -1,12 +1,42 @@
 // Explicit opt-in for integration tests, isolated to a newly marked TEMP profile.
 // No test channel is exposed to renderer; only network/OS boundaries are replaced.
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, realpathSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import type { UpdaterPort } from './updates.js'
+import type { UpdateMode } from '../shared/updates.js'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isReleaseVersion } from '../shared/whatsNew.js'
 import type { AppSettings } from '../shared/types.js'
+
+/** macOS reports /var/folders/... while Electron resolves --user-data-dir to /private/var/.... */
+function canonicalInsideTemp(profile: string): boolean {
+  try {
+    const rel = relative(realpathSync.native(tmpdir()), realpathSync.native(profile))
+    return !rel.startsWith('..') && !isAbsolute(rel) && rel !== ''
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Test-only containment for fixture-selected files. Compare canonical paths so
+ * macOS /var/... aliases still match Electron's /private/var/... profile; a target
+ * whose real parent escapes the profile stays outside. Fall back to the textual
+ * check only when an alias cannot be resolved (for example a missing parent).
+ */
+export function insideTestProfile(profile: string, target: string): boolean {
+  const inside = (root: string, path: string): boolean => {
+    const rel = relative(root, path)
+    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+  }
+  try {
+    // The selected file may not exist yet; its parent must.
+    return inside(realpathSync.native(profile), join(realpathSync.native(dirname(target)), basename(target)))
+  } catch {
+    return inside(profile, target)
+  }
+}
 
 export function isolatedTestHarness(profile: string, argv: string[]): null | {
   fetchImpl: typeof fetch
@@ -17,7 +47,8 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   initializeSettings: (settings: AppSettings, currentVersion: string, save: (settings: AppSettings) => void) => void
 } {
   const rel = relative(resolve(tmpdir()), resolve(profile))
-  if (!argv.includes('--rased-test') || rel.startsWith('..') || isAbsolute(rel) || rel === '' || !basename(profile).startsWith('rased-test-')) return null
+  const insideTemp = !rel.startsWith('..') && !isAbsolute(rel) && rel !== ''
+  if (!argv.includes('--rased-test') || (!insideTemp && !canonicalInsideTemp(profile)) || !basename(profile).startsWith('rased-test-')) return null
   const marker = join(profile, '.rased-test-profile')
   if (!existsSync(marker) || readFileSync(marker, 'utf8') !== 'RASED isolated integration test') return null
   const searchPerformance = existsSync(join(profile, 'search-performance.json'))
@@ -130,9 +161,17 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   }
   const initializeSettings = (settings: AppSettings, currentVersion: string, save: (settings: AppSettings) => void): void => {
     // Persist before renderer startup so later database reads/merges cannot restore an unseen marker.
-    if (suppressWhatsNew && settings.whatsNewSeen !== currentVersion) save({ ...settings, whatsNewSeen: currentVersion })
+    // The one-time community invite is exercised with the What's New fixture; elsewhere it would shift layouts.
+    if (suppressWhatsNew && (settings.whatsNewSeen !== currentVersion || !settings.ui.communityInviteSeen)) save({ ...settings, whatsNewSeen: currentVersion, ui: { ...settings.ui, communityInviteSeen: true } })
   }
   return { fetchImpl, aiFetchImpl, record, appVersion, suppressWhatsNew, initializeSettings }
+}
+
+export function testUpdaterMode(profile: string): UpdateMode {
+  const file = join(profile, 'update-fixture.json')
+  if (!existsSync(file)) return 'install'
+  const mode = (JSON.parse(readFileSync(file, 'utf8')) as { mode?: unknown }).mode
+  return mode === 'notify' || mode === 'open-installer' ? mode : 'install'
 }
 
 /** Only constructed after isolatedTestHarness validated the opt-in TEMP marker. */

@@ -204,6 +204,8 @@ export interface UiPreferences {
   compactUseDisplayFilter: boolean
   compactAlwaysOnTop: boolean
   closeBehavior: 'tray' | 'quit'
+  /** One-time Telegram community invite; never shown again after any action. */
+  communityInviteSeen: boolean
 }
 
 /** Project rows carry joined user flags so lists render without extra fetches. */
@@ -335,7 +337,8 @@ export function defaultUiPreferences(): UiPreferences {
     autoRevealNew: false,
     compactUseDisplayFilter: false,
     compactAlwaysOnTop: false,
-    closeBehavior: 'tray'
+    closeBehavior: 'tray',
+    communityInviteSeen: false
   }
 }
 
@@ -441,7 +444,8 @@ function sanitizeUiPreferences(v: unknown): UiPreferences {
     autoRevealNew: o['autoRevealNew'] === true,
     compactUseDisplayFilter: o['compactUseDisplayFilter'] === true,
     compactAlwaysOnTop: o['compactAlwaysOnTop'] === true,
-    closeBehavior: o['closeBehavior'] === 'quit' ? 'quit' : 'tray'
+    closeBehavior: o['closeBehavior'] === 'quit' ? 'quit' : 'tray',
+    communityInviteSeen: o['communityInviteSeen'] === true
   }
 }
 

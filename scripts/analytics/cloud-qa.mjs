@@ -49,7 +49,7 @@ export async function runCloudQa(client, project, token, eventRows = 18, capture
   writeFileSync(join(root, '.rased-test-profile'), 'Synthetic PostHog cloud QA only')
   const reference = randomUUID(), version = JSON.parse(readFileSync('package.json', 'utf8')).version
   const consent = { state: 'enabled', identity: reference, disclosure: TELEMETRY_DISCLOSURE, generation: 1, prompted: true }
-  const data = { directory, consent, config: { host: 'https://us.i.posthog.com', environment: 'qa', token }, context: { appVersion: version, environment: 'qa', language: 'en', windowsFamily: '10' } }
+  const data = { directory, consent, config: { host: 'https://us.i.posthog.com', environment: 'qa', token }, context: { appVersion: version, environment: 'qa', language: 'en', osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64' } }
   const entry = resolve('out/main/telemetryWorker.js')
   let worker, messages = [], request = 0, error
   const until = async (condition, timeout = 10000) => {

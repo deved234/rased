@@ -20,7 +20,7 @@ const pause = () => new Promise(r=>setTimeout(r,20))
 async function until(fn) { const deadline=Date.now()+7000; while(Date.now()<deadline) { const value=fn(); if(value) return value; await pause() } throw Error('Timed out waiting for built telemetry worker') }
 function boot(c,configured=true,appVersion='0.8.1') {
   messages=[]
-  const data={directory,consent:c,config:configured?{host:'https://us.i.posthog.com',environment:'qa',token:'synthetic-test-not-usable-'+configuration}:null,context:{appVersion,environment:'qa',language:'en',windowsFamily:'10'}}
+  const data={directory,consent:c,config:configured?{host:'https://us.i.posthog.com',environment:'qa',token:'synthetic-test-not-usable-'+configuration}:null,context:{appVersion,environment:'qa',language:'en',osFamily:'windows-10',osMajor:'none',cpuArch:'x64'}}
   worker=new Worker(`
     const {parentPort}=require('node:worker_threads'); let mode='success',offset=${timeOffset},realNow=Date.now;
     Date.now=()=>realNow()+offset;

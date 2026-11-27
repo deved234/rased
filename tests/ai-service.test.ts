@@ -10,14 +10,15 @@ import { openDatabase, type Db } from '../src/storage/db.js'
 import { getSettingRaw, setSettingRaw, upsertProjectDetails, upsertProjectsBatch } from '../src/storage/repositories.js'
 import { getProposalDraft, saveProposalDraft } from '../src/storage/proposalDrafts.js'
 import { AiService } from '../src/main/ai/service.js'
-import { aiKeyPath, deleteAiKey, keyStatus, migrateGeminiKey, readAiKey, saveAiKey } from '../src/main/ai/keyStore.js'
+import { aiKeyPath, deleteAiKey, keyStatus, keyStorageAvailable, migrateGeminiKey, readAiKey, saveAiKey } from '../src/main/ai/keyStore.js'
 import { getAiSettings, getCapabilities, saveAiSettings } from '../src/main/ai/settings.js'
-import { defaultAiSettings, type AiSelection } from '../src/shared/ai.js'
+import { aiErrorText, defaultAiSettings, type AiSelection } from '../src/shared/ai.js'
 import { LEGACY_PROFILE_ID } from '../src/shared/proposalProfiles.js'
 
-const encryption = vi.hoisted(() => ({ available: true, fail: false }))
+const encryption = vi.hoisted(() => ({ available: true, fail: false, backend: 'gnome_libsecret' }))
 vi.mock('electron', () => ({ safeStorage: {
   isEncryptionAvailable: () => encryption.available,
+  getSelectedStorageBackend: () => encryption.backend,
   encryptString: (s: string) => { if (encryption.fail) throw Error('encryption failed'); return Buffer.from('encrypted:' + s) },
   decryptString: (b: Buffer) => { if (!b.toString().startsWith('encrypted:')) throw Error('bad ciphertext'); return b.toString().slice(10) }
 } }))
@@ -26,7 +27,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(join(tmpdir(), 'rased-ai-test-'))
   db = openDatabase(join(dir, 'rased.db'))
   id = upsertProjectsBatch(db, [{ source: 'mostaql', externalId: 'ai-test', url: 'https://mostaql.com/go/123', title: 'Private real project', descriptionExcerpt: 'Real project description', publishedAt: null, publishedRaw: null }], { now: new Date().toISOString(), discoveryKind: 'live' }).insertedIds[0]!
-  encryption.available = true; encryption.fail = false
+  encryption.available = true; encryption.fail = false; encryption.backend = 'gnome_libsecret'
 })
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); db.close(); fs.rmSync(dir, { recursive: true, force: true }) })
 const selection: AiSelection = { provider: 'openai', model: 'gpt-4.1-mini' }
@@ -76,6 +77,25 @@ describe('encrypted provider keys and migrations', () => {
     expect(keyStatus(dir, 'openai')).toMatchObject({ hasKey: true, keyReadable: false })
     expect(() => readAiKey(dir, 'openai')).toThrow('key-unreadable')
     expect(saveAiKey(dir, 'anthropic', 'bad key with whitespace')).toBe(false)
+  })
+  it('rejects Linux basic_text safeStorage fallback while allowing real keyring backends', () => {
+    const platform = vi.spyOn(process, 'platform', 'get')
+    platform.mockReturnValue('linux')
+    encryption.available = true
+    encryption.backend = 'basic_text'
+    expect(keyStorageAvailable()).toBe(false)
+    expect(saveAiKey(dir, 'openai', 'fake-test-key-123456')).toBe(false)
+    expect(fs.existsSync(aiKeyPath(dir, 'openai'))).toBe(false)
+    encryption.backend = 'gnome_libsecret'
+    expect(keyStorageAvailable()).toBe(true)
+    expect(saveAiKey(dir, 'openai', 'fake-test-key-123456')).toBe(true)
+    platform.mockReturnValue('win32')
+    encryption.backend = 'basic_text'
+    expect(keyStorageAvailable()).toBe(true)
+    encryption.available = false
+    expect(keyStorageAvailable()).toBe(false)
+    expect(aiErrorText('keyring-unavailable', false)).toBe('Saving keys needs the system keyring (GNOME Keyring or KWallet). Enable it and try again.')
+    expect(aiErrorText('keyring-unavailable', true)).toBe('يتطلب حفظ المفتاح خزنة مفاتيح النظام (GNOME Keyring أو KWallet). فعّلها ثم أعد المحاولة.')
   })
   it('migrates a version-six database without changing old drafts or profiles', () => {
     const oldPath = join(dir, 'old.db')

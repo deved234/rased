@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { ConsentStore } from './consent.js'
 import type { TelemetryConfig } from './config.js'
 import type { TelemetryMessage, TelemetryWorkerData } from './protocol.js'
-import { TELEMETRY_DISCLOSURE, validTelemetryProperties, watchDailyBuckets, watchSlotBucket, type AnalyticsStatus, type TelemetryEvents, type TelemetryName, type TelemetrySummaryName } from '../../shared/telemetry.js'
+import { TELEMETRY_DISCLOSURE, validTelemetryProperties, watchDailyBuckets, watchSlotBucket, type AnalyticsStatus, type DeviceContext, type TelemetryEvents, type TelemetryName, type TelemetrySummaryName } from '../../shared/telemetry.js'
 import type { SourceHealth } from '../../shared/types.js'
 import type { SourceId } from '../../shared/sources.js'
 import type { WatchSource } from '../../shared/projectWatch.js'
@@ -24,7 +24,7 @@ export class TelemetryService {
   private restartCount = 0
   private healthSeen = new Map<SourceId, { attempt: string | null; state: string }>()
   private summary: Pick<AnalyticsStatus, 'queued' | 'dropped' | 'transport' | 'lastAcceptedAt'> = { queued: 0, dropped: 0, transport: 'unavailable', lastAcceptedAt: null }
-  constructor(private options: { root: string; entry: string; version: string; language: 'ar' | 'en'; windowsFamily: '10' | '11' | 'other'; config: TelemetryConfig | null; fixture?: boolean; changed: () => void }) {
+  constructor(private options: { root: string; entry: string; version: string; language: 'ar' | 'en'; device: DeviceContext; config: TelemetryConfig | null; fixture?: boolean; changed: () => void }) {
     this.consent = new ConsentStore(options.root)
   }
   start(notificationBoot: boolean): void {
@@ -37,7 +37,7 @@ export class TelemetryService {
       }
       return
     }
-    const data: TelemetryWorkerData = { directory: this.consent.directory, consent: this.consent.snapshot(), config: this.options.config, fixture: this.options.fixture === true, context: { appVersion: this.options.version, language: this.options.language, windowsFamily: this.options.windowsFamily, environment: this.options.fixture ? 'qa' : this.options.config?.environment ?? 'production' } }
+    const data: TelemetryWorkerData = { directory: this.consent.directory, consent: this.consent.snapshot(), config: this.options.config, fixture: this.options.fixture === true, context: { ...this.options.device, appVersion: this.options.version, language: this.options.language, environment: this.options.fixture ? 'qa' : this.options.config?.environment ?? 'production' } }
     try {
       const worker = new Worker(this.options.entry, { workerData: data })
       this.worker = worker
@@ -92,7 +92,7 @@ export class TelemetryService {
     this.worker = null
     // Never open a second SQLite connection until the previous worker exits.
     await old?.terminate()
-    const data: TelemetryWorkerData = { directory: this.consent.directory, consent: this.consent.snapshot(), config: null, purgeOnly: true, fixture: this.options.fixture, context: { appVersion: this.options.version, environment: 'qa', language: this.options.language, windowsFamily: this.options.windowsFamily } }
+    const data: TelemetryWorkerData = { directory: this.consent.directory, consent: this.consent.snapshot(), config: null, purgeOnly: true, fixture: this.options.fixture, context: { ...this.options.device, appVersion: this.options.version, environment: 'qa', language: this.options.language } }
     const worker = new Worker(this.options.entry, { workerData: data })
     let done = false
     try {

@@ -6,7 +6,9 @@ import {join,resolve} from 'node:path'
 import {createConnection} from 'node:net'
 import {createHash} from 'node:crypto'
 import {spawn,spawnSync} from 'node:child_process'
-import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call,sleep,persistentSession} from './cdp-tools.mjs'
+import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call,sleep,persistentSession,settles,electronPath} from './cdp-tools.mjs'
+// Quick Apply is Windows-only for now (docs/QUICK_APPLY.md); other systems skip the retired bridge flow.
+if(process.platform!=='win32'){console.log('Quick Apply bridge is Windows-only; skipped on '+process.platform+'.');process.exit(0)}
 const args=parseArgs(process.argv.slice(2)), profile=newProfile(),port=9366
 writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
 const db=new DatabaseSync(join(profile,'rased.db'))
@@ -18,7 +20,7 @@ for(const [id,source] of [[1,'mostaql'],[2,'nafezly'],[3,'khamsat']])db.prepare(
 db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify({khamsatEnabled:false,nafezlyEnabled:false,quickApply:{enabled:true,template:'Preserved template',budgetPositionPercent:50,extraDays:1}}))
 db.prepare('INSERT INTO quick_apply_tickets(ticket,project_id,expires_at) VALUES(?,?,?)').run('a'.repeat(32),1,Date.now()+60000)
 for(const name of ['rased-quick-apply-mostaql','rased-quick-apply-nafezly','unrelated-profile']){const path=join(profile,'Partitions',name);mkdirSync(path,{recursive:true});writeFileSync(join(path,'Cookies'),'fixture')}
-const child=startApp({exe:args.exe??'node_modules/electron/dist/electron.exe',app:args.app??(args.exe?undefined:'out/main/index.js'),profile,port})
+const child=startApp({exe:args.exe??electronPath(),app:args.app??(args.exe?undefined:'out/main/index.js'),profile,port})
 let checks=0
 let bridgeSocket
 const check=(name,value)=>{assert.ok(value,name);checks++;console.log('PASS '+name)}
@@ -46,7 +48,7 @@ try {
  await eventually(()=>ev("!!document.getElementById('quick-template-source')"))
  check('settings show preserved template',(await ev('window.rased.getProfileSet()')).set.profiles[0].quickTemplate==='Preserved template'&&await ev("!!document.querySelector('#quick-template-source button')&&!document.querySelector('#quick-template')"))
  check('extension toggle requires pairing and embedded login is absent',await ev("!Array.from(document.querySelectorAll('button')).some(b=>/الدخول|حذف جلسة|Sign in|Delete session/.test(b.textContent)) && document.querySelector('section.set-group input[type=checkbox]').disabled"))
- check('extension setup and Khamsat exclusion disclosed',await ev("document.body.textContent.includes('خمسات غير مشمول')&&document.body.textContent.includes('تحميل إضافة غير مضغوطة')"))
+ check('extension setup and Khamsat exclusion disclosed',await settles(()=>ev("document.body.textContent.includes('خمسات غير مشمول')&&document.body.textContent.includes('تحميل إضافة غير مضغوطة')")))
  mkdirSync('.local/qa/screenshots/quick-apply',{recursive:true})
  writeFileSync('.local/qa/screenshots/quick-apply/ar-settings.png',Buffer.from((await call(ws,'Page.captureScreenshot',{format:'png'})).data,'base64'))
  await saveTemplate('Updated template')
@@ -56,7 +58,7 @@ try {
  check('legacy clients cannot re-enable the retired flow',(await ev('window.rased.getSettings()')).quickApply.enabled===false)
  await ev("window.rased.updateSettings({language:'en'})")
  await eventually(()=>ev("document.documentElement.lang==='en'"))
- check('English explains unpacked extension setup',await ev("document.body.textContent.includes('Load unpacked')"))
+ check('English explains unpacked extension setup',await settles(()=>ev("document.body.textContent.includes('Load unpacked')")))
  writeFileSync('.local/qa/screenshots/quick-apply/en-settings.png',Buffer.from((await call(ws,'Page.captureScreenshot',{format:'png'})).data,'base64'))
  check('no embedded platform webcontents',(await targets(port)).every(t=>!/^https:\/\/(mostaql|nafezly)\.com/.test(t.url)))
  check('extension files prepared through trusted main IPC',(await ev("window.rased.extensionAction({action:'prepare'})")).ok)
@@ -94,7 +96,7 @@ try {
  await clickQuick('.quick-template-action')
  await eventually(()=>prepares().length>countBefore)
  check('one template click prepares immediately without a dialog',prepares().at(-1).settings.template==='Integration draft'&&await ev("!document.querySelector('.quick-dialog')"))
- check('both actions disabled while preparing',await ev("document.querySelector('.quick-template-action').disabled&&document.querySelector('.quick-assistant-action').disabled"))
+ check('both actions disabled while preparing',await settles(()=>ev("document.querySelector('.quick-template-action').disabled&&document.querySelector('.quick-assistant-action').disabled")))
  await finish()
  await ev("window.rased.saveProposalDraft({projectId:2,proposal:'Nafezly saved draft',assumptions:[],questions:[]})")
  await ev("location.hash='#/project/2'")
@@ -112,7 +114,7 @@ try {
  const notificationTicket='f'.repeat(32),notificationRequest='c'.repeat(32)
  db.prepare('INSERT INTO extension_jobs(ticket,request_id,project_id,expires_at,updated_at) VALUES(?,?,1,?,?)').run(notificationTicket,notificationRequest,Date.now()+60000,Date.now())
  const notificationEnv={...process.env};delete notificationEnv.ELECTRON_RUN_AS_NODE;delete notificationEnv.ELECTRON_RENDERER_URL
- const second=spawn(resolve(args.exe??'node_modules/electron/dist/electron.exe'),[...(args.app??(args.exe?undefined:'out/main/index.js')?[resolve(args.app??'out/main/index.js')]:[]),'--user-data-dir='+profile,'--rased-test','rased-dev://quick-apply-v2?ticket='+notificationTicket],{env:notificationEnv,windowsHide:true,stdio:'ignore'})
+ const second=spawn(resolve(args.exe??electronPath()),[...(args.app??(args.exe?undefined:'out/main/index.js')?[resolve(args.app??'out/main/index.js')]:[]),'--user-data-dir='+profile,'--rased-test','rased-dev://quick-apply-v2?ticket='+notificationTicket],{env:notificationEnv,windowsHide:true,stdio:'ignore'})
  await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('notification handoff timeout')),10000);second.once('exit',()=>{clearTimeout(timeout);resolve()});second.once('error',reject)})
  await eventually(()=>db.prepare('SELECT error FROM extension_jobs WHERE request_id=?').get(notificationRequest)?.error==='text-empty')
  await eventually(()=>ev("location.hash==='#/settings/ai'"))
@@ -145,7 +147,7 @@ try {
  await eventually(()=>ev("!document.querySelector('.quick-assistant-action').disabled"))
  await clickQuick('.quick-assistant-action')
  await eventually(()=>ev("!!document.querySelector('.proposal-page')"))
- check('without standing consent the Assistant opens with an explanation and per-request consent',await ev("location.hash.includes('reason=consent-required')&&!document.querySelector('.proposal-consent input').checked&&document.querySelector('.proposal-page').textContent.includes('standing consent')"))
+ check('without standing consent the Assistant opens with an explanation and per-request consent',await settles(()=>ev("location.hash.includes('reason=consent-required')&&!document.querySelector('.proposal-consent input').checked&&document.querySelector('.proposal-page').textContent.includes('standing consent')")))
  check('standing consent is off by default',!(await ev('window.rased.getAiSetup()')).quickConsent)
  check('standing consent binds the current selection',(await ev("window.rased.setQuickConsent(true,{provider:'gemini',model:'gemini-2.5-flash'})")).ok)
  const proposalEvents=async()=>{
@@ -176,7 +178,7 @@ try {
  await eventually(()=>ev("!!document.querySelector('.quick-assistant-action')"))
  await clickQuick('.quick-assistant-action')
  const writing=await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.assistant?.phase==='writing')
- check('writing progress and cancellation visible',await ev("document.querySelector('.quick-action').textContent.includes('Writing proposal')&&[...document.querySelectorAll('.quick-action button')].some(b=>b.textContent==='Cancel')"))
+ check('writing progress and cancellation visible',await settles(()=>ev("document.querySelector('.quick-action').textContent.includes('Writing proposal')&&[...document.querySelectorAll('.quick-action button')].some(b=>b.textContent==='Cancel')")))
  check('generation reserves broker against template and duplicate Assistant actions',(await ev('window.rased.quickApplyProject(1)')).error==='busy'&&(await ev('window.rased.quickApplyAssistant(1)')).error==='busy')
  await ev("window.rased.cancelQuickAssistant('wrong-operation')")
  check('wrong cancellation identity cannot cancel the operation',(await ev('window.rased.getExtensionStatus()')).assistant?.operationId===writing.assistant.operationId)
@@ -218,7 +220,7 @@ try {
  for(const lang of ['ar','en']){
    await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)},ui:{...${JSON.stringify(uiBefore)},textScale:125}})`)
    await eventually(()=>ev(`document.documentElement.lang===${JSON.stringify(lang)}`))
-   check(`both quick actions fit at 900px and 125% text in ${lang}`,await ev("(()=>{const bs=[...document.querySelectorAll('.quick-template-action,.quick-assistant-action')];return bs.length===2&&bs.every(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth})&&document.documentElement.scrollWidth<=innerWidth})()"))
+   check(`both quick actions fit at 900px and 125% text in ${lang}`,await settles(()=>ev("(()=>{const bs=[...document.querySelectorAll('.quick-template-action,.quick-assistant-action')];return bs.length===2&&bs.every(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=innerWidth})&&document.documentElement.scrollWidth<=innerWidth})()")))
    writeFileSync(`.local/qa/screenshots/quick-apply/${lang}-actions.png`,Buffer.from((await call(ws,'Page.captureScreenshot',{format:'png'})).data,'base64'))
  }
  await viewport.call('Emulation.clearDeviceMetricsOverride');viewport.close()

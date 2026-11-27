@@ -2,6 +2,8 @@
 
 The following behavior is available starting with RASED 0.8.1. Notifications created by older versions retain their original activation behavior.
 
+> **macOS and Linux:** RASED uses the normal system notification flow. The Windows foreground activation, persistent ticket/COM relay and browser-focus details below apply to Windows only.
+
 ## Opening a project
 
 Click a project notification, or **View project**, to open its original link in your default browser. RASED requests browser focus only after your click. Receiving an alert never brings the browser or RASED forward by itself.
@@ -40,6 +42,8 @@ The Windows adapter reads process executable paths/window handles transiently to
 - `npm run test:notification-activation` checks Electron/preload/SQLite lifecycle with OS effects substituted. It does **not** certify physical notification clicks or browser focus. Those require a separate Windows desktop check, including minimized/closed browsers and multiple profiles.
 
 ## بالعربي
+
+على macOS وLinux يستخدم راصد إشعارات النظام العادية؛ تفاصيل تفعيل المقدمة وتذاكر Windows ومسار COM أدناه تخص Windows فقط.
 
 اضغط الإشعار أو «عرض المشروع» لفتح الرابط في المتصفح الافتراضي. راصد يطلب إظهار المتصفح عند الضغطة فقط، ويحاول منع فتح تبويب مكرر. التقديم السريع مستقل عن عرض المشروع، ولا يحتاج عرض المشروع إضافة Chrome.
 

@@ -2,7 +2,7 @@
 
 ## User flow
 
-Version **0.12.1** fixes Mostaql project watch, follows the Windows proxy/PAC settings (including VPNs in system-proxy mode) for monitoring, details and project watch and reads Arabic dual durations; it has no migration, analytics or legal change, so 0.12.0 can still open its database. See the [0.12.1 release notes](RELEASE_0.12.1.md). The installer is **RASED-Setup-0.12.1.exe**.
+Version **0.14.0** adds macOS and Linux (beta) builds; each system updates differently (see Platforms below). Version **0.12.1** fixes Mostaql project watch, follows the Windows proxy/PAC settings (including VPNs in system-proxy mode) for monitoring, details and project watch and reads Arabic dual durations; it has no migration, analytics or legal change, so 0.12.0 can still open its database. See the [0.12.1 release notes](RELEASE_0.12.1.md). The installer is **RASED-Setup-0.12.1.exe**.
 
 Version **0.12.0** adds project watch for Mostaql, Nafezly and KAF (Watch button, Watched projects screen, contact and status alerts, away summary). Terms and Privacy are dated 2026-11-15; analytics disclosure `2026-11-15-v5` adds watch events, so previously enabled participants accept again. Migration 11 means **0.11.0 cannot open a database upgraded by 0.12.0**; keep a pre-upgrade backup if you may go back. See the [0.12.0 release notes](RELEASE_0.12.0.md).
 
@@ -11,6 +11,17 @@ Version **0.12.0** adds project watch for Mostaql, Nafezly and KAF (Watch button
 The page displays current/new versions, plain-text release notes, progress, last check time and retry states. The banner can be dismissed for the session. A downloaded update remains pending until requested. On restart, the updater can reuse its validated cache after checking the release again; the application does not pretend a previous session is still downloaded.
 
 The main process restricts check/download/install IPC to the main window. Installation needs a main-generated request and renderer confirmation after `requestAction` has handled dirty notes. `autoInstallOnAppQuit=false`, `autoDownload=false`, `allowPrerelease=false`, `allowDowngrade=false`. During the updater quit path, existing shutdown aborts source requests, drains writes, closes SQLite and quits without asking the same draft question twice. The app's ID and data location are unchanged.
+
+## Platforms
+
+| Platform | Package | Update behavior |
+| --- | --- | --- |
+| Windows (x64) | NSIS installer (`RASED-Setup-<version>.exe`) | Download inside the app, then **Restart and update**. |
+| macOS (Intel + Apple Silicon, beta) | Universal dmg/zip (`RASED-<version>-mac.dmg`) | Download inside the app (checksum verified), then **Open installer**. RASED closes and the dmg opens; drag RASED into Applications to replace the old version. |
+| Linux (x64) AppImage | `RASED-<version>-linux-x86_64.AppImage` | Same full in-app update as Windows: download, then restart and install. |
+| Linux (x64) deb | `RASED-<version>-linux-amd64.deb` | Notification only. **Open download page** opens the GitHub releases page; install the new `.deb` yourself. |
+
+All supported packages check GitHub at startup and every 6 hours, and download only when you ask.
 
 ## Feed and integrity
 

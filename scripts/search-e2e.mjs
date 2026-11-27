@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9570)
 const output = resolve('.local/phase-3-search-performance-2026-10-21/integration'); mkdirSync(output, { recursive: true })
 const file = join(profile, 'rased.db'), db = new DatabaseSync(file)
@@ -16,7 +16,7 @@ for (let id = 1; id <= 260; id++) insert.run(id, String(id), 'https://mostaql.co
 db.exec("INSERT INTO project_details(project_id,description_text,status) VALUES(1,'BodyOnly café','ready')")
 db.prepare("INSERT INTO settings VALUES('app',?)").run(JSON.stringify({ language: 'en', mostaqlEnabled: false, nafezlyEnabled: false, khamsatEnabled: false, kafEnabled: false, autoRevealNewAtTop: false }))
 db.close()
-const child = startApp({ exe: args.exe ?? 'node_modules/electron/dist/electron.exe', app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port, captureOutput: true })
+const child = startApp({ exe: args.exe ?? electronPath(), app: args.app === '' ? '' : args.app ?? 'out/main/index.js', profile, port, captureOutput: true })
 let electronOutput = ''
 child.stdout.on('data', data => { electronOutput += data.toString() })
 child.stderr.on('data', data => { electronOutput += data.toString() })
@@ -63,9 +63,9 @@ try {
   await invoke('saveProposalDraft', { projectId: 3, proposal: 'PrivateDraft', assumptions: [], questions: [] })
   check('private fields are opt-in and transport contains no private text', (await invoke('queryProjectsPage', { ...def, search: 'PrivateNote' }, 50, 0)).total === 0 && (await invoke('queryProjectsPage', { ...def, search: 'PrivateNote', searchInNotes: true }, 50, 0)).rows[0]?.matchedFields.join() === 'note' && (await invoke('queryProjectsPage', { ...def, search: 'PrivateDraft', searchInDrafts: true }, 50, 0)).rows[0]?.id === 3)
   check('batched matching uses the same SQL predicate', JSON.stringify(await invoke('matchProjectIds', { ...def, search: 'PrivateDraft', searchInDrafts: true }, [1, 2, 3, 3])) === '[3]')
-  check('oversized match batches reject', await ev(`window.rased.matchProjectIds(${JSON.stringify(def)},Array(201).fill(1)).then(()=>false,()=>true)`))
+  check('oversized match batches reject', await settles(() => ev(`window.rased.matchProjectIds(${JSON.stringify(def)},Array(201).fill(1)).then(()=>false,()=>true)`)))
   await input('bodyonly'); await eventually(() => ev(`document.querySelectorAll('[data-row]').length===1 && !!document.querySelector('[data-row="1"]')`))
-  check('visible search explains cached-body match', await ev('document.querySelector(".list-scroll").textContent.includes("cached description")'))
+  check('visible search explains cached-body match', await settles(() => ev('document.querySelector(".list-scroll").textContent.includes("cached description")')))
   await input('NoMatchYet'); await eventually(() => ev('document.querySelectorAll("[data-row]").length===0'))
   await invoke('updateSettings', { displayQuery: { ...def, search: 'NoMatchYet', searchInNotes: true } })
   await invoke('updateProjectUserState', 8, { note: 'NoMatchYet' })
@@ -88,7 +88,7 @@ try {
     await invoke('updateSettings', { language, ui: { theme, textScale: 125 } })
     await session.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 650, mobile: false, deviceScaleFactor: 1 })
     await ev('document.querySelector(".filter-trigger").click()'); await eventually(() => ev('!!document.querySelector(".drawer")'))
-    check(language + '/' + theme + ' search controls fit and are labelled', await ev('(()=>{const d=document.querySelector(".drawer");return d.scrollWidth<=d.clientWidth+1&&d.querySelectorAll(".switch input[aria-label]").length>=3})()'))
+    check(language + '/' + theme + ' search controls fit and are labelled', await settles(() => ev('(()=>{const d=document.querySelector(".drawer");return d.scrollWidth<=d.clientWidth+1&&d.querySelectorAll(".switch input[aria-label]").length>=3})()')))
     writeFileSync(join(output, language + '-' + theme + '.png'), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
     await call(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
     await eventually(() => ev('!document.querySelector(".drawer")'))

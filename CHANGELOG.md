@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-11-28
+
+- macOS (beta, universal dmg/zip, ad-hoc signed and not notarized) and Linux (beta, x64 AppImage and deb) builds alongside Windows, with native macOS window buttons and a menu-bar template icon, a Linux close-to-minimize fallback, login-item/autostart support, and Keychain or secret-service key storage (Linux refuses to save keys without a keyring).
+- Platform update paths: Windows and AppImage install in place; macOS downloads and checksum-verifies the dmg, then opens it; deb shows the new version and opens the release page.
+- Quick Apply and its Chrome extension remain Windows-only and are hidden on macOS and Linux.
+- Telegram community links (channel and group) in What's New and About, plus a one-time dismissible invite.
+- Updated Terms and Privacy dated 2026-11-27, and analytics disclosure `2026-11-27-v6`. It replaces the Windows family with OS family, macOS major version and processor type, and words feature outcomes as "whether each feature was used and succeeded". The official build asks for acceptance again.
+- Plain-language install guides for macOS and Linux, with direct download links.
+- CI now runs unit, Electron and packaging checks on Windows, macOS and Ubuntu.
+- No database migration.
+
 ## 0.12.1 — 2026-11-20
 
 - Mostaql project watch now works. In 0.12.0 every Mostaql check was rejected before any request because stored Mostaql links use `/go/<id>`; watch now follows that link's redirect to the project page under the same same-site rules. Existing Mostaql watches resume on their own after updating; their first successful check is a silent baseline. Nafezly and KAF watch were not affected.

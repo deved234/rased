@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { eventually, newProfile, startApp, stopApp, pageWs, evaluate, parseArgs } from './cdp-tools.mjs'
+import { eventually, newProfile, startApp, stopApp, pageWs, evaluate, parseArgs, electronPath } from './cdp-tools.mjs'
 const args=parseArgs(process.argv.slice(2)), profile=newProfile(), port=Number(args.port??9584)
-const exe=args.exe??'node_modules/electron/dist/electron.exe',app=args.app===''?'':args.app??'out/main/index.js'
+const exe=args.exe??electronPath(),app=args.app===''?'':args.app??'out/main/index.js'
 const db=new DatabaseSync(join(profile,'rased.db'))
 const migrations=[...readFileSync('src/storage/migrations.ts','utf8').matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
 for(const m of migrations)db.exec(m[1])

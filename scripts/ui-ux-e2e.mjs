@@ -4,10 +4,11 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, sleep, startApp, stopApp, persistentSession } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, sleep, startApp, stopApp, persistentSession, electronPath } from './cdp-tools.mjs'
 import { testWhatsNew } from './whats-new-e2e.mjs'
 const output=resolve('.local/ui-ux-implementation-2026-10-09'),profile=newProfile(),port=9392
 mkdirSync(join(output,'screenshots'),{recursive:true})
+const args=parseArgs(process.argv.slice(2))
 const db=new DatabaseSync(join(profile,'rased.db')),schema=readFileSync('src/storage/migrations.ts','utf8'),migrations=[...schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
 for(const m of migrations)db.exec(m[1]);db.exec(`PRAGMA user_version=${migrations.length}`)
 const now=new Date().toISOString()
@@ -26,7 +27,7 @@ db.prepare("INSERT INTO proposal_drafts(project_id,proposal,assumptions_json,que
 db.close()
 for(const file of ['rss-fixture.xml','nafezly-fixture.xml'])writeFileSync(join(profile,file),'<rss version="2.0"><channel><title>Audit</title></channel></rss>')
 writeFileSync(join(profile,'detail-fixture.html'),'<html><body>Audit fixture</body></html>');writeFileSync(join(profile,'khamsat-fixture.html'),'<html><body>Audit fixture</body></html>')
-const child=startApp({exe:'node_modules/electron/dist/electron.exe',app:'out/main/index.js',profile,port}),results={profile,screens:[],checks:{}}
+const child=startApp({exe:args.exe??electronPath(),app:'out/main/index.js',profile,port}),results={profile,screens:[],checks:{}}
 let ws, session
 const ev=e=>evaluate(ws,e),wait=e=>eventually(()=>ev(e))
 const nav=async hash=>{await ev(`location.hash=${JSON.stringify(hash)}`);await sleep(400)}
@@ -127,4 +128,4 @@ try{
  } finally {damagedDb.close()}
  assert.equal(results.checks.draftAccessibleName.ariaLabel,'Proposal draft text');assert.ok(results.screens.every(s=>s.unnamedFields.length===0),'all visible fields have programmatic names');assert.ok(results.screens.filter(s=>s.name.includes('900')).every(s=>s.outsideHorizontal.length===0),'narrow layouts keep controls within viewport');assert.ok(results.screens.every(s=>s.nestedControls===0),'opportunity articles no longer nest controls inside buttons');writeFileSync(join(output,'results.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results.checks,null,2))
 }finally{writeFileSync(join(output,'results.json'),JSON.stringify(results,null,2));session?.close();await stopApp(child)}
-await testWhatsNew()
+await testWhatsNew(args.exe)

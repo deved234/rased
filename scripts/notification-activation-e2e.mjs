@@ -5,10 +5,10 @@ import { spawn } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { evaluate, eventually, newProfile, pageWs, parseArgs, stopApp } from './cdp-tools.mjs'
+import { evaluate, eventually, newProfile, pageWs, parseArgs, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9564)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
+const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const db = new DatabaseSync(join(profile, 'rased.db')), schema = readFileSync('src/storage/migrations.ts', 'utf8')
 const migrations = [...schema.matchAll(/\/\* \d+ \*\/ `([\s\S]*?)`/g)]
 for (const migration of migrations) db.exec(migration[1])

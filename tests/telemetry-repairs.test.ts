@@ -26,7 +26,7 @@ const { dashboardDefinitions } = await import(dashboardsPath)
 const roots: string[] = []
 const root = (): string => { const p = mkdtempSync(join(tmpdir(), 'rased-test-repairs-')); roots.push(p); return p }
 afterEach(() => { for (const p of roots.splice(0)) rmSync(p, { recursive: true, force: true }) })
-const event = (identity = randomUUID()): TelemetryEnvelope => ({ eventId: randomUUID(), name: 'feature_used', occurredAt: new Date(Math.floor(Date.now() / 60000) * 60000).toISOString(), distinctId: identity, schemaVersion: 1, environment: 'qa', appVersion: '0.8.1', language: 'en', windowsFamily: '10', count: 1, properties: { feature: 'bookmark', outcome: 'success' } })
+const event = (identity = randomUUID()): TelemetryEnvelope => ({ eventId: randomUUID(), name: 'feature_used', occurredAt: new Date(Math.floor(Date.now() / 60000) * 60000).toISOString(), distinctId: identity, schemaVersion: 2, environment: 'qa', appVersion: '0.8.1', language: 'en', osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64', count: 1, properties: { feature: 'bookmark', outcome: 'success' } })
 
 it('preserves a previous decline when the disclosure changes', () => {
   const p = root(), c = new ConsentStore(p), declined = c.change('disable')
@@ -239,7 +239,7 @@ it('counts process startup once even when its telemetry worker recovers', async 
   const p=root(),entry=join(p,'sender.cjs'),log=join(p,'messages.jsonl')
   new ConsentStore(p).change('enable')
   writeFileSync(entry,`const {parentPort}=require('node:worker_threads');const fs=require('node:fs');parentPort.on('message',m=>{if(m.type==='record')fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(m)+'\\n');if(m.type==='close')parentPort.close();else parentPort.postMessage({type:'status',request:m.request,transport:'idle'})});parentPort.postMessage({type:'status',transport:'idle'});`)
-  const service=new TelemetryService({root:p,entry,version:'0.8.1',language:'en',windowsFamily:'10',config:null,fixture:true,changed:()=>{}})
+  const service=new TelemetryService({root:p,entry,version:'0.8.1',language:'en',device:{osFamily:'windows-10',osMajor:'none',cpuArch:'x64'},config:null,fixture:true,changed:()=>{}})
   const messages=()=>existsSync(log)?readFileSync(log,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)):[]
   try {
     service.start(false)

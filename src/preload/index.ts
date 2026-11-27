@@ -30,6 +30,7 @@ function sub<T>(channel: string, cb: (v: T) => void): () => void {
 }
 
 const api: RasedApi = {
+  platform: process.platform,
   databaseReady: () => ipcRenderer.invoke(IPC.databaseReady),
   getSidebarCounts: () => (ipcRenderer.invoke(IPC.getSidebarCounts) as Promise<SearchReply<{ unread: number; saved: number; watching: number }>>).then(unwrapSearchReply),
   matchProjectIds: (definition, ids) => (ipcRenderer.invoke(IPC.matchProjectIds, { definition, ids }) as Promise<SearchReply<number[]>>).then(unwrapSearchReply),
@@ -67,6 +68,7 @@ const api: RasedApi = {
   downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate) as Promise<MutationResult>,
   installUpdate: () => ipcRenderer.invoke(IPC.installUpdate) as Promise<MutationResult>,
   confirmUpdateInstall: () => ipcRenderer.invoke(IPC.confirmUpdateInstall) as Promise<MutationResult>,
+  openUpdatePage: () => ipcRenderer.invoke(IPC.openUpdatePage) as Promise<MutationResult>,
   onUpdateState: (cb) => sub(IPC.updateState, cb),
   onRequestUpdateInstall: (cb) => sub(IPC.requestUpdateInstall, cb),
   getProjects: (q: ProjectQuery) => ipcRenderer.invoke(IPC.getProjects, q) as Promise<Project[]>,

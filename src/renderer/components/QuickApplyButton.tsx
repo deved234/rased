@@ -13,6 +13,7 @@ export function QuickApplyButton({id,source,lang}:{id:number;source:string;lang:
   const job=status?.lastJob?.projectId===id?status.lastJob:null
   const assistant=status?.assistant
   const active=pending||!!assistant||!!status?.lastJob&&activePhase(status.lastJob.phase)
+  if(rased.platform!=='win32')return null
   if(!sourceAllowed(source))return null
   const run=async(useAssistant:boolean):Promise<void>=>{
     if(locked.current)return

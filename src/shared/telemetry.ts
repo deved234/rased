@@ -1,7 +1,7 @@
 import type { SourceId } from './sources.js'
 import type { WatchSource } from './projectWatch.js'
 
-export const TELEMETRY_DISCLOSURE = '2026-11-15-v5'
+export const TELEMETRY_DISCLOSURE = '2026-11-27-v6'
 export const ANALYTICS_SUPPORT = 'https://wa.me/201201780258'
 // Type-only import above: scripts load this file directly in Node, so no runtime import of projectWatch.
 const WATCH_TELEMETRY_SOURCES: readonly WatchSource[] = ['mostaql', 'nafezly', 'kaf']
@@ -29,7 +29,7 @@ export interface TelemetryEvents {
   project_open_result: { source: SourceId | 'unknown'; entry: 'notification' | 'app' | 'watch_notification'; launch: 'accepted' | 'failed' | 'unknown'; foreground: 'confirmed' | 'denied' | 'target-unknown' | 'not-attempted'; duration: DurationBucket }
   quick_apply_result: { source: 'mostaql' | 'nafezly'; outcome: TelemetryOutcome; error: QuickApplyTelemetryError; duration: DurationBucket }
   proposal_result: { provider: 'gemini' | 'openai' | 'anthropic'; outcome: TelemetryOutcome; error: TelemetryError; duration: DurationBucket }
-  feature_used: { feature: 'bookmark' | 'saved_filter' | 'backup_created' | 'restore_requested'; outcome: TelemetryOutcome }
+  feature_used: { feature: 'bookmark' | 'saved_filter' | 'backup_created' | 'restore_requested' | 'community_channel' | 'community_group'; outcome: TelemetryOutcome }
   update_download_result: { target_version: string; outcome: TelemetryOutcome; error: TelemetryError }
   watch_started: { source: WatchSource; entry: 'list' | 'preview' | 'detail' | 'compact' | 'watch_view' | 'auto_submitted'; result: 'active' | 'waiting' | 'replaced_other' }
   watch_daily: { source: WatchSource; watched: '0' | '1_2' | '3_5' | '6_10'; waiting: '0' | '1_2' | '3_plus' }
@@ -37,19 +37,23 @@ export interface TelemetryEvents {
   watch_stopped: { source: WatchSource; reason: 'manual' | 'replaced' | 'closed' | 'expired' | 'ignored' | 'gone' | 'source_disabled' }
 }
 export type TelemetryName = keyof TelemetryEvents
-export interface TelemetryEnvelope {
+export type OsFamily = 'windows-10' | 'windows-11' | 'macos' | 'linux' | 'other'
+export type CpuArch = 'x64' | 'arm64' | 'other'
+export interface DeviceContext { osFamily: OsFamily; osMajor: string; cpuArch: CpuArch }
+interface TelemetryEnvelopeBase {
   eventId: string
   name: TelemetryName
   occurredAt: string
   distinctId: string
-  schemaVersion: 1
   environment: 'production' | 'qa'
   appVersion: string
   language: 'ar' | 'en'
-  windowsFamily: '10' | '11' | 'other'
   count: number
   properties: Record<string, string | number>
 }
+export interface TelemetryEnvelopeV1 extends TelemetryEnvelopeBase { schemaVersion: 1; windowsFamily: '10' | '11' | 'other' }
+export interface TelemetryEnvelopeV2 extends TelemetryEnvelopeBase, DeviceContext { schemaVersion: 2 }
+export type TelemetryEnvelope = TelemetryEnvelopeV1 | TelemetryEnvelopeV2
 export interface AnalyticsStatus {
   /** Configured distributions require acceptance; transport outages do not revoke it. */
   accessAllowed: boolean
@@ -96,7 +100,7 @@ const rules: Record<TelemetryName, Rules> = {
   project_open_result: { source: oneOf(...TELEMETRY_SOURCES, 'unknown'), entry: oneOf('notification', 'app', 'watch_notification'), launch: oneOf('accepted', 'failed', 'unknown'), foreground: oneOf('confirmed', 'denied', 'target-unknown', 'not-attempted'), duration },
   quick_apply_result: { source: oneOf('mostaql', 'nafezly'), outcome, error: v => error(v) || oneOf('needs_input', 'login_required', 'draft_exists', 'expired')(v), duration },
   proposal_result: { provider: oneOf('gemini', 'openai', 'anthropic'), outcome, error, duration },
-  feature_used: { feature: oneOf('bookmark', 'saved_filter', 'backup_created', 'restore_requested'), outcome },
+  feature_used: { feature: oneOf('bookmark', 'saved_filter', 'backup_created', 'restore_requested', 'community_channel', 'community_group'), outcome },
   update_download_result: { target_version: telemetryVersion, outcome, error },
   watch_started: { source: watchSource, entry: oneOf('list', 'preview', 'detail', 'compact', 'watch_view', 'auto_submitted'), result: oneOf('active', 'waiting', 'replaced_other') },
   watch_daily: { source: watchSource, watched: oneOf('0', '1_2', '3_5', '6_10'), waiting: oneOf('0', '1_2', '3_plus') },
@@ -110,11 +114,31 @@ export function validTelemetryProperties(name: unknown, value: unknown): value i
   if ((TELEMETRY_SUMMARIES as readonly string[]).includes(name)) return true
   return Object.keys(spec).every(key => key === 'previous_version' || Object.hasOwn(value, key))
 }
+const osFamily = oneOf('windows-10', 'windows-11', 'macos', 'linux', 'other')
+const cpuArch = oneOf('x64', 'arm64', 'other')
+const osMajor = (v: unknown): v is string => typeof v === 'string' && /^\d{1,2}$/.test(v)
+function validTelemetryEnvelopeBase(e: Record<string, unknown>): boolean {
+  return telemetryUuid(e.eventId) && telemetryUuid(e.distinctId) && oneOf('production', 'qa')(e.environment) && telemetryVersion(e.appVersion) && oneOf('ar', 'en')(e.language) && typeof e.occurredAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:00\.000Z$/.test(e.occurredAt) && Number.isFinite(Date.parse(e.occurredAt)) && counter(e.count) && (e.count as number) > 0 && validTelemetryProperties(e.name, e.properties)
+}
 export function validTelemetryEnvelope(value: unknown): value is TelemetryEnvelope {
   if (!value || typeof value !== 'object') return false
-  const e = value as TelemetryEnvelope
-  const keys = ['eventId', 'name', 'occurredAt', 'distinctId', 'schemaVersion', 'environment', 'appVersion', 'language', 'windowsFamily', 'count', 'properties']
-  return Object.keys(e).length === keys.length && Object.keys(e).every(k => keys.includes(k)) && telemetryUuid(e.eventId) && telemetryUuid(e.distinctId) && e.schemaVersion === 1 && oneOf('production', 'qa')(e.environment) && telemetryVersion(e.appVersion) && oneOf('ar', 'en')(e.language) && oneOf('10', '11', 'other')(e.windowsFamily) && typeof e.occurredAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:00\.000Z$/.test(e.occurredAt) && Number.isFinite(Date.parse(e.occurredAt)) && counter(e.count) && e.count > 0 && validTelemetryProperties(e.name, e.properties)
+  const e = value as Record<string, unknown>
+  if (e.schemaVersion === 1) {
+    const keys = ['eventId', 'name', 'occurredAt', 'distinctId', 'schemaVersion', 'environment', 'appVersion', 'language', 'windowsFamily', 'count', 'properties']
+    return Object.keys(e).length === keys.length && keys.every(k => Object.hasOwn(e, k)) && oneOf('10', '11', 'other')(e.windowsFamily) && validTelemetryEnvelopeBase(e)
+  }
+  if (e.schemaVersion === 2) {
+    const keys = ['eventId', 'name', 'occurredAt', 'distinctId', 'schemaVersion', 'environment', 'appVersion', 'language', 'osFamily', 'osMajor', 'cpuArch', 'count', 'properties']
+    return Object.keys(e).length === keys.length && keys.every(k => Object.hasOwn(e, k)) && osFamily(e.osFamily) && (e.osMajor === 'none' || osMajor(e.osMajor)) && cpuArch(e.cpuArch) && (e.osFamily === 'macos' || e.osMajor === 'none') && validTelemetryEnvelopeBase(e)
+  }
+  return false
+}
+export function deviceContext(platform: string, release: string, systemVersion: string, arch: string): DeviceContext {
+  const osFamily: OsFamily = platform === 'win32' ? (Number(release.split('.')[2]) >= 22000 ? 'windows-11' : 'windows-10') : platform === 'darwin' ? 'macos' : platform === 'linux' ? 'linux' : 'other'
+  const major = platform === 'darwin' ? systemVersion.split('.')[0] ?? '' : ''
+  const osMajor = platform === 'darwin' && /^\d{1,2}$/.test(major) ? major : 'none'
+  const cpuArch: CpuArch = arch === 'x64' || arch === 'arm64' ? arch : 'other'
+  return { osFamily, osMajor, cpuArch }
 }
 export function durationBucket(ms: number): DurationBucket {
   return ms < 100 ? 'under_100ms' : ms < 500 ? '100_500ms' : ms < 2000 ? '500ms_2s' : ms < 10000 ? '2_10s' : 'over_10s'

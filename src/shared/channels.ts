@@ -106,6 +106,7 @@ export const IPC = {
   downloadUpdate: 'rased:download-update',
   installUpdate: 'rased:install-update',
   confirmUpdateInstall: 'rased:confirm-update-install',
+  openUpdatePage: 'rased:open-update-page',
   updateState: 'rased:update-state',
   requestUpdateInstall: 'rased:request-update-install',
   // main -> renderer events

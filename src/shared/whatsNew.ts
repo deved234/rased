@@ -30,6 +30,15 @@ export function selectLatestWhatsNew(currentVersion: string, entries: readonly W
 
 // Newest release first; the owner confirms version and date before publishing.
 export const WHATS_NEW: readonly WhatsNewEntry[] = [{
+  version: '0.14.0',
+  date: '2026-11-28',
+  highlights: [
+    { icon: 'globe', title: { ar: 'راصد على Mac و Linux', en: 'RASED on Mac and Linux' }, body: { ar: 'نسخة تجريبية لأجهزة Mac و Linux. كل المزايا تعمل عليها، ما عدا التقديم السريع المتاح على Windows فقط حاليًا.', en: 'A beta for Mac and Linux. Every feature works there except Quick Apply, which stays Windows-only for now.' } },
+    { icon: 'download', title: { ar: 'التحديث أسهل على كل جهاز', en: 'Easy updates on every computer' }, body: { ar: 'على Windows يتم التحديث من داخل البرنامج كالمعتاد. على Mac و Linux يخبرك راصد بالتحديث ويساعدك تثبّته.', en: 'On Windows, update inside the app as usual. On Mac and Linux, RASED tells you about updates and helps you install them.' } },
+    { icon: 'info', title: { ar: 'تابع راصد على تليجرام', en: 'Follow RASED on Telegram' }, body: { ar: 'أخبار الإصدارات في القناة، والأسئلة والاقتراحات في الجروب. الروابط هنا وفي «حول راصد».', en: 'Release news in the channel; questions and suggestions in the group. Links are here and in About.' } },
+    { icon: 'edit', title: { ar: 'خصوصية محدّثة', en: 'Updated privacy' }, body: { ar: 'الإحصائيات تشمل الآن نوع جهازك (Windows أو Mac أو Linux) ونوع المعالج، دون أي بيانات شخصية. ستُطلب موافقتك من جديد.', en: 'Analytics now include your computer type (Windows, Mac or Linux) and processor type, with no personal data. You will be asked to accept again.' } }
+  ]
+}, {
   version: '0.12.1',
   date: '2026-11-20',
   highlights: [

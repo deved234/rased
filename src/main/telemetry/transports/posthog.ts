@@ -2,11 +2,21 @@ import { validTelemetryEnvelope, type TelemetryEnvelope } from '../../../shared/
 import type { TelemetryConfig } from '../config.js'
 
 export interface SendResult { kind: 'accepted' | 'retry' | 'auth' | 'poison' | 'too_large' | 'quota'; accepted: boolean; permanent: boolean; retryAfterMs?: number }
+function windowsFamily(e: TelemetryEnvelope): '10' | '11' | 'other' {
+  if (e.schemaVersion === 1) return e.windowsFamily
+  return e.osFamily === 'windows-10' ? '10' : e.osFamily === 'windows-11' ? '11' : 'other'
+}
+function osFamily(e: TelemetryEnvelope): string {
+  if (e.schemaVersion === 2) return e.osFamily
+  return e.windowsFamily === '10' ? 'windows-10' : e.windowsFamily === '11' ? 'windows-11' : 'other'
+}
 export function posthogEvent(e: TelemetryEnvelope): object {
   if (!validTelemetryEnvelope(e)) throw Error('invalid-telemetry')
+  const device = e.schemaVersion === 2 ? { os_major: e.osMajor, cpu_arch: e.cpuArch } : {}
   return { uuid: e.eventId, event: 'rased.app.' + e.name, timestamp: e.occurredAt, properties: {
     distinct_id: e.distinctId, ...e.properties, schema_version: e.schemaVersion, record_type: 'app',
-    environment: e.environment, app_version: e.appVersion, language: e.language, windows_family: e.windowsFamily,
+    environment: e.environment, app_version: e.appVersion, language: e.language,
+    windows_family: windowsFamily(e), os_family: osFamily(e), ...device,
     event_count: e.count, $geoip_disable: true, $process_person_profile: true
   } }
 }

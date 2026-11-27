@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
-export async function testWhatsNew() {
+export async function testWhatsNew(exeOverride) {
   const version = '0.12.1' // Injected through the marked TEMP harness, independent of package.json.
   const port = 9394, output = resolve('.local/whats-new/screenshots')
   mkdirSync(output, { recursive: true })
@@ -40,11 +40,11 @@ export async function testWhatsNew() {
     return profile
   }
   const boot = async profile => {
-    child = startApp({ exe: 'node_modules/electron/dist/electron.exe', app: 'out/main/index.js', profile, port })
+    child = startApp({ exe: exeOverride ?? electronPath(), app: 'out/main/index.js', profile, port })
     ws = await pageWs(port)
     await wait('!!window.rased && !!document.querySelector(".splash")')
     await wait('document.querySelector(".splash")?.dataset.phase === "ready"')
-    check('splash precedes the dialog', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('splash precedes the dialog', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await ev('document.querySelector(".splash-enter").click()')
   }
   const stop = async () => {
@@ -71,8 +71,8 @@ export async function testWhatsNew() {
     await wait('!document.querySelector(".analytics-consent-actions .primary").disabled')
     await ev('document.querySelector(".analytics-consent-actions .primary").click()')
     await wait('!!document.querySelector(".whats-new-dialog")')
-    check('0.12.1 fixes lead, then 0.12.0 project watch and 0.11.0 profiles',await ev('(()=>{const d=document.querySelector(".whats-new-dialog").textContent;return d.indexOf("متابعة مستقل تعمل الآن")>=0 && d.indexOf("متابعة مستقل تعمل الآن")<d.indexOf("تابع مشاريعك") && d.indexOf("تابع مشاريعك")<d.indexOf("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length===10})()'))
-    check('acceptance reveals the upgrade dialog over the inert workspace', await ev('!document.querySelector(".analytics-access") && document.querySelector(".app").inert && document.querySelector(".whats-new-dialog").getAttribute("aria-modal")==="true" && document.querySelector(".whats-new-dialog").getAttribute("role")==="dialog"'))
+    check('0.12.1 fixes lead, then 0.12.0 project watch and 0.11.0 profiles',await settles(() => ev('(()=>{const d=document.querySelector(".whats-new-dialog").textContent;return d.indexOf("متابعة مستقل تعمل الآن")>=0 && d.indexOf("متابعة مستقل تعمل الآن")<d.indexOf("تابع مشاريعك") && d.indexOf("تابع مشاريعك")<d.indexOf("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length===10})()')))
+    check('acceptance reveals the upgrade dialog over the inert workspace', await settles(() => ev('!document.querySelector(".analytics-access") && document.querySelector(".app").inert && document.querySelector(".whats-new-dialog").getAttribute("aria-modal")==="true" && document.querySelector(".whats-new-dialog").getAttribute("role")==="dialog"')))
     await ev('window.rased.openCompact()')
     const compact = await pageWs(port, target => target.url.includes('compact'))
     await eventually(() => evaluate(compact, '!!document.querySelector(".compact")'))
@@ -92,7 +92,7 @@ export async function testWhatsNew() {
     await ev('location.hash="#/settings/about"')
     await wait('!!document.querySelector(".about-version")')
     await reload()
-    check('Escape dismissal survives renderer reload', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('Escape dismissal survives renderer reload', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await stop(); await boot(legacy)
     await wait('!!document.querySelector(".about-version") || !!document.querySelector(".sidebar")')
     await ev('location.hash="#/settings/about"')
@@ -102,15 +102,15 @@ export async function testWhatsNew() {
     // Simulate the next unseen upgrade, then exercise the primary close path.
     await ev('window.rased.updateSettings({whatsNewSeen:null})')
     await wait('!!document.querySelector(".whats-new-dialog")')
-    check('focus starts at the primary action', await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
+    check('focus starts at the primary action', await settles(() => ev('document.activeElement === document.querySelector(".whats-new-footer .primary")')))
     const modalRoute = await ev('location.hash')
     await key('k', 'KeyK', 75, 2)
     await paint()
     check('Ctrl+K cannot navigate or move focus into the inert workspace', await ev('location.hash') === modalRoute && await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
     await key('Tab', 'Tab', 9, 8)
-    check('Shift+Tab wraps to the secondary action', await ev('document.activeElement === document.querySelector(".whats-new-footer button:last-child")'))
+    check('Shift+Tab moves to the community group button', await settles(() => ev('document.activeElement === document.querySelectorAll(".whats-new-community button")[1]')))
     await key('Tab', 'Tab', 9)
-    check('Tab wraps back to primary action', await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
+    check('Tab wraps back to primary action', await settles(() => ev('document.activeElement === document.querySelector(".whats-new-footer .primary")')))
     const locked = new DatabaseSync(join(legacy, 'rased.db'))
     try {
       locked.exec("CREATE TRIGGER reject_whats_new_save BEFORE UPDATE ON settings WHEN NEW.key='app' BEGIN SELECT RAISE(ABORT,'fixture save failure'); END")
@@ -126,7 +126,7 @@ export async function testWhatsNew() {
     await wait('!document.querySelector(".whats-new-dialog")')
     check('primary action saves current version using keyboard only', (await ev('window.rased.getSettings()')).whatsNewSeen === version)
     await reload()
-    check('primary dismissal survives reload', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('primary dismissal survives reload', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await stop(); await boot(legacy)
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
     check('primary dismissal survives restart', (await ev('window.rased.getSettings()')).whatsNewSeen === version && await ev('!document.querySelector(".whats-new-dialog")'))
@@ -136,6 +136,14 @@ export async function testWhatsNew() {
     for (const language of ['ar', 'en']) for (const theme of ['dark', 'light']) {
       await ev(`(async()=>{const s=await window.rased.getSettings();await window.rased.updateSettings({language:${JSON.stringify(language)},ui:{...s.ui,textScale:125,theme:${JSON.stringify(theme)}}})})()`)
       await wait(`document.documentElement.lang===${JSON.stringify(language)}`)
+      const aboutCommunity = await ev(`(()=>{const h=document.getElementById('about-community-title');const s=h?.closest('section');const b=[...s?.querySelectorAll('button')??[]];return {dir:document.documentElement.dir,title:h?.textContent,body:s?.querySelector('p')?.textContent,buttons:b.map(x=>x.textContent?.replace(/\\s+/g,' ').trim())}})()`)
+      check(`${language}/${theme} About community section shows both buttons`, aboutCommunity.dir === (language === 'ar' ? 'rtl' : 'ltr') && aboutCommunity.title === (language === 'ar' ? 'مجتمع راصد' : 'RASED community') && aboutCommunity.body === (language === 'ar' ? 'أخبار الإصدارات في القناة، والأسئلة والاقتراحات في الجروب.' : 'Release news in the channel; questions and suggestions in the group.') && aboutCommunity.buttons[0].startsWith(language === 'ar' ? 'القناة' : 'Channel') && aboutCommunity.buttons[1].startsWith(language === 'ar' ? 'الجروب' : 'Group'))
+      await ev(`(()=>{const s=document.getElementById('about-community-title').closest('section');s.querySelectorAll('button')[0].click();s.querySelectorAll('button')[1].click()})()`)
+      await eventually(() => {
+        const traces = readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8')
+        return traces.includes('"kind":"open-external","data":"https://t.me/rased_app"') && traces.includes('"kind":"open-external","data":"https://t.me/rased_chat"')
+      })
+      check(`${language}/${theme} About community buttons record exact external URLs`, readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8').includes('"kind":"open-external","data":"https://t.me/rased_app"') && readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8').includes('"kind":"open-external","data":"https://t.me/rased_chat"'))
       await ev('(()=>{const b=Array.from(document.querySelectorAll(".about-hero button")).find(b=>b.textContent==="ما الجديد"||b.textContent==="What\'s new");b.focus();b.click()})()')
       await wait('!!document.querySelector(".whats-new-dialog")')
       const metrics = await ev(`(()=>{
@@ -146,13 +154,24 @@ export async function testWhatsNew() {
           buttons:buttons.every(b=>b.left>=rect.left&&b.right<=rect.right&&b.top>=rect.top&&b.bottom<=innerHeight&&b.width>0&&b.height>0),
           dir:d.dir,scale:document.documentElement.dataset.textscale }
       })()`)
+      const community = await ev(`(()=>{const s=document.querySelector('.whats-new-community');const b=[...s.querySelectorAll('button')];return {title:s.querySelector('h3')?.textContent,body:s.querySelector('p')?.textContent,buttons:b.map(x=>x.textContent?.replace(/\\s+/g,' ').trim()),hrefs:b.length}})()`)
       check(`${language}/${theme} 900px/125% fits without horizontal overflow and with visible buttons`, metrics.fits && !metrics.overflow && metrics.buttons && metrics.dir === (language === 'ar' ? 'rtl' : 'ltr') && metrics.scale === '125')
+      check(`${language}/${theme} WhatsNew community section shows both buttons`, community.hrefs === 2 && community.title === (language === 'ar' ? 'تابع راصد على تليجرام' : 'Follow RASED on Telegram') && community.body === (language === 'ar' ? 'أخبار الإصدارات في القناة، والأسئلة والاقتراحات في الجروب.' : 'Release news in the channel; questions and suggestions in the group.') && community.buttons[0].startsWith(language === 'ar' ? 'القناة' : 'Channel') && community.buttons[1].startsWith(language === 'ar' ? 'الجروب' : 'Group'))
+      const tracesBefore = readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8')
+      await ev(`document.querySelectorAll('.whats-new-community button')[0].click()`)
+      await ev(`document.querySelectorAll('.whats-new-community button')[1].click()`)
+      await eventually(() => {
+        const traces = readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8')
+        return traces.length > tracesBefore.length && traces.includes('"data":"https://t.me/rased_app"') && traces.includes('"data":"https://t.me/rased_chat"')
+      })
+      check(`${language}/${theme} WhatsNew community buttons record exact external URLs`, readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8').includes('"kind":"open-external","data":"https://t.me/rased_app"') && readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8').includes('"kind":"open-external","data":"https://t.me/rased_chat"'))
       writeFileSync(join(output, `${language}-${theme}-900-125.png`), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
       await session.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
-      check(`${language}/${theme} reduced motion disables card animation`, await ev('getComputedStyle(document.querySelector(".whats-new-card")).animationName==="none"'))
+      check(`${language}/${theme} reduced motion disables card animation`, await settles(() => ev('getComputedStyle(document.querySelector(".whats-new-card")).animationName==="none"')))
       await ev('document.querySelector(".whats-new-footer button:last-child").click()')
       await key('Escape', 'Escape', 27); await wait('!document.querySelector(".whats-new-dialog")')
-      check(`${language}/${theme} closing restores focus to About button`, await ev('document.activeElement === document.querySelector(".about-hero button")'))
+      // Focus returns just after the dialog unmounts; wait for it (seen late on Ubuntu CI).
+      check(`${language}/${theme} closing restores focus to About button`, await eventually(() => ev('document.activeElement === document.querySelector(".about-hero button")')).then(() => true, () => false))
     }
     check('changelog reuses only the fixed safe GitHub releases destination', readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8').includes('"data":"https://github.com/deved234/rased/releases"'))
     await stop()
@@ -164,10 +183,30 @@ export async function testWhatsNew() {
     await wait('!document.querySelector(".analytics-consent-actions .primary").disabled')
     await ev('document.querySelector(".analytics-consent-actions .primary").click()')
     await wait('!!document.querySelector(".sidebar")')
+    check('fresh profile silently persists current version before acceptance', (await ev('window.rased.getSettings()')).whatsNewSeen === version && await ev('!document.querySelector(".whats-new-dialog")'))
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
-    check('fresh install shows no dialog after acceptance', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('fresh install shows no dialog after acceptance', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
+    await ev('(()=>{const b=Array.from(document.querySelectorAll(".about-hero button")).find(b=>b.textContent==="ما الجديد"||b.textContent==="What\'s new");b.click()})()')
+    await wait('!!document.querySelector(".whats-new-dialog")')
+    await ev('document.querySelector(".whats-new-footer .primary").click()')
+    await wait('!document.querySelector(".whats-new-dialog")')
+    await wait('!!document.querySelector(".community-invite-banner")')
+    check('community invite appears once on a fresh profile after What’s New is closed', await ev('(()=>{const b=document.querySelector(".community-invite-banner");const text=b?.textContent||"";const buttons=[...b?.querySelectorAll("button")||[]].map(x=>x.textContent||"");return !!b && b.getAttribute("role")==="region" && (text.includes("انضم لمجتمع راصد على تليجرام") || text.includes("Join the RASED community on Telegram")) && buttons.some(x=>x.includes("القناة")||x.includes("Channel")) && buttons.some(x=>x.includes("الجروب")||x.includes("Group")) && buttons.some(x=>x.includes("مش دلوقتي")||x.includes("Not now"))})()'))
+    await ev('window.rased.openCompact()')
+    const freshCompact = await pageWs(port, target => target.url.includes('compact'))
+    await eventually(() => evaluate(freshCompact, '!!document.querySelector(".compact")'))
+    check('community invite is absent in the compact window', await evaluate(freshCompact, '!document.querySelector(".community-invite-banner")'))
+    await ev('window.rased.closeCompact()')
+    await ev('window.rased.windowControl("maximize")')
+    await sleep(600)
+    await wait('document.visibilityState === "visible"')
+    await ev('(()=>{const b=document.querySelector(".community-invite-banner");Array.from(b.querySelectorAll("button")).find(x=>x.textContent.includes("Not now")||x.textContent.includes("مش دلوقتي")).click()})()')
+    await wait('!document.querySelector(".community-invite-banner")')
+    check('Not now hides the community invite', (await ev('window.rased.getSettings()')).ui.communityInviteSeen === true)
     await stop(); await boot(fresh)
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
+    await paint()
+    check('community invite stays hidden after a real restart', await settles(() => ev('!document.querySelector(".community-invite-banner") && (window.rased.getSettings ? true : true)')) && (await ev('window.rased.getSettings()')).ui.communityInviteSeen === true)
     check('fresh install remains silent after restart', (await ev('window.rased.getSettings()')).whatsNewSeen === version && await ev('!document.querySelector(".whats-new-dialog")'))
     await stop()
     const noNotes = fixtureProfile(false, '0.0.1')
@@ -178,7 +217,7 @@ export async function testWhatsNew() {
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
     await ev('window.rased.getAppInfo()')
     await paint()
-    check('About hides manual review when all authored notes are newer than the installed version', await ev('!document.querySelector(".about-hero button") && !document.querySelector(".whats-new-dialog")'))
+    check('About hides manual review when all authored notes are newer than the installed version', await settles(() => ev('!document.querySelector(".about-hero button") && !document.querySelector(".whats-new-dialog")')))
     console.log(`WHAT’S NEW E2E PASSED (${passed} assertions).`)
   } finally { await stop() }
 }

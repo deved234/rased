@@ -17,3 +17,18 @@ describe('compact filter preference compatibility', () => {
     expect(sanitizeSettings({ ui: { compactUseDisplayFilter: 'true' } }).ui.compactUseDisplayFilter).toBe(false)
   })
 })
+
+describe('community invite preference', () => {
+  it('defaults to unseen and keeps existing installs unseen when missing', () => {
+    expect(defaultSettings().ui.communityInviteSeen).toBe(false)
+    expect(sanitizeSettings({}).ui.communityInviteSeen).toBe(false)
+    expect(sanitizeSettings({ ui: { theme: 'light' } }).ui.communityInviteSeen).toBe(false)
+  })
+  it('round trips true and rejects malformed values', () => {
+    const settings = defaultSettings()
+    settings.ui.communityInviteSeen = true
+    expect(sanitizeSettings(JSON.parse(JSON.stringify(settings))).ui.communityInviteSeen).toBe(true)
+    expect(sanitizeSettings({ ui: { communityInviteSeen: 'true' } }).ui.communityInviteSeen).toBe(false)
+    expect(sanitizeSettings({ ui: { communityInviteSeen: 1 } }).ui.communityInviteSeen).toBe(false)
+  })
+})

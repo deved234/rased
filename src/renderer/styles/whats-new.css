@@ -29,6 +29,11 @@
 .whats-new-card-2 { animation-delay: 80ms; }
 .whats-new-card-3 { animation-delay: 120ms; }
 .whats-new-card-4 { animation-delay: 160ms; }
+.whats-new-community { margin-block-start: 16px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--panel-2); }
+.whats-new-community h3 { margin: 0 0 2px; font-size: .95rem; line-height: 1.6; }
+.whats-new-community p { margin: 0 0 10px; font-size: .85rem; line-height: 1.6; color: var(--muted); }
+.whats-new-community .row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.whats-new-community .btn { min-block-size: 44px; white-space: normal; max-inline-size: 100%; }
 .whats-new-footer { flex: none; padding: 16px 24px; border-block-start: 1px solid var(--border); }
 .whats-new-footer .row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .whats-new-footer .btn { min-block-size: 44px; white-space: normal; max-inline-size: 100%; }

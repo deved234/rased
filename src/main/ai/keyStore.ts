@@ -6,6 +6,14 @@ import type { AiProviderId } from '../../shared/ai.js'
 
 interface KeyEnvelope { version: 1; revision: string; encrypted: string }
 function invalidKey(key: string): boolean { return /\s/.test(key) || [...key].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) }
+/** Whether OS-backed secret storage (not Linux `basic_text` plaintext fallback) is available. */
+export function keyStorageAvailable(): boolean {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  if (process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function') {
+    return safeStorage.getSelectedStorageBackend() !== 'basic_text'
+  }
+  return true
+}
 export function aiKeyPath(userData: string, provider: AiProviderId): string { return join(userData, 'ai-keys', `${provider}.enc`) }
 function envelope(userData: string, provider: AiProviderId): KeyEnvelope | null {
   try {
@@ -14,13 +22,13 @@ function envelope(userData: string, provider: AiProviderId): KeyEnvelope | null 
   } catch { return null }
 }
 export function saveAiKey(userData: string, provider: AiProviderId, value: unknown): boolean {
-  if (typeof value !== 'string' || !safeStorage.isEncryptionAvailable()) return false
+  if (typeof value !== 'string' || !keyStorageAvailable()) return false
   const key = value.trim()
   if (key.length < 16 || key.length > 4096 || invalidKey(key)) return false
   const target = aiKeyPath(userData, provider)
   const temp = `${target}.tmp`
   try {
-    mkdirSync(join(userData, 'ai-keys'), { recursive: true })
+    mkdirSync(join(userData, 'ai-keys'), { recursive: true, mode: 0o700 })
     const data: KeyEnvelope = { version: 1, revision: randomUUID(), encrypted: safeStorage.encryptString(key).toString('base64') }
     writeFileSync(temp, JSON.stringify(data), { mode: 0o600 })
     const written = JSON.parse(readFileSync(temp, 'utf8')) as KeyEnvelope
@@ -35,7 +43,7 @@ export function saveAiKey(userData: string, provider: AiProviderId, value: unkno
 // Never remove the only usable copy before a verified atomic replacement exists.
 export function migrateGeminiKey(userData: string): void {
   const old = join(userData, 'gemini-key.enc')
-  if (!existsSync(old) || !safeStorage.isEncryptionAvailable() || existsSync(aiKeyPath(userData, 'gemini'))) return
+  if (!existsSync(old) || !keyStorageAvailable() || existsSync(aiKeyPath(userData, 'gemini'))) return
   try {
     const key = safeStorage.decryptString(readFileSync(old))
     if (!saveAiKey(userData, 'gemini', key)) return
@@ -50,7 +58,7 @@ export function readAiKey(userData: string, provider: AiProviderId, migrate = tr
   const data = envelope(userData, provider)
   const legacy = provider === 'gemini' && !existsSync(aiKeyPath(userData, provider)) && existsSync(join(userData, 'gemini-key.enc'))
   if (!data && !legacy) throw new Error(existsSync(aiKeyPath(userData, provider)) ? 'key-unreadable' : 'key-missing')
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('key-unreadable')
+  if (!keyStorageAvailable()) throw new Error('key-unreadable')
   try {
     const key = safeStorage.decryptString(data ? Buffer.from(data.encrypted, 'base64') : readFileSync(join(userData, 'gemini-key.enc')))
     if (!key || invalidKey(key)) throw new Error()

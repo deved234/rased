@@ -12,7 +12,11 @@
       "out/preload/**/*",
       "out/renderer/**/*",
       "package.json",
-      "resources/*.png"
+      "resources/*.png",
+      "!node_modules/@koromix/koffi-darwin-*{,/**/*}",
+      "!node_modules/@koromix/koffi-linux-*{,/**/*}",
+      "!node_modules/@koromix/koffi-freebsd-*{,/**/*}",
+      "!node_modules/@koromix/koffi-openbsd-*{,/**/*}"
     ],
     "nsis": {
       "allowToChangeInstallationDirectory": true,
@@ -39,7 +43,67 @@
           ],
           "target": "nsis"
         }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/icon.ico",
+          "to": "branding/icon.ico"
+        },
+        {
+          "from": "resources/chrome-extension",
+          "to": "chrome-extension"
+        },
+        {
+          "from": "resources/chrome-bridge",
+          "to": "chrome-bridge"
+        }
       ]
+    },
+    "mac": {
+      "target": [
+        {
+          "arch": [
+            "universal"
+          ],
+          "target": "dmg"
+        },
+        {
+          "arch": [
+            "universal"
+          ],
+          "target": "zip"
+        }
+      ],
+      "icon": "resources/icon-master.png",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "notarize": false,
+      "artifactName": "RASED-${version}-mac.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "AppImage"
+        },
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "deb"
+        }
+      ],
+      "icon": "resources/icon-master.png",
+      "category": "Office",
+      "executableName": "rased",
+      "synopsis": "Local desktop watcher for freelance opportunities",
+      "description": "RASED (راصد) — local desktop watcher for freelance opportunities across supported platforms. No cloud backend or app account.",
+      "maintainer": "RASED (deved234) <deved234@users.noreply.github.com>",
+      "artifactName": "RASED-${version}-linux-${arch}.${ext}"
     },
     "extraResources": [
       {
@@ -47,20 +111,8 @@
         "to": "legal"
       },
       {
-        "from": "resources/icon.ico",
-        "to": "branding/icon.ico"
-      },
-      {
         "from": "resources/icon.png",
         "to": "branding/icon.png"
-      },
-      {
-        "from": "resources/chrome-extension",
-        "to": "chrome-extension"
-      },
-      {
-        "from": "resources/chrome-bridge",
-        "to": "chrome-bridge"
       }
     ],
     "protocols": [
@@ -82,7 +134,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
-  "description": "RASED (راصد) — local Windows watcher for freelance opportunities across supported platforms. No cloud backend or app account.",
+  "description": "RASED (راصد) — local desktop watcher for freelance opportunities across supported platforms. No cloud backend or app account.",
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/chrome": "^0.3.4",
@@ -114,6 +166,8 @@
     "build": "electron-vite build",
     "dev": "node scripts/run-desktop.mjs dev",
     "dist": "npm run build && electron-builder --win nsis --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --publish never",
     "icons": "node scripts/generate-icons.mjs",
     "lint": "eslint src tests scripts extension native-host electron.vite.config.ts",
     "predev": "node scripts/ensure-electron.mjs && npm run build:extension && npm run build:native-host",
@@ -142,5 +196,5 @@
     "test:watch": "node scripts/project-watch-e2e.mjs",
     "test:network": "node scripts/network-e2e.mjs"
   },
-  "version": "0.12.1"
+  "version": "0.14.0"
 }

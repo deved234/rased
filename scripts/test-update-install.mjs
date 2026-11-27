@@ -42,7 +42,7 @@ app.on('before-quit',()=>{record('closed-db',app.getVersion());db.close()});
 record('launch',{version:app.getVersion(),note:db.prepare('SELECT note FROM notes WHERE id=1').get().note});
 if(app.getVersion()==='1.0.1'){app.quit();return}
 const port=new NsisUpdater();port.disableDifferentialDownload=true;
-const controller=new UpdateController(port,app.getVersion(),s=>record('state',s),e=>record('error',String(e)));
+const controller=new UpdateController(port,'install',app.getVersion(),s=>record('state',s),e=>record('error',String(e)));
 const checked=await controller.check();if(!checked.ok||controller.snapshot().phase!=='available')throw Error('No available QA update');
 const downloaded=await controller.download();if(!downloaded.ok)throw Error('QA download failed');
 record('explicit-install',true);if(!controller.install().ok)throw Error('QA install failed');

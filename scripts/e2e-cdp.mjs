@@ -6,13 +6,13 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(args.profile)
 const port = Number(args.port ?? 9361)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe'
+const exe = args.exe ?? electronPath()
 const app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const schema = readFileSync('src/storage/migrations.ts', 'utf8')
 const db = new DatabaseSync(join(profile, 'rased.db'))
@@ -39,9 +39,26 @@ const nafezlyFeed = items => `\n<?xml version="1.0" encoding="UTF-8"?><rss versi
 const writeNafezly = items => writeFileSync(join(profile, 'nafezly-fixture.xml'), nafezlyFeed(items))
 writeNafezly([{id:50001,slug:'baseline',title:'Old Nafezly project',description:'Baseline description',publishedAt:Date.now()-3600000}])
 let child, ws, viewportSession, passed = 0
+const MAX_OUTPUT_CHARS = 65536
+let childOutput = ''
+const appendChildOutput = chunk => {
+  childOutput += chunk
+  if (childOutput.length > MAX_OUTPUT_CHARS) childOutput = childOutput.slice(-MAX_OUTPUT_CHARS)
+}
+const launchApp = () => {
+  childOutput = ''
+  const proc = startApp({ exe, app, profile, port, captureOutput: true })
+  proc.stdout?.setEncoding('utf8')
+  proc.stderr?.setEncoding('utf8')
+  proc.stdout?.on('data', appendChildOutput)
+  proc.stderr?.on('data', appendChildOutput)
+  return proc
+}
 const check = (label, condition, detail = '') => { assert.ok(condition, `${label}: ${detail}`); passed++; console.log(`PASS ${label}${detail ? ' — ' + detail : ''}`) }
 const ev = expression => evaluate(ws, expression)
 const wait = expression => eventually(() => ev(expression))
+// The check button stays disabled until the update state loads; clicking earlier is a silent no-op.
+const checkUpdates = async () => { await wait('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent.includes("Check for updates")&&!b.disabled)'); await click('Check for updates', '.updates-page button') }
 const click = async (pattern, selector = 'button') => {
   await ev(`(()=>{const b=Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(b=>new RegExp(${JSON.stringify(pattern)}).test(b.textContent));if(!b)throw Error('Button missing: '+${JSON.stringify(pattern)});b.click()})()`)
   await sleep(150)
@@ -55,7 +72,7 @@ const fill = async (selector, value) => {
 }
 const traces = () => existsSync(join(profile, 'test-trace.jsonl')) ? readFileSync(join(profile, 'test-trace.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(s=>JSON.parse(s)) : []
 try {
-  child = startApp({ exe, app, profile, port })
+  child = launchApp()
   ws = await pageWs(port)
   // Attach before observing bootstrap: executable startup may finish the short
   // splash before CDP connects on a busy Windows runner. Reload the renderer
@@ -72,7 +89,7 @@ try {
   writeFileSync('.local/qa/screenshots/startup/ar-ready.png', Buffer.from(splashShot.data, 'base64'))
   await ev('document.querySelector(".splash-enter")?.click()')
   await wait('document.querySelectorAll("[data-row]").length === 50')
-  check('real bootstrap with cached 450 rows and no RSS dependency', await ev('!document.querySelector(".splash")'))
+  check('real bootstrap with cached 450 rows and no RSS dependency', await settles(() => ev('!document.querySelector(".splash")')))
   mkdirSync('.local/qa/screenshots/identity', { recursive: true })
   const mainShot = await call(ws, 'Page.captureScreenshot', { format: 'png' })
   writeFileSync('.local/qa/screenshots/identity/ar-main.png', Buffer.from(mainShot.data, 'base64'))
@@ -81,20 +98,25 @@ try {
   writeFileSync('.local/qa/screenshots/identity/ar-watching.png', Buffer.from(watchingShot.data, 'base64'))
   await nav('#/')
   await wait('document.querySelectorAll("[data-row]").length === 50')
-  await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>s.maximized)')
-  await wait('document.querySelector(".window-controls button:nth-child(2)").getAttribute("aria-pressed")==="true"')
-  check('custom maximize control synchronizes real window state', true)
-  await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
-  check('custom restore control restores window', true)
-  await ev('document.querySelector(".window-controls button:first-child").click()')
-  await wait('window.rased.getWindowState().then(s=>s.minimized)')
-  check('custom minimize control minimizes the real window', true)
-  await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>s.maximized)'); await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
+  // Custom frameless controls drive the real window manager; xvfb on Linux has no WM and
+  // macOS later swaps in native traffic lights, so only Windows proves the real state.
+  if (process.platform === 'win32') {
+    await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>s.maximized)')
+    await wait('document.querySelector(".window-controls button:nth-child(2)").getAttribute("aria-pressed")==="true"')
+    check('custom maximize control synchronizes real window state', true)
+    await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
+    check('custom restore control restores window', true)
+    await ev('document.querySelector(".window-controls button:first-child").click()')
+    await wait('window.rased.getWindowState().then(s=>s.minimized)')
+    check('custom minimize control minimizes the real window', true)
+    await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>s.maximized)'); await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
+  }
+  check('window chrome keeps platform-appropriate controls', await settles(() => ev(process.platform === 'darwin' ? '!document.querySelector(".window-controls") && !!document.querySelector(".window-titlebar.mac")' : 'document.querySelectorAll(".window-controls button").length===3')))
   await nav('#/settings/legal'); await wait('!!document.querySelector(".legal-page")')
-  check('offline legal terms render in Arabic', await ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")'))
-  await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")'))
-  check('privacy discloses optional Gemini transfer and free-tier processing', await ev('document.querySelector(".legal-page").textContent.includes("مساعد العروض وGemini") && document.querySelector(".legal-page").textContent.includes("مراجعون بشريون")'))
-  await click('الرخص', '.legal-page .chips button'); check('licenses include actual dependency texts', await ev('document.querySelector(".license-text")?.textContent.includes("MIT License")'))
+  check('offline legal terms render in Arabic', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")')))
+  await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")')))
+  check('privacy discloses optional Gemini transfer and free-tier processing', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("مساعد العروض وGemini") && document.querySelector(".legal-page").textContent.includes("مراجعون بشريون")')))
+  await click('الرخص', '.legal-page .chips button'); check('licenses include actual dependency texts', await settles(() => ev('document.querySelector(".license-text")?.textContent.includes("MIT License")')))
   const legalOpens=traces().filter(t=>t.kind==='open-external').length
   await click('شروط مستقل الرسمية','.legal-page button'); await eventually(()=>traces().filter(t=>t.kind==='open-external').length===legalOpens+1)
   check('legal source button opens the fixed official destination',traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/p/terms')
@@ -128,9 +150,12 @@ try {
   await click('فتح المشروع في المتصفح', '.proposal-card button')
   check('proposal browser action opens project externally', traces().filter(t=>t.kind==='open-external').length===proposalOpens+1)
   await nav('#/settings/notifications')
-  await wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.includes("إعدادات إشعارات Windows"))')
-  await click('إعدادات إشعارات Windows')
-  check('notification guidance opens fixed Windows Focus assist settings', traces().filter(t=>t.kind==='open-system-settings').at(-1)?.data==='ms-settings:quiethours')
+  // The Focus Assist deep link and its Windows settings entry exist only on Windows.
+  if (process.platform === 'win32') {
+    await wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.includes("إعدادات إشعارات Windows"))')
+    await click('إعدادات إشعارات Windows')
+    check('notification guidance opens fixed Windows Focus assist settings', traces().filter(t=>t.kind==='open-system-settings').at(-1)?.data==='ms-settings:quiethours')
+  }
   await nav('#/'); await wait('document.querySelectorAll("[data-row]").length===50')
 
 
@@ -176,7 +201,7 @@ try {
   await ev(`window.rased.createSavedFilter('Audit search',{...${JSON.stringify(def)},search:'Review project 1'})`)
   await nav('#/filters'); await click('تطبيق|Apply'); await wait('document.querySelector(".search-top").value==="Review project 1"')
   await wait('document.querySelector(".list-head")?.textContent.includes("111")')
-  check('saved filter preserves search and actual matching count', await ev('document.querySelector(".list-head").textContent.includes("111")'))
+  check('saved filter preserves search and actual matching count', await settles(() => ev('document.querySelector(".list-head").textContent.includes("111")')))
   await fill('.search-top',''); await wait('document.querySelector(".list-head").textContent.includes("450")')
   // Dirty note guard catches sidebar routes and allows save/discard/cancel.
   await nav('#/project/450'); await wait('!!document.querySelector("textarea")'); await fill('textarea','PERSISTENT NOTE')
@@ -205,6 +230,8 @@ try {
   await ev('window.rased.testSound()'); await wait('window.__audioStarts===1')
   check('main/preload sound event starts an oscillator exactly once', true)
   await ev('window.rased.openCompact()'); const compact = await pageWs(port,t=>t.url.includes('compact'))
+  // The target can appear before its preload runs (seen on macOS CI); wait for the bridge.
+  await eventually(()=>evaluate(compact,'!!window.rased?.setAlwaysOnTop').catch(()=>false))
   await evaluate(compact,'window.rased.setAlwaysOnTop(true)')
   await eventually(()=>evaluate(compact,'document.querySelector(".compact-top [aria-pressed]")?.getAttribute("aria-pressed")==="true"'))
   await ev('window.rased.updateSettings({language:"en"})'); await eventually(()=>evaluate(compact,'document.documentElement.dir==="ltr"'))
@@ -236,7 +263,7 @@ try {
   await viewportSession.call('Emulation.setDeviceMetricsOverride',{width:900,height:600,deviceScaleFactor:1.5,mobile:false})
   await wait('innerWidth===900 && innerHeight===600'); await ev('window.dispatchEvent(new Event("resize"))')
   await wait('!!document.querySelector(".preview-pane:not(.overlay)")')
-  check('900px preview stays beside the list without dimming it', await ev('!document.querySelector(".scrim") && !!document.querySelector(".preview-pane:not(.overlay)")'))
+  check('900px preview stays beside the list without dimming it', await settles(() => ev('!document.querySelector(".scrim") && !!document.querySelector(".preview-pane:not(.overlay)")')))
   await click('View full details|عرض التفاصيل كاملة', '.preview-pane button')
   await wait('location.hash.startsWith("#/project/")')
   check('full details button works at minimum desktop width', true)
@@ -246,16 +273,16 @@ try {
   await viewportSession.call('Emulation.setDeviceMetricsOverride',{width:760,height:600,deviceScaleFactor:1.5,mobile:false})
   await wait('innerWidth===760'); await ev('window.dispatchEvent(new Event("resize"))')
   await wait('!!document.querySelector(".preview-pane.overlay")')
-  check('narrow preview details button is above the dimming scrim', await ev('(()=>{const b=[...document.querySelectorAll(".preview-pane.overlay button")].find(x=>/View full details|عرض التفاصيل كاملة/.test(x.textContent));if(!b)return false;const r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()'))
+  check('narrow preview details button is above the dimming scrim', await settles(() => ev('(()=>{const b=[...document.querySelectorAll(".preview-pane.overlay button")].find(x=>/View full details|عرض التفاصيل كاملة/.test(x.textContent));if(!b)return false;const r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()')))
   await ev('document.querySelector(".preview-pane.overlay button:last-of-type").focus()')
   await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
-  check('preview focus stays in overlay below the desktop minimum width', await ev('document.querySelector(".preview-pane.overlay").contains(document.activeElement)'))
+  check('preview focus stays in overlay below the desktop minimum width', await settles(() => ev('document.querySelector(".preview-pane.overlay").contains(document.activeElement)')))
   await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27}); await wait('!document.querySelector(".preview-pane")')
   await nav('#/project/450'); await wait('!!document.querySelector("textarea")')
   await ev('document.querySelector("textarea").scrollIntoView({block:"center"})')
-  check('detail notes remain accessible in small viewport', await ev('(()=>{const r=document.querySelector("textarea").getBoundingClientRect();return r.height>0 && r.top>=0 && r.bottom<=innerHeight})()'))
+  check('detail notes remain accessible in small viewport', await settles(() => ev('(()=>{const r=document.querySelector("textarea").getBoundingClientRect();return r.height>0 && r.top>=0 && r.bottom<=innerHeight})()')))
   await viewportSession.call('Emulation.clearDeviceMetricsOverride'); viewportSession.close(); viewportSession=null
-  await fill('textarea','CANCEL CLOSE DRAFT'); await ev('document.querySelector(".window-close").click()'); await wait('!!document.querySelector(".dialog")')
+  await fill('textarea','CANCEL CLOSE DRAFT'); if(process.platform==='darwin')await ev('window.rased.windowControl("close")');else await ev('document.querySelector(".window-close").click()'); await wait('!!document.querySelector(".dialog")')
   check('native close asks before discarding note', await ev('document.querySelector("textarea").value')==='CANCEL CLOSE DRAFT')
   await click('Cancel|إلغاء','.dialog button'); await wait('!document.querySelector(".dialog")')
   check('cancel close retains page and dirty draft', await ev('location.hash')==='#/project/450' && await ev('document.querySelector("textarea").value')==='CANCEL CLOSE DRAFT')
@@ -271,7 +298,9 @@ try {
   await ev('window.__events=[];window.rased.onProjectsChanged(e=>window.__events.push(e))'); writeRss([{title:'New matching project',external:'91000001'}]); await ev('window.rased.resume()')
   await wait('!!document.querySelector(".pill")').catch(async e=>{console.error('Arrival debug',await ev('JSON.stringify({events:window.__events,scroll:document.querySelector(".list-scroll").scrollTop,rows:Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row),text:document.body.innerText,settings:await window.rased.getSettings()})'));throw e}); await sleep(2700)
   check('new arrival/enrichment preserves loaded ids until reveal', JSON.stringify(visible)===JSON.stringify(await ev('Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row)')))
-  check('single toast requests high priority and persistent browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="foreground"') && notificationDestination(db,traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml)==='https://mostaql.com/go/91000001' && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
+  check('single toast requests high priority and persistent browser activation without in-app navigation', await ev('location.hash')==='#/' && traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001')
+  // Windows-only by design: the urgent scenario, toast XML and its activation ticket are built only on win32.
+  if (process.platform === 'win32') check('single toast uses the persistent Windows activation ticket', traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="foreground"') && notificationDestination(db,traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml)==='https://mostaql.com/go/91000001')
   check('single Mostaql toast identifies its platform before the project title', traces().filter(t=>t.kind==='toast').at(-1)?.data.title.startsWith('Mostaql — New matching project'))
   await click('.', '.pill'); await wait('document.querySelector("[data-row] article").textContent.includes("New matching project")')
   check('arrival reveal fetches new row', true)
@@ -282,7 +311,9 @@ try {
   const items = Array.from({length:7},(_,i)=>({title:'Summary project '+i,external:String(92000001+i)}))
   writeRss(items); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===458)'); await ev('window.rased.pause()')
   const newToasts = traces().filter(t=>t.kind==='toast').slice(toastCount)
-  check('summary native activation targets newest persisted project once', newToasts.length===1 && notificationDestination(db,newToasts[0].data.toastXml)==='https://mostaql.com/go/92000007' && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
+  check('summary native activation targets newest persisted project once', newToasts.length===1 && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
+  // Windows-only by design: the summary activation ticket is resolved from Windows toast XML.
+  if (process.platform === 'win32') check('summary native activation resolves through the Windows toast ticket', notificationDestination(db,newToasts[0].data.toastXml)==='https://mostaql.com/go/92000007')
   const mutedToasts = traces().filter(t=>t.kind==='toast').length
   await ev('window.rased.setDnd(new Date(Date.now()+60000).toISOString())'); writeRss([{title:'Muted project',external:'93000001'}]); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===459)'); await ev('window.rased.pause()')
   check('DND suppresses actual main dispatch while discovery continues', traces().filter(t=>t.kind==='toast').length===mutedToasts && db.prepare("SELECT COUNT(*) n FROM notification_events WHERE status='suppressed'").get().n>=1)
@@ -296,18 +327,18 @@ try {
   await ev('window.rased.updateSettings({khamsatEnabled:true})')
   await ev('window.rased.resumeKhamsat()')
   await eventually(() => db.prepare("SELECT baseline_complete n FROM source_state WHERE source='khamsat'").get()?.n === 1)
-  check('Khamsat scans while Mostaql remains paused', await ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>m.paused&&!k.paused)'))
+  check('Khamsat scans while Mostaql remains paused', await settles(() => ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>m.paused&&!k.paused)')))
   await ev('window.rased.pauseKhamsat()')
   check('Khamsat first scan stores a silent baseline', db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 1 && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 0)
   await nav('#/settings')
   await click('Resume Khamsat|استئناف خمسات', '.settings button')
   await wait('window.rased.getKhamsatHealth().then(h=>!h.paused)')
-  check('settings resume acts only on Khamsat', await ev('window.rased.getHealth().then(h=>h.paused)'))
+  check('settings resume acts only on Khamsat', await settles(() => ev('window.rased.getHealth().then(h=>h.paused)')))
   await click('Pause Khamsat|إيقاف مؤقت خمسات', '.settings button')
   await wait('window.rased.getKhamsatHealth().then(h=>h.paused)')
   await nav('#/')
   await ev('window.rased.resume()')
-  check('Mostaql resumes without resuming Khamsat', await ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>!m.paused&&k.paused)'))
+  check('Mostaql resumes without resuming Khamsat', await settles(() => ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>!m.paused&&k.paused)')))
   await ev('window.rased.pause()')
   const khamsatToastStart = traces().filter(t => t.kind === 'toast').length
   writeKhamsat([{id:790001,slug:'baseline',title:'Old Khamsat request',publishedAt:Date.now()-3600000},{id:790002,slug:'fresh',title:'New Khamsat request',publishedAt:Date.now()},{id:790003,slug:'old-return',title:'Old discussion returned',publishedAt:Date.now()-9*3600000}])
@@ -315,7 +346,9 @@ try {
   await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 3)
   await ev('window.rased.pauseKhamsat()')
   const khamsatToasts = traces().filter(t => t.kind === 'toast').slice(khamsatToastStart)
-  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && notificationDestination(db,khamsatToasts[0].data.toastXml)==='https://khamsat.com/community/requests/790002-fresh' && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
+  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
+  // Windows-only by design: the Khamsat activation ticket is resolved from Windows toast XML.
+  if (process.platform === 'win32') check('fresh Khamsat toast activation resolves to its own project link', notificationDestination(db,khamsatToasts[0].data.toastXml)==='https://khamsat.com/community/requests/790002-fresh')
   check('single Khamsat toast identifies its platform before the request title', khamsatToasts[0].data.title === 'Khamsat — New Khamsat request')
   check('old Khamsat discussion is marked recovered', db.prepare("SELECT discovery_kind FROM projects WHERE source='khamsat' AND external_id='790003'").get()?.discovery_kind === 'recovered')
   const khamsatOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"khamsat"},50,0)})()')
@@ -326,15 +359,15 @@ try {
   // As in telemetry-e2e, an exited root can briefly retain its old CDP endpoint.
   // Wait for it to disappear before reusing the port for the restarted process.
   await eventually(async () => { try { await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) }); return false } catch { return true } })
-  child = startApp({exe,app,profile,port}); ws=await pageWs(port)
+  child = launchApp(); ws=await pageWs(port)
   await call(ws, 'Page.reload')
   await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
-  check('restart splash uses persisted English preferences', await ev('document.documentElement.lang === "en" && document.documentElement.dir === "ltr" && (document.querySelector(".splash-enter")?.textContent === "Explore opportunities" || !!document.querySelector(".app"))'))
+  check('restart splash uses persisted English preferences', await settles(() => ev('document.documentElement.lang === "en" && document.documentElement.dir === "ltr" && (document.querySelector(".splash-enter")?.textContent === "Explore opportunities" || !!document.querySelector(".app"))')))
   await sleep(600)
   const englishSplash = await call(ws, 'Page.captureScreenshot', { format: 'png' })
   writeFileSync('.local/qa/screenshots/startup/en-ready.png', Buffer.from(englishSplash.data, 'base64'))
-  await wait('!document.querySelector(".splash")')
-  check('ready splash enters workspace automatically without a click', await ev('!!document.querySelector(".app")'))
+  // The splash unmounts a moment before the workspace mounts; wait for the final state.
+  check('ready splash enters workspace automatically without a click', await eventually(() => ev('!document.querySelector(".splash") && !!document.querySelector(".app")')).then(() => true, () => false))
   const note = await ev('window.rased.getProject(450).then(p=>p.note)')
   check('saved note and bookmark survive a real process restart', note==='PERSISTENT NOTE' && await ev('window.rased.getProject(450).then(p=>p.saved)'))
   await wait('document.querySelectorAll("[data-row]").length>0')
@@ -348,13 +381,13 @@ try {
   // Updater fixture replaces its native/network boundary; controller, IPC and UI are real.
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
   writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ version: '0.3.0', releaseNotes: '<h2>Safe release notes</h2>\nA new feature', error: 'check' }))
-  await click('Check for updates', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="error")')
+  await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="error")')
   check('offline update check surfaces retry without losing local notes', await ev('document.querySelector(".updates-page").textContent.includes("Could not complete")') && db.prepare('SELECT note FROM project_user_state WHERE project_id=450').get().note==='PERSISTENT NOTE')
   writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ version: '0.3.0', releaseNotes: '<h2>Safe release notes</h2>\nA new feature' }))
   await click('Retry', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="available")')
   check('available update shows banner and plain text without auto-download', await ev('!!document.querySelector(".update-banner") && document.querySelector(".update-notes").textContent.includes("Safe release notes") && !document.querySelector(".update-notes h2")') && !traces().some(t=>t.kind==='update-download'))
   await click('Download update', '.updates-page button'); await wait('!!document.querySelector(".update-progress progress")')
-  check('download progress reaches renderer through actual IPC', await ev('window.rased.getUpdateState().then(s=>s.phase==="downloading")'))
+  check('download progress reaches renderer through actual IPC', await settles(() => ev('window.rased.getUpdateState().then(s=>s.phase==="downloading")')))
   await wait('window.rased.getUpdateState().then(s=>s.phase==="downloaded")')
   check('download waits for explicit install', !traces().some(t=>t.kind==='update-install'))
   mkdirSync('.local/qa/screenshots/updates', { recursive: true })
@@ -368,6 +401,38 @@ try {
   await click('Restart and update', '.update-banner button'); await wait('!!document.querySelector(".dialog")'); await click('Save', '.dialog button')
   await wait('window.rased.getUpdateState().then(s=>s.phase==="installing")')
   check('confirmed update requests silent relaunch once after saving', traces().filter(t=>t.kind==='update-install').length===1 && traces().find(t=>t.kind==='update-install').data.relaunch===true && db.prepare('SELECT note FROM project_user_state WHERE project_id=450').get().note==='UPDATE UNSAVED NOTE')
+  // Update mode checks: mode is read at startup from the isolated fixture.
+  await ev('window.rased.confirmClose(true)').catch(()=>{}); await sleep(500); await stopApp(child)
+  writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ mode: 'notify', version: '0.3.1', releaseNotes: 'Notify release' }))
+  child = launchApp(); ws = await pageWs(port)
+  await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
+  await wait('!!document.querySelector(".app")')
+  await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
+  await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="notify")')
+  check('notify mode shows open download page button without download button', await settles(() => ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open download page")) && !!Array.from(document.querySelectorAll(".update-banner button")).find(b=>b.textContent?.includes("Open download page")) && !Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Download update"))')))
+  const openExternalBefore = traces().filter(t=>t.kind==='open-external' && t.data==='https://github.com/deved234/rased/releases/latest').length
+  const updateDownloadBefore = traces().filter(t=>t.kind==='update-download').length
+  await click('Open download page', '.updates-page button')
+  await eventually(() => traces().filter(t=>t.kind==='open-external' && t.data==='https://github.com/deved234/rased/releases/latest').length > openExternalBefore)
+  check('notify mode opens fixed releases page and never downloads', traces().filter(t=>t.kind==='update-download').length===updateDownloadBefore)
+  await ev('window.rased.confirmClose(true)').catch(()=>{}); await sleep(500); await stopApp(child)
+  writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ mode: 'open-installer', version: '0.3.2', releaseNotes: 'Open installer release' }))
+  child = launchApp(); ws = await pageWs(port)
+  await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
+  await wait('!!document.querySelector(".app")')
+  await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
+  await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="open-installer")')
+  await click('Download update', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="downloaded" && s.mode==="open-installer")')
+  check('open-installer mode shows Open installer button', await settles(() => ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open installer"))')))
+  const installBefore = traces().filter(t=>t.kind==='update-install').length
+  await click('Open installer', '.updates-page button'); await wait('!!document.querySelector(".dialog")')
+  await click('Open installer', '.dialog button'); await eventually(() => traces().filter(t=>t.kind==='update-install').length > installBefore)
+  check('open-installer mode confirms and records update-install', traces().filter(t=>t.kind==='update-install').length===installBefore+1)
+  await ev('window.rased.confirmClose(true)').catch(()=>{}); await sleep(500); await stopApp(child)
+  writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ version: '0.3.0', releaseNotes: '<h2>Safe release notes</h2>\nA new feature' }))
+  child = launchApp(); ws = await pageWs(port)
+  await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
+  await wait('!!document.querySelector(".app")')
   await ev('window.rased.updateSettings({nafezlyEnabled:true})')
   await ev('window.rased.resumeNafezly()')
   await eventually(() => db.prepare("SELECT baseline_complete n FROM source_state WHERE source='nafezly'").get()?.n === 1)
@@ -379,9 +444,12 @@ try {
   await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='nafezly'").get().n===2)
   await ev('window.rased.pauseNafezly()')
   const nafezlyToasts = traces().filter(t=>t.kind==='toast').slice(nafezlyToastStart)
-  check('Nafezly fresh project stores full RSS description and browser toast destination', nafezlyToasts.length===1 && notificationDestination(db,nafezlyToasts[0].data.toastXml)==='https://nafezly.com/project/50002-fresh' && db.prepare("SELECT d.description_text FROM project_details d JOIN projects p ON p.id=d.project_id WHERE p.source='nafezly' AND p.external_id='50002'").get()?.description_text==='Full RSS description for integration')
+  check('Nafezly fresh project stores full RSS description and browser toast destination', nafezlyToasts.length===1 && db.prepare("SELECT d.description_text FROM project_details d JOIN projects p ON p.id=d.project_id WHERE p.source='nafezly' AND p.external_id='50002'").get()?.description_text==='Full RSS description for integration')
+  // Windows-only by design: the Nafezly activation ticket is resolved from Windows toast XML.
+  if (process.platform === 'win32') check('fresh Nafezly toast activation resolves to its own project link', notificationDestination(db,nafezlyToasts[0].data.toastXml)==='https://nafezly.com/project/50002-fresh')
   check('single Nafezly toast identifies its platform before the project title', nafezlyToasts[0].data.title === 'Nafezly — New Nafezly project')
-  const nafezlyOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"nafezly",categoryFilter:{mode:"all",categories:[],keywordsAny:[],keywordsAll:[],excludeKeywords:[]}},50,0)})()')
+  // Right after a relaunch the renderer's own list query can supersede this one; retry only that case.
+  const nafezlyOnly = await eventually(()=>ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"nafezly",categoryFilter:{mode:"all",categories:[],keywordsAny:[],keywordsAll:[],excludeKeywords:[]}},50,0)})()').catch(e=>String(e?.message??e).includes('search-superseded')?null:Promise.reject(e)))
   check('Nafezly source filter returns only its projects', nafezlyOnly.total===2 && nafezlyOnly.rows.every(p=>p.source==='nafezly'))
   const nafezlyProjectId = db.prepare("SELECT id FROM projects WHERE source='nafezly' AND external_id='50002'").get().id
   await nav(`#/project/${nafezlyProjectId}`); await wait('!!document.querySelector(".detail-article")')
@@ -396,6 +464,8 @@ try {
   try { console.error('Renderer failure state:', await ev('({phase:document.querySelector(".splash")?.dataset.phase,text:document.querySelector(".splash")?.textContent,rows:document.querySelectorAll("[data-row]").length})')) } catch { /* process may already have exited */ }
   console.error(`E2E FAILED after ${passed} assertions:`,err.stack); console.error('Profile retained:',profile); process.exitCode=1
   console.error('Child exit state:', { exitCode: child?.exitCode, signalCode: child?.signalCode })
+  const outputTail = childOutput.trim().split(/\r?\n/).slice(-40).join('\n')
+  if (outputTail) console.error('Child output (last 40 lines):\n' + outputTail)
   const startupLog = join(profile, 'startup-failure.log')
   if (existsSync(startupLog)) console.error('Sanitized startup failures:', readFileSync(startupLog, 'utf8').slice(-8192))
 } finally { viewportSession?.close(); db.close(); if(child) await stopApp(child) }

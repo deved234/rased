@@ -5,13 +5,13 @@ import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
 const profile = newProfile(args.profile)
 const profilesToClean = [profile]
 const port = Number(args.port ?? 9495)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe'
+const exe = args.exe ?? electronPath()
 const app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const output = resolve('.local/project-watch-2026-11-11/mock')
 mkdirSync(output, { recursive: true })
@@ -724,26 +724,29 @@ try {
   assert.equal(watchToasts.length, 4, 'total watch toasts must be exactly 4')
 
   // Verify toast traces have activation pointing to the right project
-  const p1Toast = sureToasts[0]
-  const p20Toast = inProgressToasts[0]
-  const p30Toast = completedToasts[0]
-  const p5Toast = maybeToasts[0]
+  // Notification activation tickets are only issued on Windows.
+  if (process.platform === 'win32') {
+    const p1Toast = sureToasts[0]
+    const p20Toast = inProgressToasts[0]
+    const p30Toast = completedToasts[0]
+    const p5Toast = maybeToasts[0]
 
-  const p1Act = getActivation(storage, p1Toast?.data?.toastXml)
-  const p20Act = getActivation(storage, p20Toast?.data?.toastXml)
-  const p30Act = getActivation(storage, p30Toast?.data?.toastXml)
-  const p5Act = getActivation(storage, p5Toast?.data?.toastXml)
+    const p1Act = getActivation(storage, p1Toast?.data?.toastXml)
+    const p20Act = getActivation(storage, p20Toast?.data?.toastXml)
+    const p30Act = getActivation(storage, p30Toast?.data?.toastXml)
+    const p5Act = getActivation(storage, p5Toast?.data?.toastXml)
 
-  assert.equal(p1Act?.project_id, 1, 'p1 activation project_id')
-  assert.equal(p1Act?.origin, 'watch_notification', 'p1 activation origin')
-  assert.equal(p20Act?.project_id, 20, 'p20 activation project_id')
-  assert.equal(p20Act?.origin, 'watch_notification', 'p20 activation origin')
-  assert.equal(p30Act?.project_id, 30, 'p30 activation project_id')
-  assert.equal(p30Act?.origin, 'watch_notification', 'p30 activation origin')
-  assert.equal(p5Act?.project_id, 5, 'p5 activation project_id')
-  assert.equal(p5Act?.origin, 'watch_notification', 'p5 activation origin')
+    assert.equal(p1Act?.project_id, 1, 'p1 activation project_id')
+    assert.equal(p1Act?.origin, 'watch_notification', 'p1 activation origin')
+    assert.equal(p20Act?.project_id, 20, 'p20 activation project_id')
+    assert.equal(p20Act?.origin, 'watch_notification', 'p20 activation origin')
+    assert.equal(p30Act?.project_id, 30, 'p30 activation project_id')
+    assert.equal(p30Act?.origin, 'watch_notification', 'p30 activation origin')
+    assert.equal(p5Act?.project_id, 5, 'p5 activation project_id')
+    assert.equal(p5Act?.origin, 'watch_notification', 'p5 activation origin')
 
-  check('Each toast trace has origin/activation pointing to the right project', true)
+    check('Each toast trace has origin/activation pointing to the right project', true)
+  }
 
   // Clear watches from scenario b to keep subsequent source slots fast
   await setWatchState(1, 'off')

@@ -104,7 +104,7 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
       setMessageSection('key'); setBusy(true)
       void rased.deleteAiKey(provider).then(async result => { if (result.ok) { setKey(''); await reload() }; setMessage(result.ok ? (ar ? 'تم حذف المفتاح.' : 'Key deleted.') : aiErrorText(result.error, ar)) }).catch(() => setMessage(aiErrorText('key-save-failed', ar))).finally(() => setBusy(false))
     }}>{ar ? 'حذف المفتاح' : 'Delete key'}</button></div>
-    <p className="hint">{ar ? 'المفاتيح مستقلة ومشفرة بحماية Windows، خارج قاعدة البيانات والتصدير. حفظ المفتاح لا يثبت صلاحيته. الاستخدام والحصة والتكلفة حسب حسابك لدى الشركة.' : 'Separate Windows-encrypted keys stay outside the database and exports. Saving does not verify a key. Quotas and costs depend on your provider account.'}</p>
+    <p className="hint">{ar ? 'المفاتيح مستقلة ومشفرة بمخزن النظام المحمي، خارج قاعدة البيانات والتصدير. حفظ المفتاح لا يثبت صلاحيته. الاستخدام والحصة والتكلفة حسب حسابك لدى الشركة.' : 'Separate keys encrypted by your system’s protected storage stay outside the database and exports. Saving does not verify a key. Quotas and costs depend on your provider account.'}</p>
     {status?.verification?.model === selection.model && <p className="tag good">{ar ? 'آخر توليد ناجح: ' : 'Last successful generation: '}{new Date(status.verification.testedAt).toLocaleString(ar ? 'ar-EG' : 'en-US')}</p>}
     <p className="hint">{ar ? 'في التوليد اليدوي ستراجع البيانات والشركة المستقبلة. راجع الخصوصية وشروط API؛ لا تشارك بيانات سرية دون إذن.' : 'For manual generation, review input and its recipient first. Read API terms and privacy policies; do not send confidential data without permission.'}</p>
     {message && messageSection === 'key' && <p className="inline-feedback" role="status">{message}</p>}
@@ -120,7 +120,7 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
     <div className="row-actions"><button className="btn sm" disabled={busy || !status?.keyReadable || !sanitizeSelection(selection)} onClick={() => void test()}>{ar ? 'اختبار التوليد' : 'Test generation'}</button>{busy && <button className="btn sm" onClick={() => void rased.cancelProposal()}>{ar ? 'إلغاء الاختبار' : 'Cancel test'}</button>}</div>
     <p className="hint">{ar ? 'الاختبار يستخدم بيانات وهمية فقط. الموديلات الجديدة قد تحتاج اختبار توافق؛ لا ننتقل إلى موفر آخر عند الفشل.' : 'Tests use synthetic data only. New models may require compatibility testing; failures never switch provider automatically.'}</p>
     {message && messageSection === 'model' && <p className="inline-feedback" role="status">{message}</p>}
-    <section className="quick-consent-settings">
+    {rased.platform === 'win32' && <section className="quick-consent-settings">
       <h3>{ar ? 'التقديم السريع بمساعد العروض (اختياري)' : 'Quick Apply with Assistant (optional)'}</h3>
       <p id="quick-consent-description" className="hint">{ar ? `عند كل نقرة، إذا لم توجد مسودة محفوظة، تُرسل بيانات المشروع العامة (العنوان والوصف والتصنيف والمهارات والميزانية) وملفك المهني إلى ${AI_NAMES[provider]} / ${selection.model} بلا معاينة. لا تُرسل الملاحظات الخاصة. تنطبق رسوم وحصص وسياسات المزوّد. تُعاد استخدام المسودة المحفوظة دون توليد. راجع العرض في Chrome وقدّمه بنفسك. يمكنك سحب الموافقة هنا؛ لا تُنقل بالتصدير أو النسخ الاحتياطي.` : `On each click, if no saved draft exists, public project data (title, description, category, skills, budget) and your freelancer profile are sent to ${AI_NAMES[provider]} / ${selection.model} without a preview. Private notes are excluded. Provider charges, quotas and policies apply. Saved drafts are reused without generation. Review in Chrome and submit yourself. Withdraw consent here; it is excluded from exports and backups.`}</p>
       <label><input id="ai-quick-consent" type="checkbox" aria-describedby="quick-consent-description" checked={!!setup?.quickConsent} disabled={busy || (!setup?.quickConsent && (aiDirty || !status?.keyReadable || !sanitizeSelection(selection)))} onChange={e => {
@@ -129,7 +129,7 @@ export function ProposalSettings({ lang }: { lang: Lang }): React.ReactElement {
         void rased.setQuickConsent(enabled, selection).then(async result => { if (!result.ok) setMessage(aiErrorText('bad-request', ar)); await reload() }).catch(() => setMessage(aiErrorText('network-error', ar))).finally(() => setBusy(false))
       }} /> {ar ? 'اسمح بالتقديم السريع بمساعد العروض' : 'Allow Quick Apply with Assistant'}</label>
       {aiDirty && <p className="hint">{ar ? 'احفظ اختيار المزوّد والموديل أولًا.' : 'Save the provider and model selection first.'}</p>}
-    </section>
+    </section>}
     <ProfileEditor ar={ar} value={profiles} saved={savedProfiles} error={profileError} busy={busy} onChange={setProfiles} onSave={saveProfiles} onRecover={() => {
       setBusy(true); setMessageSection('profile')
       void rased.recoverProfileSet().then(async result => { if (!result.ok) throw Error(); const state = await rased.getProfileSet(); setProfiles(state.set); setSavedProfiles(state.set); setProfileError(!!state.error) }).catch(() => setMessage(ar ? 'تعذرت إعادة الإنشاء.' : 'Recovery failed.')).finally(() => setBusy(false))

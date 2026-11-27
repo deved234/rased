@@ -30,6 +30,10 @@ export function QuickApplySettings({settings}:{settings:AppSettings}):React.Reac
   const act=async(action:ExtensionAction)=>{setBusy(true);try{const result=await rased.extensionAction(action);setStatus(await rased.getExtensionStatus());setMessage(result.ok?(ar?'تم':'Done'):(ar?'تعذر إتمام الخطوة. تأكد أن Chrome مثبت ثم أعد المحاولة.':'Unable to complete this step. Check Chrome installation and retry.'))}catch{setMessage(ar?'تعذر الاتصال':'Connection failed')}finally{setBusy(false)}}
   const save=async():Promise<boolean>=>{if(!validQuickApply(draft)||busy)return false;setBusy(true);try{const saved=await rased.updateSettings({quickApply:draft});baseline.current={...saved.quickApply};setDraft({...saved.quickApply});setConflict(false);setMessage(ar?'تم الحفظ':'Saved');return true}catch{setMessage(ar?'راجع القالب والقيم وربط الإضافة':'Check template, values, and extension pairing');return false}finally{setBusy(false)}}
   const unsavedDialog=useUnsavedChanges(dirty,ar,save)
+  if(rased.platform!=='win32')return <section className="set-group">
+    <h2>{ar?'التقديم السريع':'Quick Apply'}</h2>
+    <p className="hint" role="status">{ar?'التقديم السريع متاح على Windows حاليًا.':'Quick Apply is currently available on Windows only.'}</p>
+  </section>
   return <section className="set-group">
     <h2>{ar?'التقديم السريع':'Quick Apply'}</h2>
     {status?.assistant && <p role="status">{ar?'جارٍ كتابة وتجهيز العرض…':'Writing and preparing proposal…'} <button className="btn sm" onClick={()=>void rased.cancelQuickAssistant(status.assistant!.operationId)}>{ar?'إلغاء':'Cancel'}</button></p>}

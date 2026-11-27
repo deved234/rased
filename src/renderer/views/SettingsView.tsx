@@ -273,10 +273,10 @@ export function SettingsView({
               <div className="set-row">
                 <span className="hint">{t.testNotifNote}</span>
               </div>
-              {appInfo?.platform === 'win32' && (
+              {(appInfo?.platform === 'win32' || appInfo?.platform === 'darwin') && (
                 <div className="set-row">
-                  <button className="btn sm" onClick={() => void rased.openWindowsNotificationSettings()}>{t.windowsNotificationSettings}</button>
-                  <span className="hint">{t.windowsNotificationHint}</span>
+                  <button className="btn sm" onClick={() => void rased.openWindowsNotificationSettings()}>{appInfo?.platform === 'darwin' ? t.macNotificationSettings : t.windowsNotificationSettings}</button>
+                  <span className="hint">{appInfo?.platform === 'darwin' ? t.macNotificationHint : t.windowsNotificationHint}</span>
                 </div>
               )}
             </div>
@@ -636,6 +636,14 @@ export function SettingsView({
               <div className="about-links">
                 <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('linkedin')}>LinkedIn <Icon name="external" size={14} /></button>
                 <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('github')}>GitHub <Icon name="external" size={14} /></button>
+              </div>
+            </section>
+            <section className="set-group" aria-labelledby="about-community-title">
+              <h3 id="about-community-title">{t.communityTitle}</h3>
+              <p className="muted">{t.communityBody}</p>
+              <div className="about-links">
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('telegramChannel')}>{t.communityChannel} <Icon name="external" size={14} /></button>
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('telegramGroup')}>{t.communityGroup} <Icon name="external" size={14} /></button>
               </div>
             </section>
             <section className="set-group about-story" aria-labelledby="about-story-title">

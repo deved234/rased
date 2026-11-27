@@ -79,6 +79,7 @@ export interface AppInfo {
 }
 
 export interface RasedApi {
+  readonly platform: string
   databaseReady(): Promise<boolean>
   getSidebarCounts(): Promise<{ unread: number; saved: number; watching: number }>
   matchProjectIds(definition: FilterDefinition, ids: number[]): Promise<number[]>
@@ -116,6 +117,7 @@ export interface RasedApi {
   downloadUpdate(): Promise<MutationResult>
   installUpdate(): Promise<MutationResult>
   confirmUpdateInstall(): Promise<MutationResult>
+  openUpdatePage(): Promise<MutationResult>
   onUpdateState(cb: (state: UpdateState) => void): () => void
   onRequestUpdateInstall(cb: () => void): () => void
   getProjects(q: ProjectQuery): Promise<Project[]>

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { LEGAL_DOCUMENTS, LEGAL_UPDATED_AT } from '../src/shared/legal.ts'
 mkdirSync('resources/legal', { recursive: true })
@@ -10,7 +10,12 @@ function gather(name, base = process.cwd()) {
   if (seen.has(id)) return
   seen.add(id)
   let text = ''
-  for (const file of ['LICENSE', 'LICENSE.txt', 'LICENSE.md', 'license', 'license.txt', 'COPYING', 'OFL.txt']) if (existsSync(join(dir, file))) { text = readFileSync(join(dir, file), 'utf8'); break }
+  const candidates = ['LICENSE', 'LICENSE.txt', 'LICENSE.md', 'license', 'license.txt', 'COPYING', 'OFL.txt']
+  const dirEntries = existsSync(dir) ? readdirSync(dir) : []
+  for (const candidate of candidates) {
+    const match = dirEntries.find(entry => entry.toLowerCase() === candidate.toLowerCase())
+    if (match) { text = readFileSync(join(dir, match), 'utf8'); break }
+  }
   if (!text && name === '@nodable/entities') text = readFileSync('docs/legal/entities-LICENSE.txt', 'utf8')
   if (!text && name === 'lazy-val') text = readFileSync('docs/legal/lazy-val-license-declaration.txt', 'utf8')
   if (!text && name === '@koromix/koffi-win32-x64') text = readFileSync('node_modules/koffi/LICENSE.txt', 'utf8')
@@ -18,7 +23,8 @@ function gather(name, base = process.cwd()) {
   parts.push(id + '\n' + (p.homepage ?? p.repository?.url ?? '') + '\n\n' + text)
   for (const dependency of Object.keys(p.dependencies ?? {})) gather(dependency, dir)
 }
-for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-sans-arabic', 'electron-updater', 'koffi', '@koromix/koffi-win32-x64']) gather(name)
+// koffi's prebuilt binary package is installed per platform; only Windows loads and ships it.
+for (const name of ['react', 'react-dom', 'fast-xml-parser', '@fontsource/noto-sans-arabic', 'electron-updater', 'koffi', ...(process.platform === 'win32' ? ['@koromix/koffi-win32-x64'] : [])]) gather(name)
 writeFileSync('resources/legal/THIRD_PARTY_NOTICES.txt', parts.join('\n\n' + '='.repeat(72) + '\n\n'))
 writeFileSync('resources/legal/LICENSE', readFileSync('LICENSE'))
 for (const [key, file] of [['terms', 'TERMS.md'], ['privacy', 'PRIVACY.md']]) {

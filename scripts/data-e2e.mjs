@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js', port = Number(args.port ?? 9495)
+const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js', port = Number(args.port ?? 9495)
 const output = resolve('.local/phase-1-data-2026-10-15/screenshots')
 mkdirSync(output, { recursive: true })
 const source = newProfile(), target = newProfile(), children = []
@@ -142,7 +142,7 @@ try {
   await invoke('closeCompact')
   dialog(target, 'open-backup', 'exports/full.rased-backup')
   await navData(); await click('اختيار نسخة للاستعادة'); await wait('!!document.querySelector(".backup-preview")')
-  check('restore preview shows current/incoming counts for four data groups', await ev('document.querySelectorAll(".backup-counts tbody tr").length===4 && document.querySelector(".backup-counts tbody tr td:last-child").textContent==="4"'))
+  check('restore preview shows current/incoming counts for four data groups', await settles(() => ev('document.querySelectorAll(".backup-counts tbody tr").length===4 && document.querySelector(".backup-counts tbody tr td:last-child").textContent==="4"')))
   await click('إلغاء الاستعادة')
   check('cancelling preview preserves the database', !(await invoke('getDataStatus')).lastRestore && (await invoke('queryProjectsPage', definition, 50, 0)).total === 1)
   await click('اختيار نسخة للاستعادة'); await wait('!!document.querySelector(".backup-preview")')
@@ -150,10 +150,10 @@ try {
   await session.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 720, deviceScaleFactor: 1.25, mobile: false })
   await invoke('updateSettings', { ui: { ...(await invoke('getSettings')).ui, textScale: 125 } })
   await ev('document.querySelector(".backup-preview").scrollIntoView({block:"center"})'); await sleep(150)
-  check('Arabic preview fits 900px at 125% text', await ev('document.documentElement.dir==="rtl" && document.body.scrollWidth<=innerWidth+1'))
+  check('Arabic preview fits 900px at 125% text', await settles(() => ev('document.documentElement.dir==="rtl" && document.body.scrollWidth<=innerWidth+1')))
   await shot('ar-dark-125-restore-preview')
   await click('متابعة الاستعادة…'); await wait('!!document.querySelector(".dialog")')
-  check('restore has a separate confirmation dialog', await ev('document.querySelector(".dialog").getAttribute("role")==="alertdialog"'))
+  check('restore has a separate confirmation dialog', await settles(() => ev('document.querySelector(".dialog").getAttribute("role")==="alertdialog"')))
   await call(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
   await wait('!document.querySelector(".dialog")')
   check('Escape cancels without restart or data changes', b.exitCode === null && (await invoke('getProject', 1)).note === 'Target private note')
@@ -166,7 +166,7 @@ try {
   await click('Continue restore…'); await wait('!!document.querySelector(".dialog")')
   await shot('en-light-restore-confirmation')
   await call(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
-  check('confirmation keeps keyboard focus in the dialog', await ev('document.querySelector(".dialog").contains(document.activeElement)'))
+  check('confirmation keeps keyboard focus in the dialog', await settles(() => ev('document.querySelector(".dialog").contains(document.activeElement)')))
   await invoke('updateProjectUserState', 1, { note: 'Latest edit after preview' })
   await click('Restore and restart')
   session.close(); session = null

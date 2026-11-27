@@ -37,7 +37,7 @@ if (options.purgeOnly) {
   const publish = (request?: number, failed = false): void => { parentPort?.postMessage({ type: 'status', request, failed, ...store.status(), transport: options.config || options.fixture ? delivery.state : 'unavailable', lastAcceptedAt: delivery.lastAccepted }) }
   function envelope(name: TelemetryName, properties: Record<string, string | number>, hour = false): TelemetryEnvelope {
     const unit = hour ? 3600000 : 60000
-    return { ...options.context, schemaVersion: 1, eventId: randomUUID(), distinctId: consent.identity!, name, properties, occurredAt: new Date(Math.floor(Date.now() / unit) * unit).toISOString(), count: 1 }
+    return { ...options.context, schemaVersion: 2, eventId: randomUUID(), distinctId: consent.identity!, name, properties, occurredAt: new Date(Math.floor(Date.now() / unit) * unit).toISOString(), count: 1 }
   }
   function record(name: TelemetryName, properties: Record<string, string | number>, once?: string): void {
     if (enabled() && validTelemetryProperties(name, properties)) store.add(envelope(name, properties), once)

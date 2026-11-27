@@ -12,9 +12,10 @@ import { matchesKafKeywords } from '../collector/kaf.js'
 
 import { randomUUID } from 'node:crypto'
 import { release as osRelease } from 'node:os'
-import { NsisUpdater } from 'electron-updater'
 import { UpdateController } from './updates.js'
-import { testUpdater } from './testHarness.js'
+import { testUpdater, testUpdaterMode } from './testHarness.js'
+import { createUpdaterPort } from './platform/updater.js'
+import { toTemplateBitmap } from './platform/trayTemplate.js'
 import { version as APP_VERSION } from '../../package.json'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -35,7 +36,7 @@ import {
 import { IPC } from '../shared/channels.js'
 import { TelemetryService, telemetryWorkerEntry } from './telemetry/service.js'
 import { telemetryConfig } from './telemetry/config.js'
-import { ANALYTICS_SUPPORT, UI_SURFACES, durationBucket, quickApplyTelemetryError } from '../shared/telemetry.js'
+import { ANALYTICS_SUPPORT, UI_SURFACES, deviceContext, durationBucket, quickApplyTelemetryError } from '../shared/telemetry.js'
 import type { SourceId } from '../shared/sources.js'
 import { repairLegacyDevShortcut, RASED_APP_ID, RASED_DEV_APP_ID, taskbarDetails } from './taskbar.js'
 import { backupError, DataBackupManager, isCorruptDatabaseError, recoverCorruptDatabase, recoverPendingRestore } from './dataBackup.js'
@@ -117,7 +118,7 @@ import type { ProjectFacts } from '../shared/projectFacts.js'
 import { SourceArbiter, type ArbiterClaim } from '../collector/sourceArbiter.js'
 import { arbiterBudget } from '../collector/arbiterBudget.js'
 import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './policies.js'
-import { isolatedTestHarness } from './testHarness.js'
+import { isolatedTestHarness, insideTestProfile } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import {
@@ -154,6 +155,8 @@ import { notificationActivationArguments, notificationScheme, parseNotificationA
 import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation, watchActivationTarget, type NotificationOrigin } from '../storage/notificationActivations.js'
 import { getProposalProfile, saveProposalProfile, saveProfileSet } from './proposals.js'
 import { AiService } from './ai/service.js'
+import { keyStorageAvailable } from './ai/keyStore.js'
+import { applyAutoStart as applyPlatformAutoStart } from './platform/autostart.js'
 import { QuickAssistant } from './extension/quickAssistant.js'
 import { loadAppSettings } from '../storage/appSettings.js'
 import { isAiProvider, sanitizeSelection } from '../shared/ai.js'
@@ -436,6 +439,7 @@ function publishSettings(s: AppSettings): void {
   applyAutoStart()
   broadcast(IPC.settingsChanged, s)
   updateTray()
+  if (previous.language !== s.language) updateAppMenu()
 }
 
 function handleWatchSourceDisabled(source: WatchSource): void {
@@ -485,12 +489,15 @@ function applyMonitoringSettings(previous: AppSettings, next: AppSettings): void
 }
 
 function applyAutoStart(): void {
-  if (testHarness) return
-  try {
-    app.setLoginItemSettings({ openAtLogin: settings.runAtStartup })
-  } catch {
-    /* best effort; surfaced in README as manual fallback */
-  }
+  applyPlatformAutoStart({
+    platform: process.platform,
+    packaged: IS_PACKAGED,
+    testHarness: !!testHarness,
+    openAtLogin: settings.runAtStartup,
+    loginItem: app,
+    env: process.env,
+    paths: { execPath: process.execPath, homeDir: app.getPath('home') }
+  })
 }
 
 // ---------------------------------------------------------------- health
@@ -1452,8 +1459,15 @@ function applyCspPolicy(session: Session): void {
   })
 }
 
+function windowIcon(): string | undefined {
+  if (process.platform === 'win32') return iconPath('icon.ico')
+  if (process.platform === 'linux') return iconPath('icon.png')
+  return undefined
+}
+
 function attachWindowChrome(window: BrowserWindow): void {
-  window.setIcon(iconPath('icon.ico'))
+  const icon = windowIcon()
+  if (icon) window.setIcon(icon)
   if (process.platform === 'win32') window.setAppDetails(taskbarDetails(IS_PACKAGED, process.execPath, join(__dirname, 'index.js'), iconPath('icon.ico')))
   const emit = (): void => { if (!window.isDestroyed()) window.webContents.send(IPC.windowState, { maximized: window.isMaximized() }) }
   window.on('maximize', emit)
@@ -1469,6 +1483,7 @@ function guardNavigation(window: BrowserWindow): void {
 }
 
 function createWindow(): void {
+  const icon = windowIcon()
   win = new BrowserWindow({
     width: 1220,
     height: 820,
@@ -1476,8 +1491,8 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#14171c',
     autoHideMenuBar: true,
-    icon: iconPath('icon.ico'),
-    frame: false,
+    ...(icon ? { icon } : {}),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } } : { frame: false }),
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -1538,6 +1553,41 @@ function trayLabel(): string {
   return `RASED — ${state}`
 }
 
+function requestQuit(): void {
+  if (win && !win.isDestroyed()) { win.show(); win.webContents.send(IPC.requestClose, { quit: true }) }
+  else doQuit()
+}
+
+function updateAppMenu(): void {
+  if (process.platform !== 'darwin') return
+  const ar = settings.language === 'ar'
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { label: ar ? 'خروج' : 'Quit', accelerator: 'CmdOrCtrl+Q', click: requestQuit }
+        ]
+      },
+      { role: 'editMenu' },
+      {
+        label: ar ? 'عرض' : 'View',
+        submenu: [
+          { role: 'togglefullscreen' },
+          ...(!IS_PACKAGED ? [{ role: 'toggleDevTools' as const }] : [])
+        ]
+      },
+      { role: 'windowMenu' }
+    ])
+  )
+}
+
 function updateTray(): void {
   if (!tray) return
   tray.setToolTip(trayLabel())
@@ -1567,14 +1617,20 @@ function updateTray(): void {
       },
       { label: ar ? 'الإعدادات' : 'Settings', click: () => { win?.show(); win?.webContents.send(IPC.openSettings) } },
       { type: 'separator' },
-      { label: ar ? 'خروج' : 'Quit', click: () => { if (win && !win.isDestroyed()) { win.show(); win.webContents.send(IPC.requestClose, { quit: true }) } else doQuit() } }
+      { label: ar ? 'خروج' : 'Quit', click: requestQuit }
     ])
   )
 }
 
 function createTray(): void {
-  const img = nativeImage.createFromPath(iconPath('tray.png'))
-  tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img)
+  const loaded = nativeImage.createFromPath(iconPath('tray.png'))
+  let img = loaded.isEmpty() ? nativeImage.createEmpty() : loaded
+  if (!loaded.isEmpty() && process.platform === 'darwin') {
+    const resized = loaded.resize({ width: 36, height: 36 })
+    img = nativeImage.createFromBitmap(toTemplateBitmap(resized.toBitmap()), { width: 36, height: 36, scaleFactor: 2 })
+    img.setTemplateImage(true)
+  }
+  tray = new Tray(img)
   tray.on('double-click', () => win?.show())
   updateTray()
 }
@@ -1632,6 +1688,7 @@ function openCompact(): void {
     return
   }
   const saved = saneCompactBounds()
+  const icon = windowIcon()
   compactWin = new BrowserWindow({
     width: saved?.width ?? 380,
     height: saved?.height ?? 560,
@@ -1642,8 +1699,8 @@ function openCompact(): void {
     backgroundColor: settings.ui.theme === 'light' ? '#faf7f0' : '#14171c',
     autoHideMenuBar: true,
     alwaysOnTop: settings.ui.compactAlwaysOnTop,
-    icon: iconPath('icon.ico'),
-    frame: false,
+    ...(icon ? { icon } : {}),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } } : { frame: false }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -1933,7 +1990,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.saveAiKey, (event, v) => {
     const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.saveKey(v.provider, v?.key))
     if (ok) quickAssistant?.cancel()
-    return { ok, error: ok ? undefined : 'key-save-failed' }
+    return { ok, error: ok ? undefined : process.platform === 'linux' && !keyStorageAvailable() ? 'keyring-unavailable' : 'key-save-failed' }
   })
   ipcMain.handle(IPC.deleteAiKey, (event, v) => {
     const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.deleteKey(v.provider))
@@ -1990,11 +2047,24 @@ function registerIpc(): void {
     updateInstallRequested = false
     return updates?.install()
   })
+  ipcMain.handle(IPC.openUpdatePage, async event => {
+    if (!mainSender(event)) return { ok: false, error: 'untrusted' }
+    const url = 'https://github.com/deved234/rased/releases/latest'
+    try {
+      if (testHarness) testHarness.record('open-external', url)
+      else await shell.openExternal(url)
+      return { ok: true }
+    } catch { return { ok: false, error: 'open-failed' } }
+  })
   ipcMain.handle(IPC.confirmClose, (event, v: { quit: boolean }) => {
     if (event.sender !== win?.webContents) return
     if (v.quit === true || !applicationAccessAllowed()) return shutdown()
-    win?.hide()
-    if (!hintShown) {
+    // Linux: minimize instead of hiding; a tray-less hidden window could become unreachable.
+    if (process.platform === 'linux') win?.minimize()
+    // Windows and macOS: hide to the tray background; macOS restores via the Dock activate handler.
+    else win?.hide()
+    // The tray balloon hint is a Windows-only API whose text says "quit from the tray menu".
+    if (process.platform === 'win32' && !hintShown) {
       hintShown = true
       tray?.displayBalloon({
         title: 'RASED',
@@ -2434,10 +2504,11 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.testNotification, () => sendTestNotification())
   ipcMain.handle(IPC.openWindowsNotificationSettings, async event => {
-    if (!mainSender(event) || process.platform !== 'win32') return { ok: false, error: 'unavailable' }
+    const url = process.platform === 'win32' ? 'ms-settings:quiethours' : process.platform === 'darwin' ? 'x-apple.systempreferences:com.apple.preference.notifications' : null
+    if (!mainSender(event) || !url) return { ok: false, error: 'unavailable' }
     try {
-      if (testHarness) testHarness.record('open-system-settings', 'ms-settings:quiethours')
-      else await shell.openExternal('ms-settings:quiethours')
+      if (testHarness) testHarness.record('open-system-settings', url)
+      else await shell.openExternal(url)
       return { ok: true }
     } catch {
       return { ok: false, error: 'open-failed' }
@@ -2585,12 +2656,17 @@ function registerIpc(): void {
   ipcMain.handle(IPC.openAboutLink, async (_event, value: unknown): Promise<MutationResult> => {
     const link = value && typeof value === 'object' ? (value as { link?: unknown }).link : null
     if (typeof link !== 'string' || !Object.hasOwn(ABOUT_LINKS, link)) return { ok: false, error: 'bad-link' }
+    const communityFeature = link === 'telegramChannel' ? 'community_channel' : link === 'telegramGroup' ? 'community_group' : null
     try {
       const url = ABOUT_LINKS[link as AboutLink]
       if (testHarness) testHarness.record('open-external', url)
       else await shell.openExternal(url)
+      if (communityFeature) telemetry?.record('feature_used', { feature: communityFeature, outcome: 'success' })
       return { ok: true }
-    } catch { return { ok: false, error: 'open-failed' } }
+    } catch {
+      if (communityFeature) telemetry?.record('feature_used', { feature: communityFeature, outcome: 'failed' })
+      return { ok: false, error: 'open-failed' }
+    }
   })
   ipcMain.handle(IPC.getAppInfo, () => ({ version: testHarness?.appVersion ?? APP_VERSION, platform: process.platform, arch: process.arch }))
   ipcMain.handle(IPC.openCompact, () => {
@@ -2700,7 +2776,7 @@ async function boot(): Promise<void> {
   testHarness?.initializeSettings(settings, testHarness.appVersion ?? APP_VERSION, saveSettings)
   startupStage = 'later'
   if (testHarness && existsSync(join(app.getPath('userData'), 'startup-failure.json'))) throw Error('synthetic startup failure')
-  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, windowsFamily: Number(osRelease().split('.')[2]) >= 22000 ? '11' : process.platform === 'win32' ? '10' : 'other', config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) { syncAnalyticsAccess(); broadcast(IPC.analyticsChanged, telemetry.status()) } } })
+  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, device: deviceContext(process.platform, osRelease(), process.getSystemVersion(), process.arch), config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) { syncAnalyticsAccess(); broadcast(IPC.analyticsChanged, telemetry.status()) } } })
   telemetry.start(notificationBoot)
   aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi, result => telemetry?.record('proposal_result', result))
   cleanupNotificationActivations(db)
@@ -2716,10 +2792,12 @@ async function boot(): Promise<void> {
   } catch {
     recordDiagnostic(db, { at: new Date().toISOString(), endpointKind: 'quick-apply', status: 'retirement-failed', durationMs: 0, itemCount: null, errorCategory: 'legacy-browser-cleanup-failed', detail: null })
   }
-  try{
-    extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>applicationAccessAllowed() ? settings : { ...settings, quickApply: { ...settings.quickApply, enabled: false } },extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
-    await extension.start()
-  }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
+  if (process.platform === 'win32') {
+    try{
+      extension=new ExtensionBroker(db,join(app.getPath('userData'),'chrome-link'),IS_PACKAGED?process.resourcesPath:join(__dirname,'../../resources'),()=>applicationAccessAllowed() ? settings : { ...settings, quickApply: { ...settings.quickApply, enabled: false } },extensionChanged,()=>launchChrome(),testHarness?'com.rased.quick_apply_integration':undefined)
+      await extension.start()
+    }catch{extension?.dispose();extension=null;auditUi('extension-bridge-unavailable')}
+  }
   if(extension&&aiService)quickAssistant=new QuickAssistant(db,aiService,extension,applicationAccessAllowed,extensionChanged)
   if(settings.quickApply.enabled&&!extension?.available())saveSettings({...settings,quickApply:{...settings.quickApply,enabled:false}})
   if(!testHarness){
@@ -2759,9 +2837,12 @@ async function boot(): Promise<void> {
 
   // Development never installs updates over a working checkout. Test mode
   // replaces only the updater boundary inside the explicitly marked profile.
-  const updatePort = testHarness ? testUpdater(app.getPath('userData'), testHarness.record) : IS_PACKAGED && process.platform === 'win32' ? new NsisUpdater() : null
+  const updateSelection = testHarness
+    ? { port: testUpdater(app.getPath('userData'), testHarness.record), mode: testUpdaterMode(app.getPath('userData')) }
+    : IS_PACKAGED ? createUpdaterPort(process.platform, process.env) : null
+  const updatePort = updateSelection?.port ?? null
   let lastUpdateTelemetry = ''
-  updates = new UpdateController(updatePort, APP_VERSION, state => {
+  updates = new UpdateController(updatePort, updateSelection?.mode ?? 'install', APP_VERSION, state => {
     broadcast(IPC.updateState, state)
     if (state.phase === 'downloading') lastUpdateTelemetry = ''
     const result = state.phase === 'downloaded' ? 'success' : state.phase === 'error' && state.error === 'download' ? 'failed' : null
@@ -2830,6 +2911,7 @@ async function boot(): Promise<void> {
   }
   registerIpc()
   kaf.start(!!testHarness)
+  updateAppMenu()
   createWindow()
   createTray()
   analyticsServicesReady = true
@@ -2943,8 +3025,8 @@ async function chooseDataFile(kind: 'save-settings' | 'open-settings' | 'save-ba
     const selected = fixture[kind]
     if (selected === null || selected === undefined) return null
     if (typeof selected !== 'string') throw Error('bad-schema')
-    const path = resolve(app.getPath('userData'), selected), rel = relative(app.getPath('userData'), path)
-    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw Error('protected-location')
+    const path = resolve(app.getPath('userData'), selected)
+    if (!insideTestProfile(app.getPath('userData'), path)) throw Error('protected-location')
     testHarness.record('data-dialog', kind)
     return path
   }
@@ -3094,6 +3176,7 @@ void boot().catch(async (error: unknown) => {
   // Surface them and exit instead of leaving an invisible, unusable process.
   const failure = recordStartupFailure(app.getPath('userData'), startupStage, error)
   console.error('RASED startup failed', failure)
+  if (testHarness) console.error('RASED startup error (test profile):', error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}`.slice(0, 2000) : String(error).slice(0, 2000))
   const code = error && typeof error === 'object' && 'errcode' in error ? Number(error.errcode) : null
   if (testHarness) testHarness.record('boot-failed', { ...failure, sqliteCode: code })
   else {

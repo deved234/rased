@@ -8,10 +8,12 @@ import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { electronPath, parseArgs } from './cdp-tools.mjs'
 
 const live = process.argv.includes('--live')
+const args = parseArgs(process.argv.slice(2).filter(a => a !== '--live'))
 const dir = mkdtempSync(join(tmpdir(), 'rased-test-network-'))
-const exe = resolve('node_modules/electron/dist/electron.exe')
+const exe = resolve(args.exe ?? electronPath())
 
 const runner = String.raw`
 const { app, session } = require('electron')

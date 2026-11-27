@@ -18,11 +18,11 @@ class Port extends EventEmitter implements UpdaterPort {
 }
 describe('Update lifecycle', () => {
   it('disables automatic downloads/quit installation, prereleases and downgrades', () => {
-    const port = new Port(); new UpdateController(port, '0.2.5', () => {})
+    const port = new Port(); new UpdateController(port, 'install', '0.2.5', () => {})
     expect([port.autoDownload, port.autoInstallOnAppQuit, port.allowPrerelease, port.allowDowngrade]).toEqual([false, false, false, false])
   })
   it('requires explicit download and one install; preserves a download on repeated checks', async () => {
-    const port = new Port(), controller = new UpdateController(port, '0.2.5', () => {})
+    const port = new Port(), controller = new UpdateController(port, 'install', '0.2.5', () => {})
     expect(controller.install().ok).toBe(false); expect((await controller.download()).ok).toBe(false)
     await controller.check(); expect(port.downloads).toBe(0)
     expect(controller.snapshot().notes).toBe('Changes\nNew feature')
@@ -33,7 +33,7 @@ describe('Update lifecycle', () => {
     expect(port.installs).toEqual([[true, true]])
   })
   it('serializes requests and clamps invalid progress', async () => {
-    const port = new Port(), controller = new UpdateController(port, '0.2.5', () => {})
+    const port = new Port(), controller = new UpdateController(port, 'install', '0.2.5', () => {})
     let complete!: () => void
     port.check = () => new Promise(resolve => { complete = () => { port.emit('update-available', { version: '0.3.0' }); resolve() } })
     const checking = controller.check()
@@ -48,7 +48,7 @@ describe('Update lifecycle', () => {
     await controller.download(); expect(port.checks).toBe(1)
   })
   it('recovers from offline checks and checksum failures without installing', async () => {
-    const port = new Port(), controller = new UpdateController(port, '0.2.5', () => {})
+    const port = new Port(), controller = new UpdateController(port, 'install', '0.2.5', () => {})
     port.check = async () => { throw Error('offline') }
     expect((await controller.check()).ok).toBe(false); expect(controller.snapshot().error).toBe('check')
     port.check = async () => { port.emit('update-available', { version: '0.3.0' }) }
@@ -60,9 +60,9 @@ describe('Update lifecycle', () => {
     expect((await controller.download()).ok).toBe(true); expect(port.installs).toEqual([])
   })
   it('handles no update, disabled development, malformed metadata and cleanup', async () => {
-    const disabled = new UpdateController(null, '0.2.5', () => {})
+    const disabled = new UpdateController(null, 'install', '0.2.5', () => {})
     expect((await disabled.check()).error).toBe('disabled'); expect(disabled.install().ok).toBe(false)
-    const port = new Port(), controller = new UpdateController(port, '0.2.5', () => {})
+    const port = new Port(), controller = new UpdateController(port, 'install', '0.2.5', () => {})
     port.check = async () => { port.emit('update-available', { version: '<script>' }) }
     await controller.check(); expect(controller.snapshot().phase).toBe('error')
     port.check = async () => { port.emit('update-not-available', { version: '0.2.5' }) }
@@ -71,9 +71,25 @@ describe('Update lifecycle', () => {
     expect(() => port.emit('error', Error('late request failure during quit'))).not.toThrow()
   })
   it('does not claim successful installation after an installer error', async () => {
-    const port = new Port(), controller = new UpdateController(port, '0.2.5', () => {})
+    const port = new Port(), controller = new UpdateController(port, 'install', '0.2.5', () => {})
     await controller.check(); await controller.download()
     port.quitAndInstall = () => { port.emit('error', Error('installer missing')) }
     expect(controller.install().ok).toBe(false); expect(controller.snapshot().error).toBe('install')
+  })
+  it('reports each mode in state and notify mode refuses download and install', async () => {
+    for (const mode of ['install', 'open-installer', 'notify'] as const) {
+      const controller = new UpdateController(new Port(), mode, '0.2.5', () => {})
+      expect(controller.snapshot().mode).toBe(mode)
+    }
+    const port = new Port(), controller = new UpdateController(port, 'notify', '0.2.5', () => {})
+    await controller.check()
+    expect(controller.snapshot()).toMatchObject({ phase: 'available', mode: 'notify', version: '0.3.0' })
+    const download = await controller.download()
+    expect(download).toEqual({ ok: false, error: 'not-available' })
+    expect(port.downloads).toBe(0)
+    expect(controller.snapshot().phase).toBe('available')
+    const install = controller.install()
+    expect(install).toEqual({ ok: false, error: 'not-available' })
+    expect(port.installs).toEqual([])
   })
 })

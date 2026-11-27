@@ -4,10 +4,10 @@ import assert from 'node:assert/strict'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, startApp, stopApp } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, settles, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9581)
-const exe = args.exe ?? 'node_modules/electron/dist/electron.exe', app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
+const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
 const fixture = join(profile, 'telemetry-fixture.json'), eventsFile = join(profile, 'telemetry-fixture-sink/fixture-events.jsonl')
 writeFileSync(fixture, JSON.stringify({ flush: false }))
 const db = new DatabaseSync(join(profile, 'rased.db'))
@@ -19,7 +19,7 @@ db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify
 db.prepare("INSERT INTO projects(id,source,external_id,url,title,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at) VALUES(1,'mostaql','123','https://mostaql.com/go/123',?,?,?,'initial',?,?)").run(canary, stamp, stamp, stamp, stamp)
 db.close()
 let child, ws, passed = 0
-const check = (label, value) => { assert.ok(value, label); passed++; console.log('PASS ' + label) }
+const check = (label, value, detail = '') => { assert.ok(value, `${label}${detail ? ` — ${detail}` : ''}`); passed++; console.log('PASS ' + label) }
 const ev = expression => evaluate(ws, expression)
 const status = () => ev('window.rased.getAnalyticsStatus()')
 const events = () => existsSync(eventsFile) ? readFileSync(eventsFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []
@@ -89,14 +89,15 @@ try {
   check('test notification never increments project notification analytics', events().filter(e => e.name === 'project_open_result').length === 1)
   await ev('window.location.hash="#/settings/analytics"')
   await eventually(() => ev('!!document.getElementById("analytics-heading")'))
-  check('Arabic settings disclose WhatsApp, opt-in and remote deletion limits', await ev('document.body.innerText.includes("01201780258") && document.body.innerText.includes("لا يحذف")'))
+  check('Arabic settings disclose WhatsApp, opt-in and remote deletion limits', await settles(() => ev('document.body.innerText.includes("01201780258") && document.body.innerText.includes("لا يحذف")')))
   check('copy-reference works without sending it externally', (await ev('window.rased.analyticsAction("copy-reference")')).ok)
   check('contact opens only the fixed WhatsApp destination', (await ev('window.rased.analyticsAction("contact")')).ok)
   const trace = readFileSync(join(profile, 'test-trace.jsonl'), 'utf8')
   check('WhatsApp URL contains no prefilled identity or message', trace.includes('https://wa.me/201201780258') && !trace.includes('wa.me/201201780258?'))
   const archive = join(profile, 'analytics-exclusion.rased-backup')
   writeFileSync(join(profile, 'data-dialog.json'), JSON.stringify({ 'save-backup': archive }))
-  check('portable backup succeeds with active separate analytics store', (await ev('window.rased.createBackup()')).ok)
+  const backup = await ev('window.rased.createBackup()')
+  check('portable backup succeeds with active separate analytics store', backup.ok, JSON.stringify(backup))
   check('portable backup never includes analytics identity', !readFileSync(archive).includes(Buffer.from(identity)))
   await stop(); await boot()
   check('ordinary app restart preserves participating identity', (await status()).reference === identity && (await status()).state === 'enabled')
@@ -107,7 +108,7 @@ try {
   await ev('window.rased.openProjectExternal(1)'); await flush()
   check('revocation clears queued events and stops subsequent capture', (await status()).queued === 0 && events().length === before)
   await eventually(() => ev('!!document.querySelector(".analytics-access")'))
-  check('withdrawal locks feature views but retains deletion support', !(await status()).accessAllowed && await ev('!document.querySelector(".sidebar") && !!document.querySelector(".analytics-reference")'))
+  check('withdrawal locks feature views but retains deletion support', await eventually(async () => !(await status()).accessAllowed && await ev('!document.querySelector(".sidebar") && !!document.querySelector(".analytics-reference")')))
   check('stopping retains the reference for a deletion request', (await status()).reference === identity)
   await ev('window.rased.analyticsConsent("forget")')
   check('forget removes local reference and keeps sharing disabled', !(await status()).reference && (await status()).state === 'disabled')
@@ -121,12 +122,12 @@ try {
   for (const [lang, theme] of [['ar', 'dark'], ['en', 'light']]) {
     await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)},ui:{theme:${JSON.stringify(theme)}}})`)
     await eventually(() => ev(`document.body.innerText.includes(${JSON.stringify(lang === 'ar' ? 'لا يحدد راصد موعد حذف دوري' : 'no scheduled expiry')})`))
-    check(`${lang} settings disclose no scheduled expiry and the provider storage limitation`, await ev(lang === 'ar' ? 'document.body.innerText.includes("لا يحدد راصد موعد حذف دوري") && document.body.innerText.includes("لا نضمن بقاء البيانات للأبد")' : 'document.body.innerText.includes("no scheduled expiry") && document.body.innerText.includes("Permanent availability is not guaranteed")'))
-    check(`${lang} settings disclose pending cloud-event deletion verification before consent`, await ev(lang === 'ar' ? 'document.body.innerText.includes("التحقق النهائي من اكتمال حذف الأحداث") && document.body.innerText.includes("لم يكتمل بعد")' : 'document.body.innerText.includes("verification of completed event deletion") && document.body.innerText.includes("still pending")'))
+    check(`${lang} settings disclose no scheduled expiry and the provider storage limitation`, await settles(() => ev(lang === 'ar' ? 'document.body.innerText.includes("لا يحدد راصد موعد حذف دوري") && document.body.innerText.includes("لا نضمن بقاء البيانات للأبد")' : 'document.body.innerText.includes("no scheduled expiry") && document.body.innerText.includes("Permanent availability is not guaranteed")')))
+    check(`${lang} settings disclose pending cloud-event deletion verification before consent`, await settles(() => ev(lang === 'ar' ? 'document.body.innerText.includes("التحقق النهائي من اكتمال حذف الأحداث") && document.body.innerText.includes("لم يكتمل بعد")' : 'document.body.innerText.includes("verification of completed event deletion") && document.body.innerText.includes("still pending")')))
     await call(ws, 'Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false })
     const shot = await call(ws, 'Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
     writeFileSync(join(out, `analytics-${lang}-${theme}.png`), Buffer.from(shot.data, 'base64'))
-    check(`${lang} analytics settings have no horizontal document overflow`, await ev('document.documentElement.scrollWidth <= innerWidth + 2'))
+    check(`${lang} analytics settings have no horizontal document overflow`, await settles(() => ev('document.documentElement.scrollWidth <= innerWidth + 2')))
   }
   const consentFile = join(profile, 'telemetry/consent.json'), retainedReference = (await status()).reference
   await stop()
@@ -156,6 +157,16 @@ try {
   await boot()
   await eventually(() => ev('!!document.querySelector(".analytics-access")'))
   check('old explicit decline stays disabled behind the disclosed access requirement',(await status()).state==='disabled' && !(await status()).accessAllowed)
+  await stop()
+  writeFileSync(consentFile,JSON.stringify({...JSON.parse(readFileSync(consentFile,'utf8')),state:'enabled',identity:retainedReference,disclosure:'2026-11-15-v5',prompted:true,generation:1,purgePending:false}))
+  await boot()
+  await eventually(() => ev('!!document.querySelector(".analytics-access")'))
+  check('enabled v5 consent is gated again under v6 disclosure',(await status()).state==='unknown' && !(await status()).accessAllowed && (await status()).reference===retainedReference && await ev('!!document.querySelector(".analytics-consent-actions .primary")'))
+  await stop()
+  writeFileSync(consentFile,JSON.stringify({...JSON.parse(readFileSync(consentFile,'utf8')),state:'disabled',identity:retainedReference,disclosure:'2026-11-15-v5',prompted:true,generation:1,purgePending:false}))
+  await boot()
+  await eventually(()=>status(),s=>s?.state==='disabled')
+  check('disabled v5 consent stays disabled under v6 disclosure',(await status()).state==='disabled' && (await status()).reference===retainedReference && (await status()).disclosure===currentDisclosure)
   // Actual main/worker cleanup failure remains visible after identity removal.
   await ev('window.rased.analyticsConsent("enable")')
   writeFileSync(fixture,JSON.stringify({purgeFail:true}))
@@ -165,7 +176,7 @@ try {
   for (const lang of ['ar','en']) {
     await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)}})`)
     await eventually(()=>ev('!!document.querySelector(".analytics-purge-retry")'))
-    check(lang+' incomplete purge message and retry remain accessible without identity',await ev(`document.body.innerText.includes(${JSON.stringify(lang==='ar'?'لم يكتمل النسيان المحلي':'Local forgetting is incomplete')}) && document.querySelector('.analytics-purge-retry').disabled===false`))
+    check(lang+' incomplete purge message and retry remain accessible without identity',await settles(() => ev(`document.body.innerText.includes(${JSON.stringify(lang==='ar'?'لم يكتمل النسيان المحلي':'Local forgetting is incomplete')}) && document.querySelector('.analytics-purge-retry').disabled===false`)))
     const button=await ev('document.querySelector(".analytics-purge-retry").focus(); document.activeElement.className')
     check(lang+' retry button accepts keyboard focus',button.includes('analytics-purge-retry'))
     const shots=resolve('.local/analytics-repair-2026-10-20/screenshots');mkdirSync(shots,{recursive:true})
