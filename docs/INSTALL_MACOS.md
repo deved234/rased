@@ -1,6 +1,6 @@
 # تثبيت راصد على macOS
 
-راصد متاح على macOS بنسخة تجريبية (Beta) تدعم معالجات Intel وApple Silicon في ملف تثبيت واحد.
+راصد متاح على macOS بنسخة تجريبية (Beta) تدعم معالجات Intel وApple Silicon في ملف تثبيت واحد. لو جرّبته، قولنا عمل معاك إزاي في [جروب راصد](https://t.me/rased_chat).
 
 ## الخطوات
 
@@ -47,7 +47,7 @@
 
 ## English
 
-RASED is available on macOS as a beta build with a universal installer for Intel and Apple Silicon.
+RASED is available on macOS as a beta build with a universal installer for Intel and Apple Silicon. If you try it, tell us how it went in the [RASED group](https://t.me/rased_chat).
 
 ## Steps
 

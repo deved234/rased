@@ -1,6 +1,6 @@
 # تثبيت راصد على Linux
 
-راصد متاح على Linux بصيغتي AppImage وdeb (x64). تم اختباره في CI على Ubuntu 24.04.
+راصد متاح على Linux بنسخة **تجريبية (Beta)** بصيغتي AppImage وdeb (x64). اختباراته الأوتوماتيكية بتشتغل على Ubuntu 24.04، بس لسه ما اتجرّبش يدويًا على أجهزة كتير. لو جرّبته، قولنا عمل معاك إزاي في [جروب راصد](https://t.me/rased_chat).
 
 ## الخطوات
 
@@ -59,7 +59,7 @@
 
 ## English
 
-RASED is available on Linux as x64 AppImage and deb packages. It is tested in CI on Ubuntu 24.04.
+RASED is available on Linux as a **beta** in x64 AppImage and deb packages. Its automated tests run on Ubuntu 24.04, but it has not yet been tried by hand on many machines. If you try it, tell us how it went in the [RASED group](https://t.me/rased_chat).
 
 ## Steps
 

@@ -197,6 +197,21 @@ jobs:
           step build npm run dist:${{ matrix.platform }}
           step verify node scripts/verify-release-files.mjs --platform=${{ matrix.platform }}
           step smoke run node scripts/e2e-cdp.mjs --exe=${{ matrix.exe }} --app=
+      - if: matrix.platform == 'linux'
+        name: Launch the AppImage and the installed deb with Ubuntu's default AppArmor restriction
+        # Earlier steps relax unprivileged user namespaces for the test harness. A desktop
+        # Ubuntu 24.04 keeps them restricted, which can stop Electron's sandbox; check the
+        # shipped AppImage and the deb exactly as users run them.
+        shell: bash
+        run: |
+          step() { local name=$1; shift; if ! (set -o pipefail; "$@" 2>&1 | tee step.log); then node scripts/ci-failure-note.mjs "package $name" step.log; return 1; fi; }
+          sudo apt-get install -y libfuse2t64
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          failed=0
+          step appimage-apparmor xvfb-run -a node scripts/launch-smoke.mjs --exe="$(ls release/RASED-*-linux-x86_64.AppImage)" --label=AppImage || failed=1
+          sudo apt-get install -y ./release/RASED-*-linux-amd64.deb
+          step deb-apparmor xvfb-run -a node scripts/launch-smoke.mjs --exe=/opt/RASED/rased --label=deb || failed=1
+          exit $failed
       - name: Upload test packages (7 days, not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
