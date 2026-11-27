@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -90,7 +90,8 @@ export async function stopApp(child) {
     if (child.signalCode !== null || !child.pid) return
     // Kill the entire process group (spawned with detached: true).
     // macOS returns EPERM (not ESRCH) when the group leader already exited and only a zombie remains.
-    try { process.kill(-child.pid, 'SIGKILL') } catch (e) { if (e.code === 'EPERM') { try { child.kill('SIGKILL') } catch { /* already gone */ } } else if (e.code !== 'ESRCH') throw e }
+    // pkill -g still reaches the live helpers (renderer, GPU) so none keeps the single-instance lock or debug port.
+    try { process.kill(-child.pid, 'SIGKILL') } catch (e) { if (e.code === 'EPERM') spawnSync('pkill', ['-KILL', '-g', String(child.pid)]); else if (e.code !== 'ESRCH') throw e }
     if (child.exitCode === null && child.signalCode === null) await new Promise(resolve => child.once('close', resolve))
   }
 }
