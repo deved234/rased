@@ -44,7 +44,7 @@ Follow neighboring code: two-space indentation, single quotes, and generally no 
 
 ## Testing Guidelines
 
-Name Vitest files `tests/*.test.ts`. Add focused regression tests for changed behavior, using fixtures and injectable clocks where appropriate. No numeric coverage threshold is configured. Integration tests use fresh temporary profiles; never substitute real user data. Check Arabic RTL, English LTR, keyboard access, and unsaved-note protection for UI changes. Automated OS mocks do not prove real notification clicks. A new `test:*` script must be added to exactly one Electron group in `.github/workflows/ci.yml` (or excluded with a reason in `scripts/ci-coverage-check.mjs`); CI fails otherwise.
+Name Vitest files `tests/*.test.ts`. Add focused regression tests for changed behavior, using fixtures and injectable clocks where appropriate. No numeric coverage threshold is configured. Integration tests use fresh temporary profiles; never substitute real user data. Check Arabic RTL, English LTR, keyboard access, and unsaved-note protection for UI changes. Automated OS mocks do not prove real notification clicks. A new `test:*` script must be added to exactly one Windows `electron` group and exactly one macOS/Linux `unix-electron` group in `.github/workflows/ci.yml` (or excluded, or listed as Windows-only, with a reason in `scripts/ci-coverage-check.mjs`); CI fails otherwise.
 
 ## Commit & Pull Request Guidelines
 
