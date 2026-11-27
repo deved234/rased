@@ -1,8 +1,7 @@
 name: Checks
 on:
   push:
-    # cross-platform: temporary while the 0.14.0 macOS/Linux branch is open; drop at merge.
-    branches: [main, cross-platform]
+    branches: [main]
   pull_request:
 permissions:
   contents: read
