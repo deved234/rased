@@ -9,6 +9,7 @@ import { SourceHealthDetails } from '../components/SourceHealthDetails.js'
 
 export function SourceMonitoringSettings({ lang, settings, health, patchSettings }: { lang: Lang; settings: AppSettings; health: Record<SourceId, SourceHealth | null>; patchSettings: (patch: Partial<AppSettings>) => Promise<void> }): React.ReactElement {
   const ar = lang === 'ar', t = STRINGS[lang]
+  const quickApplyAvailable = rased.platform === 'win32'
   const [actionError, setActionError] = React.useState(false), [report, setReport] = React.useState<'busy' | 'ok' | 'error' | null>(null)
   const [busySource, setBusySource] = React.useState<SourceId | null>(null)
   const act = (id: SourceId, action: () => Promise<unknown>): void => {
@@ -41,7 +42,7 @@ export function SourceMonitoringSettings({ lang, settings, health, patchSettings
           {settings.pollIntervalMs === 2000 && <p className="hint">{t.interval2Warn}</p>}
         </>}
         <SourceHealthDetails source={id} health={value} lang={lang} />
-        <details className="source-capabilities"><summary>{ar ? 'الوظائف المتاحة لهذه المنصة' : 'Capabilities for this platform'}</summary><ul>{(Object.keys(features) as (keyof typeof features)[]).map(key => <li key={key}>{features[key]}: {source.capabilities[key] ? ar ? 'متاح' : 'Available' : ar ? 'غير مدعوم حاليًا' : 'Not currently supported'}</li>)}</ul></details>
+        <details className="source-capabilities"><summary>{ar ? 'الوظائف المتاحة لهذه المنصة' : 'Capabilities for this platform'}</summary><ul>{(Object.keys(features) as (keyof typeof features)[]).map(key => <li key={key}>{features[key]}: {source.capabilities[key] && (key !== 'quickApply' || quickApplyAvailable) ? ar ? 'متاح' : 'Available' : ar ? 'غير مدعوم حاليًا' : 'Not currently supported'}</li>)}</ul></details>
       </section>
     })}
   </>

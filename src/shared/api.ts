@@ -79,6 +79,7 @@ export interface AppInfo {
 }
 
 export interface RasedApi {
+  readonly platform: string
   databaseReady(): Promise<boolean>
   getSidebarCounts(): Promise<{ unread: number; saved: number; watching: number }>
   matchProjectIds(definition: FilterDefinition, ids: number[]): Promise<number[]>

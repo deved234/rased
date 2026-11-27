@@ -114,7 +114,7 @@ export function ProposalView({ lang, projectId }: { lang: Lang; projectId: numbe
   }
   const source = preview?.source ?? projectSource
   const platform = source && isAiProposalSource(source) ? source : null
-  const chromePrep = !!platform && sourceAllowed(platform)
+  const chromePrep = !!platform && sourceAllowed(platform) && rased.platform === 'win32'
 
   return <div className="proposal-page">
     <button className="btn ghost sm" onClick={() => go({ name: 'project', id: projectId })}>{ar ? 'المشروع →' : '← Project'}</button>

@@ -109,6 +109,7 @@ try {
     check('custom minimize control minimizes the real window', true)
     await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>s.maximized)'); await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
   }
+  check('window chrome keeps platform-appropriate controls', await ev(process.platform === 'darwin' ? '!document.querySelector(".window-controls") && !!document.querySelector(".window-titlebar.mac")' : 'document.querySelectorAll(".window-controls button").length===3'))
   await nav('#/settings/legal'); await wait('!!document.querySelector(".legal-page")')
   check('offline legal terms render in Arabic', await ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")'))
   await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")'))
@@ -277,7 +278,7 @@ try {
   await ev('document.querySelector("textarea").scrollIntoView({block:"center"})')
   check('detail notes remain accessible in small viewport', await ev('(()=>{const r=document.querySelector("textarea").getBoundingClientRect();return r.height>0 && r.top>=0 && r.bottom<=innerHeight})()'))
   await viewportSession.call('Emulation.clearDeviceMetricsOverride'); viewportSession.close(); viewportSession=null
-  await fill('textarea','CANCEL CLOSE DRAFT'); await ev('document.querySelector(".window-close").click()'); await wait('!!document.querySelector(".dialog")')
+  await fill('textarea','CANCEL CLOSE DRAFT'); if(process.platform==='darwin')await ev('window.rased.windowControl("close")');else await ev('document.querySelector(".window-close").click()'); await wait('!!document.querySelector(".dialog")')
   check('native close asks before discarding note', await ev('document.querySelector("textarea").value')==='CANCEL CLOSE DRAFT')
   await click('Cancel|إلغاء','.dialog button'); await wait('!document.querySelector(".dialog")')
   check('cancel close retains page and dirty draft', await ev('location.hash')==='#/project/450' && await ev('document.querySelector("textarea").value')==='CANCEL CLOSE DRAFT')

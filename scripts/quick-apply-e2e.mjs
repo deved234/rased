@@ -7,6 +7,8 @@ import {createConnection} from 'node:net'
 import {createHash} from 'node:crypto'
 import {spawn,spawnSync} from 'node:child_process'
 import {newProfile,startApp,stopApp,pageWs,evaluate,eventually,parseArgs,targets,call,sleep,persistentSession,electronPath} from './cdp-tools.mjs'
+// Quick Apply is Windows-only for now (docs/QUICK_APPLY.md); other systems skip the retired bridge flow.
+if(process.platform!=='win32'){console.log('Quick Apply bridge is Windows-only; skipped on '+process.platform+'.');process.exit(0)}
 const args=parseArgs(process.argv.slice(2)), profile=newProfile(),port=9366
 writeFileSync(join(profile,'telemetry-fixture.json'),'{}')
 const db=new DatabaseSync(join(profile,'rased.db'))

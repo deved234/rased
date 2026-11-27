@@ -1491,7 +1491,7 @@ function createWindow(): void {
     backgroundColor: '#14171c',
     autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
-    frame: false,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } } : { frame: false }),
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -1694,7 +1694,7 @@ function openCompact(): void {
     autoHideMenuBar: true,
     alwaysOnTop: settings.ui.compactAlwaysOnTop,
     ...(icon ? { icon } : {}),
-    frame: false,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } } : { frame: false }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -2044,8 +2044,12 @@ function registerIpc(): void {
   ipcMain.handle(IPC.confirmClose, (event, v: { quit: boolean }) => {
     if (event.sender !== win?.webContents) return
     if (v.quit === true || !applicationAccessAllowed()) return shutdown()
-    win?.hide()
-    if (!hintShown) {
+    // Linux: minimize instead of hiding; a tray-less hidden window could become unreachable.
+    if (process.platform === 'linux') win?.minimize()
+    // Windows and macOS: hide to the tray background; macOS restores via the Dock activate handler.
+    else win?.hide()
+    // The tray balloon hint is a Windows-only API whose text says "quit from the tray menu".
+    if (process.platform === 'win32' && !hintShown) {
       hintShown = true
       tray?.displayBalloon({
         title: 'RASED',

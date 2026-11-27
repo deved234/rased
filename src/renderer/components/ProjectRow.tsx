@@ -37,10 +37,10 @@ export function ProjectRow({
   const onKey = (e: React.KeyboardEvent): void => {
     if (e.target !== e.currentTarget) return // inner buttons handle their own keys
     e.stopPropagation()
-    if ((e.key === 'Enter' && !e.ctrlKey) || e.key === ' ') {
+    if ((e.key === 'Enter' && !e.ctrlKey && !e.metaKey) || e.key === ' ') {
       e.preventDefault()
       onPreview()
-    } else if (e.key === 'Enter' && e.ctrlKey) {
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       onOpenExternal()
     }
