@@ -120,7 +120,12 @@ describe('Administrative analytics boundaries', () => {
   })
   it('keeps all four dashboards private-production metrics separate from downloads', () => {
     const definitions = dashboardDefinitions() as { name: string; insights: { name: string; sql: string }[] }[]
-    expect(definitions).toHaveLength(5)
+    expect(definitions).toHaveLength(6)
+    const devices = definitions.find(d => d.name === 'RASED — Devices & platforms')!
+    expect(devices.insights.map(i => i.name)).toEqual(['Active installations by system (last 7 days)', 'Active installations by processor (last 7 days)', 'macOS versions (last 30 days)', 'Daily active installations by system'])
+    // Pre-0.14.0 events only carry windows_family; the system must still be derived, never reported as missing.
+    for (const name of ['Active installations by system (last 7 days)', 'Daily active installations by system']) expect(devices.insights.find(i => i.name === name)!.sql).toContain("properties.windows_family = '11', 'windows-11'")
+    for (const i of devices.insights) expect(i.sql).not.toContain('event_count')
     for (const d of definitions) for (const i of d.insights) {
       expect(i.sql).toContain('production')
       if (!i.name.startsWith('GitHub') && !i.name.includes('GitHub')) expect(i.sql).toContain("record_type")
