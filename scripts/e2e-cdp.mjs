@@ -57,6 +57,8 @@ const launchApp = () => {
 const check = (label, condition, detail = '') => { assert.ok(condition, `${label}: ${detail}`); passed++; console.log(`PASS ${label}${detail ? ' — ' + detail : ''}`) }
 const ev = expression => evaluate(ws, expression)
 const wait = expression => eventually(() => ev(expression))
+// The check button stays disabled until the update state loads; clicking earlier is a silent no-op.
+const checkUpdates = async () => { await wait('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent.includes("Check for updates")&&!b.disabled)'); await click('Check for updates', '.updates-page button') }
 const click = async (pattern, selector = 'button') => {
   await ev(`(()=>{const b=Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(b=>new RegExp(${JSON.stringify(pattern)}).test(b.textContent));if(!b)throw Error('Button missing: '+${JSON.stringify(pattern)});b.click()})()`)
   await sleep(150)
@@ -379,7 +381,7 @@ try {
   // Updater fixture replaces its native/network boundary; controller, IPC and UI are real.
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
   writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ version: '0.3.0', releaseNotes: '<h2>Safe release notes</h2>\nA new feature', error: 'check' }))
-  await click('Check for updates', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="error")')
+  await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="error")')
   check('offline update check surfaces retry without losing local notes', await ev('document.querySelector(".updates-page").textContent.includes("Could not complete")') && db.prepare('SELECT note FROM project_user_state WHERE project_id=450').get().note==='PERSISTENT NOTE')
   writeFileSync(join(profile, 'update-fixture.json'), JSON.stringify({ version: '0.3.0', releaseNotes: '<h2>Safe release notes</h2>\nA new feature' }))
   await click('Retry', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="available")')
@@ -406,7 +408,7 @@ try {
   await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
   await wait('!!document.querySelector(".app")')
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
-  await click('Check for updates', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="notify")')
+  await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="notify")')
   check('notify mode shows open download page button without download button', await ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open download page")) && !!Array.from(document.querySelectorAll(".update-banner button")).find(b=>b.textContent?.includes("Open download page")) && !Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Download update"))'))
   const openExternalBefore = traces().filter(t=>t.kind==='open-external' && t.data==='https://github.com/deved234/rased/releases/latest').length
   const updateDownloadBefore = traces().filter(t=>t.kind==='update-download').length
@@ -419,7 +421,7 @@ try {
   await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
   await wait('!!document.querySelector(".app")')
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
-  await click('Check for updates', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="open-installer")')
+  await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="open-installer")')
   await click('Download update', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="downloaded" && s.mode==="open-installer")')
   check('open-installer mode shows Open installer button', await ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open installer"))'))
   const installBefore = traces().filter(t=>t.kind==='update-install').length
