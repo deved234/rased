@@ -13,13 +13,23 @@ concurrency:
   cancel-in-progress: true
 jobs:
   probe:
-    name: Probe ${{ matrix.os }}
+    name: Probe ${{ matrix.os }} ${{ matrix.group }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # Electron suites run in parallel groups so a run takes ~4 minutes, not ~9.
+      # Static checks and unit tests run once per OS, in the 'core' group.
       matrix:
         os: [macos-latest, ubuntu-latest]
+        group: [core, data, ui]
+        include:
+          - group: core
+            suites: test:e2e test:network test:monitoring
+          - group: data
+            suites: test:telemetry test:kaf test:data test:watch
+          - group: ui
+            suites: test:ui test:ai test:search test:project-facts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -45,14 +55,17 @@ jobs:
         continue-on-error: true
         run: npm ci && node scripts/ensure-electron.mjs
       - id: typecheck
+        if: matrix.group == 'core'
         continue-on-error: true
         run: npm run typecheck
       - id: lint
+        if: matrix.group == 'core'
         continue-on-error: true
         run: npm run lint
       # Logs need a GitHub sign-in, so every failure is also re-emitted as a
       # public annotation (tail of its output) by the Summary step.
       - id: unit
+        if: matrix.group == 'core'
         continue-on-error: true
         shell: bash
         run: set -o pipefail; npx vitest run --reporter=default --reporter=json --outputFile=probe-unit.json 2>&1 | tee probe-unit.log
@@ -67,13 +80,15 @@ jobs:
         # Skipped as Windows-only by design: test:startup (WAL file mapping),
         # test:notification-activation (COM toasts), test:quick-apply,
         # test:extension (Quick Apply deferred) and test:update-install (NSIS).
+        env:
+          PROBE_GROUP_SUITES: ${{ matrix.suites }}
         run: |
           # Suites resolve the platform Electron binary themselves (scripts/cdp-tools.mjs electronPath);
           # passing --exe would make some suites treat it as a packaged app and skip out/main/index.js.
           run() { if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a "$@"; else "$@"; fi; }
           mkdir -p probe-logs
           failed=()
-          for suite in test:e2e test:search test:project-facts test:network test:telemetry test:ai test:kaf test:ui test:data test:monitoring test:watch; do
+          for suite in $PROBE_GROUP_SUITES; do
             echo "::group::$suite"
             if (set -o pipefail; run npm run "$suite" 2>&1 | tee "probe-logs/${suite#test:}.log"); then echo "::endgroup::"; echo "PASS $suite" >> probe-suites.txt
             else echo "::endgroup::"; echo "FAIL $suite" >> probe-suites.txt; failed+=("$suite"); fi
@@ -83,7 +98,7 @@ jobs:
         if: always()
         run: node scripts/ci-probe-summary.mjs
         env:
-          PROBE_OS: ${{ matrix.os }}
+          PROBE_OS: ${{ matrix.os }} ${{ matrix.group }}
           PROBE_INSTALL: ${{ steps.install.outcome }}
           PROBE_TYPECHECK: ${{ steps.typecheck.outcome }}
           PROBE_LINT: ${{ steps.lint.outcome }}

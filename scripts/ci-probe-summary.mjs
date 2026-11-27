@@ -29,4 +29,5 @@ if (existsSync('probe-logs')) for (const file of readdirSync('probe-logs')) {
 }
 
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## ${os}\n\n\`\`\`\n${overview}\n\`\`\`\n`)
-if (steps.some(([, outcome]) => outcome !== 'success')) process.exit(1)
+// Non-core groups skip the static checks and unit tests (they run once per OS).
+if (steps.some(([, outcome]) => outcome !== 'success' && outcome !== 'skipped')) process.exit(1)
