@@ -58,9 +58,13 @@ export async function targets(port) {
   return (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
 }
 export async function pageWs(port, match = t => t.url.includes('index.html') && !t.url.includes('compact'), timeout = 30000) {
-  return eventually(async () => {
+  const url = await eventually(async () => {
     try { return (await targets(port)).find(t => t.type === 'page' && match(t))?.webSocketDebuggerUrl } catch { return null }
   }, Boolean, timeout)
+  // A page target can be listed before its preload runs (seen on macOS and Ubuntu CI).
+  // Wait briefly for the bridge; pages without it are returned unchanged after the wait.
+  await eventually(() => evaluate(url, 'typeof window.rased === "object"').catch(() => false), Boolean, 10000).catch(() => {})
+  return url
 }
 export function call(wsUrl, method, params = {}) {
   return new Promise((resolve, reject) => {
