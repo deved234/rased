@@ -2656,12 +2656,17 @@ function registerIpc(): void {
   ipcMain.handle(IPC.openAboutLink, async (_event, value: unknown): Promise<MutationResult> => {
     const link = value && typeof value === 'object' ? (value as { link?: unknown }).link : null
     if (typeof link !== 'string' || !Object.hasOwn(ABOUT_LINKS, link)) return { ok: false, error: 'bad-link' }
+    const communityFeature = link === 'telegramChannel' ? 'community_channel' : link === 'telegramGroup' ? 'community_group' : null
     try {
       const url = ABOUT_LINKS[link as AboutLink]
       if (testHarness) testHarness.record('open-external', url)
       else await shell.openExternal(url)
+      if (communityFeature) telemetry?.record('feature_used', { feature: communityFeature, outcome: 'success' })
       return { ok: true }
-    } catch { return { ok: false, error: 'open-failed' } }
+    } catch {
+      if (communityFeature) telemetry?.record('feature_used', { feature: communityFeature, outcome: 'failed' })
+      return { ok: false, error: 'open-failed' }
+    }
   })
   ipcMain.handle(IPC.getAppInfo, () => ({ version: testHarness?.appVersion ?? APP_VERSION, platform: process.platform, arch: process.arch }))
   ipcMain.handle(IPC.openCompact, () => {

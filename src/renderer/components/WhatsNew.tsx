@@ -2,7 +2,7 @@ import React from 'react'
 import type { AppSettings } from '@shared/types.js'
 import { selectWhatsNew, selectLatestWhatsNew, type WhatsNewEntry } from '@shared/whatsNew.js'
 import { rased } from '../api.js'
-import type { Lang } from '../i18n.js'
+import { STRINGS, type Lang } from '../i18n.js'
 import logo from '../assets/logo.svg'
 import { Icon } from './Icon.js'
 import { isTopDialog, useDialogFocus } from './ui.js'
@@ -37,11 +37,14 @@ function WhatsNewDialog({ lang, version, entries, onDone }: {
   lang: Lang; version: string; entries: WhatsNewEntry[]; onDone: () => Promise<void>
 }): React.ReactElement {
   const ar = lang === 'ar'
+  const t = STRINGS[lang]
   const panel = React.useRef<HTMLDivElement>(null)
+  const primaryRef = React.useRef<HTMLButtonElement>(null)
   const saving = React.useRef(false)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   useDialogFocus(panel)
+  React.useEffect(() => { primaryRef.current?.focus() }, [])
   const close = React.useCallback(async (): Promise<void> => {
     if (saving.current) return
     saving.current = true
@@ -50,6 +53,11 @@ function WhatsNewDialog({ lang, version, entries, onDone }: {
     try { await onDone() } catch { setError(ar ? 'تعذّر حفظ الإعدادات. حاول مجددًا.' : 'Could not save settings. Please retry.') }
     finally { saving.current = false; setBusy(false) }
   }, [onDone, ar])
+  const openCommunity = (link: 'telegramChannel' | 'telegramGroup'): void => {
+    void rased.openAboutLink(link).then(result => {
+      if (!result.ok) setError(t.aboutLinkError)
+    }).catch(() => setError(t.aboutLinkError))
+  }
   React.useEffect(() => {
     const key = (event: KeyboardEvent): void => {
       if (event.key === 'Escape' && isTopDialog(panel.current)) {
@@ -86,11 +94,19 @@ function WhatsNewDialog({ lang, version, entries, onDone }: {
             <div><h3>{highlight.title[lang]}</h3><p>{highlight.body[lang]}</p></div>
           </article>)}</div>
         </section>)}
+        <section className="whats-new-community" aria-labelledby="whats-new-community-title">
+          <h3 id="whats-new-community-title">{t.communityFollowTitle}</h3>
+          <p>{t.communityBody}</p>
+          <div className="row-actions">
+            <button className="btn" disabled={busy} onClick={() => openCommunity('telegramChannel')}>{t.communityChannel} <Icon name="external" size={14} /></button>
+            <button className="btn" disabled={busy} onClick={() => openCommunity('telegramGroup')}>{t.communityGroup} <Icon name="external" size={14} /></button>
+          </div>
+        </section>
       </div>
       <footer className="whats-new-footer">
         {error && <p role="alert" className="field-err">{error}</p>}
         <div className="row-actions">
-          <button className="btn primary" disabled={busy} onClick={() => void close()}>{ar ? 'ابدأ الاستخدام' : 'Start using RASED'}</button>
+          <button ref={primaryRef} className="btn primary" disabled={busy} onClick={() => void close()}>{ar ? 'ابدأ الاستخدام' : 'Start using RASED'}</button>
           <button className="btn" disabled={busy} onClick={() => {
             void rased.openAboutLink('releases').then(result => {
               if (!result.ok) setError(ar ? 'تعذّر فتح سجل التغييرات.' : 'Could not open the changelog.')

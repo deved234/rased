@@ -638,6 +638,14 @@ export function SettingsView({
                 <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('github')}>GitHub <Icon name="external" size={14} /></button>
               </div>
             </section>
+            <section className="set-group" aria-labelledby="about-community-title">
+              <h3 id="about-community-title">{t.communityTitle}</h3>
+              <p className="muted">{t.communityBody}</p>
+              <div className="about-links">
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('telegramChannel')}>{t.communityChannel} <Icon name="external" size={14} /></button>
+                <button className="btn" title={t.aboutBrowserHint} onClick={() => void openAboutLink('telegramGroup')}>{t.communityGroup} <Icon name="external" size={14} /></button>
+              </div>
+            </section>
             <section className="set-group about-story" aria-labelledby="about-story-title">
               <h3 id="about-story-title">{t.aboutStoryTitle}</h3>
               <p>{t.aboutStoryStart}</p>

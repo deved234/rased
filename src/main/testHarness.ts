@@ -161,7 +161,8 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   }
   const initializeSettings = (settings: AppSettings, currentVersion: string, save: (settings: AppSettings) => void): void => {
     // Persist before renderer startup so later database reads/merges cannot restore an unseen marker.
-    if (suppressWhatsNew && settings.whatsNewSeen !== currentVersion) save({ ...settings, whatsNewSeen: currentVersion })
+    // The one-time community invite is exercised with the What's New fixture; elsewhere it would shift layouts.
+    if (suppressWhatsNew && (settings.whatsNewSeen !== currentVersion || !settings.ui.communityInviteSeen)) save({ ...settings, whatsNewSeen: currentVersion, ui: { ...settings.ui, communityInviteSeen: true } })
   }
   return { fetchImpl, aiFetchImpl, record, appVersion, suppressWhatsNew, initializeSettings }
 }

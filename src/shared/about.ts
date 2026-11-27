@@ -5,6 +5,8 @@ export const ABOUT_LINKS = {
   linkedin: 'https://www.linkedin.com/in/david-atef/',
   source: 'https://github.com/deved234/rased',
   releases: 'https://github.com/deved234/rased/releases',
+  telegramChannel: 'https://t.me/rased_app',
+  telegramGroup: 'https://t.me/rased_chat',
   mostaqlTerms: 'https://mostaql.com/p/terms',
   mostaqlPrivacy: 'https://mostaql.com/p/privacy',
   geminiTerms: 'https://ai.google.dev/gemini-api/terms',

@@ -158,6 +158,16 @@ export function App(): React.ReactElement {
     return rased.onPlayBeep(playBeep)
   }, [route.name])
 
+  const [modalOpen, setModalOpen] = React.useState(false)
+  React.useEffect(() => {
+    if (route.name === 'compact') { setModalOpen(false); return }
+    const check = (): void => setModalOpen(!!document.querySelector('[aria-modal="true"]'))
+    check()
+    const obs = new MutationObserver(check)
+    obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-modal', 'inert'] })
+    return () => obs.disconnect()
+  }, [route.name, boot])
+
   React.useEffect(() => {
     return rased.onRequestClose((e) => requestAction(() => { void rased.confirmClose(e.quit) }))
   }, [])
@@ -216,7 +226,10 @@ export function App(): React.ReactElement {
   }
 
   return (
-    <div className="desktop-shell"><Titlebar lang={lang} /><AnalyticsAccess lang={lang}><WhatsNewAccess settings={settings} patchSettings={patchSettings}>{(openWhatsNew, whatsNewOpen) => <div className="app" inert={whatsNewOpen}>
+    <div className="desktop-shell"><Titlebar lang={lang} /><AnalyticsAccess lang={lang}><WhatsNewAccess settings={settings} patchSettings={patchSettings}>{(openWhatsNew, whatsNewOpen) => {
+      const dismissCommunityInvite = (): void => { void patchSettings({ ui: { ...settings.ui, communityInviteSeen: true } }) }
+      const openCommunityInvite = (link: 'telegramChannel' | 'telegramGroup'): void => { dismissCommunityInvite(); void rased.openAboutLink(link) }
+      return <div className="app" inert={whatsNewOpen}>
       <Sidebar
         lang={lang}
         route={route}
@@ -227,6 +240,14 @@ export function App(): React.ReactElement {
         onToggleCollapse={() => void patchSettings({ ui: { ...settings.ui, sidebarCollapsed: !settings.ui.sidebarCollapsed } })}
       />
       <div className="main">
+        {!settings.ui.communityInviteSeen && !modalOpen && !whatsNewOpen && <div className="update-banner community-invite-banner" role="region" aria-label={lang === 'ar' ? 'دعوة مجتمع راصد على تليجرام' : 'RASED Telegram community invite'}>
+          <span>{lang === 'ar' ? 'انضم لمجتمع راصد على تليجرام: أخبار الإصدارات وأسئلة المستخدمين.' : 'Join the RASED community on Telegram: release news and user questions.'}</span>
+          <div className="row-actions">
+            <button className="btn sm" onClick={() => openCommunityInvite('telegramChannel')}>{lang === 'ar' ? 'القناة' : 'Channel'}</button>
+            <button className="btn sm" onClick={() => openCommunityInvite('telegramGroup')}>{lang === 'ar' ? 'الجروب' : 'Group'}</button>
+            <button className="btn ghost sm" onClick={dismissCommunityInvite}>{lang === 'ar' ? 'مش دلوقتي' : 'Not now'}</button>
+          </div>
+        </div>}
         <UpdateBanner lang={lang} state={updateState} />
         <Topbar
           lang={lang}
@@ -309,6 +330,6 @@ export function App(): React.ReactElement {
         )}
         <Statusbar lang={lang} health={health} khamsatHealth={khamsatHealth} nafezlyHealth={nafezlyHealth} kafHealth={kafHealth} settings={settings} />
       </div>
-    </div>}</WhatsNewAccess></AnalyticsAccess></div>
+    </div>}}</WhatsNewAccess></AnalyticsAccess></div>
   )
 }

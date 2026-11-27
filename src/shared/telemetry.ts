@@ -29,7 +29,7 @@ export interface TelemetryEvents {
   project_open_result: { source: SourceId | 'unknown'; entry: 'notification' | 'app' | 'watch_notification'; launch: 'accepted' | 'failed' | 'unknown'; foreground: 'confirmed' | 'denied' | 'target-unknown' | 'not-attempted'; duration: DurationBucket }
   quick_apply_result: { source: 'mostaql' | 'nafezly'; outcome: TelemetryOutcome; error: QuickApplyTelemetryError; duration: DurationBucket }
   proposal_result: { provider: 'gemini' | 'openai' | 'anthropic'; outcome: TelemetryOutcome; error: TelemetryError; duration: DurationBucket }
-  feature_used: { feature: 'bookmark' | 'saved_filter' | 'backup_created' | 'restore_requested'; outcome: TelemetryOutcome }
+  feature_used: { feature: 'bookmark' | 'saved_filter' | 'backup_created' | 'restore_requested' | 'community_channel' | 'community_group'; outcome: TelemetryOutcome }
   update_download_result: { target_version: string; outcome: TelemetryOutcome; error: TelemetryError }
   watch_started: { source: WatchSource; entry: 'list' | 'preview' | 'detail' | 'compact' | 'watch_view' | 'auto_submitted'; result: 'active' | 'waiting' | 'replaced_other' }
   watch_daily: { source: WatchSource; watched: '0' | '1_2' | '3_5' | '6_10'; waiting: '0' | '1_2' | '3_plus' }
@@ -100,7 +100,7 @@ const rules: Record<TelemetryName, Rules> = {
   project_open_result: { source: oneOf(...TELEMETRY_SOURCES, 'unknown'), entry: oneOf('notification', 'app', 'watch_notification'), launch: oneOf('accepted', 'failed', 'unknown'), foreground: oneOf('confirmed', 'denied', 'target-unknown', 'not-attempted'), duration },
   quick_apply_result: { source: oneOf('mostaql', 'nafezly'), outcome, error: v => error(v) || oneOf('needs_input', 'login_required', 'draft_exists', 'expired')(v), duration },
   proposal_result: { provider: oneOf('gemini', 'openai', 'anthropic'), outcome, error, duration },
-  feature_used: { feature: oneOf('bookmark', 'saved_filter', 'backup_created', 'restore_requested'), outcome },
+  feature_used: { feature: oneOf('bookmark', 'saved_filter', 'backup_created', 'restore_requested', 'community_channel', 'community_group'), outcome },
   update_download_result: { target_version: telemetryVersion, outcome, error },
   watch_started: { source: watchSource, entry: oneOf('list', 'preview', 'detail', 'compact', 'watch_view', 'auto_submitted'), result: oneOf('active', 'waiting', 'replaced_other') },
   watch_daily: { source: watchSource, watched: oneOf('0', '1_2', '3_5', '6_10'), waiting: oneOf('0', '1_2', '3_plus') },

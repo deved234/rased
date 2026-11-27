@@ -150,6 +150,10 @@ describe('Explicit event contracts', () => {
     expect(validTelemetryProperties('proposal_result', { provider: 'custom', outcome: 'failed', error: 'PRIVATE_CANARY', duration: 'over_10s' })).toBe(false)
     expect(validTelemetryProperties('monitoring_hourly', { mostaql_success: -1 })).toBe(false)
     expect(validTelemetryProperties('feature_used', { feature: 'bookmark' })).toBe(false)
+    expect(validTelemetryProperties('feature_used', { feature: 'community_channel', outcome: 'success' })).toBe(true)
+    expect(validTelemetryProperties('feature_used', { feature: 'community_group', outcome: 'failed' })).toBe(true)
+    expect(validTelemetryProperties('feature_used', { feature: 'community_channel' })).toBe(false)
+    expect(validTelemetryProperties('feature_used', { feature: 'telegram', outcome: 'success' })).toBe(false)
   })
   it('uses fixed duration and error buckets without serializing raw errors', () => {
     expect([99, 100, 500, 2000, 10000].map(durationBucket)).toEqual(['under_100ms', '100_500ms', '500ms_2s', '2_10s', 'over_10s'])

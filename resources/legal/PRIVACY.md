@@ -32,7 +32,7 @@
 
 ## الاتصالات الخارجية
 
-يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده وصفحات مشاريعه العامة عند طلب الميزانية والمدة من المعاينة أو التفاصيل. تُحفظ بيانات البطاقة مؤقتًا محليًا لتقليل الطلبات وتحترم الإيقاف والتهدئة. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا. ويطلب صفحات المشاريع التي تتابعها دوريًا كما هو موضح في «متابعة المشاريع».
+يتصل جهازك مباشرة بمستقل لجلب RSS وصفحات التفاصيل عند الحاجة، وبصفحة طلبات الخدمات غير الموجودة العامة في خمسات، وبخلاصة RSS العامة لنفذلي عند تفعيل رصده وصفحات مشاريعه العامة عند طلب الميزانية والمدة من المعاينة أو التفاصيل. تُحفظ بيانات البطاقة مؤقتًا محليًا لتقليل الطلبات وتحترم الإيقاف والتهدئة. قد يرى كل موقع ومزود الشبكة عنوان IP ووقت الطلب وبيانات الاتصال وUser-Agent. فتح رابط طلب أو مشروع أو GitHub أو LinkedIn أو Telegram (t.me) يشغّل متصفحك وتطبق سياسات تلك المواقع. لا يقرأ راصد جلسة المتصفح أو كلمات مرور المنصات. رصد خمسات ونفذلي لا يحتاج تسجيل دخول؛ وصف نفذلي الكامل الوارد في RSS يُحفظ محليًا. ويطلب صفحات المشاريع التي تتابعها دوريًا كما هو موضح في «متابعة المشاريع».
 
 ## مساعد العروض وGemini وOpenAI وClaude
 
@@ -102,7 +102,7 @@ Projects, excerpts, fetched descriptions, read states, bookmarks, notes, filters
 
 ## External connections
 
-Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Previewing or opening a Nafezly project may also request its public page for budget and duration. Project-card data is cached locally to reduce requests and honors source pause and cooldowns. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub and LinkedIn links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally. Pages of projects you watch are also requested periodically, as described in "Project watch".
+Your device contacts Mostaql directly for RSS and detail pages as needed, the public Khamsat unavailable-service requests listing, and the public Nafezly RSS feed when each source is enabled. Previewing or opening a Nafezly project may also request its public page for budget and duration. Project-card data is cached locally to reduce requests and honors source pause and cooldowns. Each site and network provider may receive your IP address, request timing, connection metadata and User-Agent. Project, request, GitHub, LinkedIn and Telegram (t.me) links open in your browser and those sites apply their own policies. RASED does not read your browser session or platform passwords. Khamsat and Nafezly monitoring need no login; Nafezly descriptions supplied in RSS are stored locally. Pages of projects you watch are also requested periodically, as described in "Project watch".
 
 ## Proposal Assistant: Gemini, OpenAI and Claude
 
