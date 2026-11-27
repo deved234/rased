@@ -366,8 +366,8 @@ try {
   await sleep(600)
   const englishSplash = await call(ws, 'Page.captureScreenshot', { format: 'png' })
   writeFileSync('.local/qa/screenshots/startup/en-ready.png', Buffer.from(englishSplash.data, 'base64'))
-  await wait('!document.querySelector(".splash")')
-  check('ready splash enters workspace automatically without a click', await ev('!!document.querySelector(".app")'))
+  // The splash unmounts a moment before the workspace mounts; wait for the final state.
+  check('ready splash enters workspace automatically without a click', await eventually(() => ev('!document.querySelector(".splash") && !!document.querySelector(".app")')).then(() => true, () => false))
   const note = await ev('window.rased.getProject(450).then(p=>p.note)')
   check('saved note and bookmark survive a real process restart', note==='PERSISTENT NOTE' && await ev('window.rased.getProject(450).then(p=>p.saved)'))
   await wait('document.querySelectorAll("[data-row]").length>0')
