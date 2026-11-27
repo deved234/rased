@@ -89,7 +89,8 @@ export async function stopApp(child) {
   } else {
     if (child.signalCode !== null || !child.pid) return
     // Kill the entire process group (spawned with detached: true).
-    try { process.kill(-child.pid, 'SIGKILL') } catch (e) { if (e.code !== 'ESRCH') throw e }
+    // macOS returns EPERM (not ESRCH) when the group leader already exited and only a zombie remains.
+    try { process.kill(-child.pid, 'SIGKILL') } catch (e) { if (e.code === 'EPERM') { try { child.kill('SIGKILL') } catch { /* already gone */ } } else if (e.code !== 'ESRCH') throw e }
     if (child.exitCode === null && child.signalCode === null) await new Promise(resolve => child.once('close', resolve))
   }
 }
