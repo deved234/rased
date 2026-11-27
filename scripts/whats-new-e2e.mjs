@@ -152,7 +152,8 @@ export async function testWhatsNew(exeOverride) {
       check(`${language}/${theme} reduced motion disables card animation`, await ev('getComputedStyle(document.querySelector(".whats-new-card")).animationName==="none"'))
       await ev('document.querySelector(".whats-new-footer button:last-child").click()')
       await key('Escape', 'Escape', 27); await wait('!document.querySelector(".whats-new-dialog")')
-      check(`${language}/${theme} closing restores focus to About button`, await ev('document.activeElement === document.querySelector(".about-hero button")'))
+      // Focus returns just after the dialog unmounts; wait for it (seen late on Ubuntu CI).
+      check(`${language}/${theme} closing restores focus to About button`, await eventually(() => ev('document.activeElement === document.querySelector(".about-hero button")')).then(() => true, () => false))
     }
     check('changelog reuses only the fixed safe GitHub releases destination', readFileSync(join(legacy, 'test-trace.jsonl'), 'utf8').includes('"data":"https://github.com/deved234/rased/releases"'))
     await stop()

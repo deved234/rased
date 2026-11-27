@@ -25,9 +25,9 @@ jobs:
         group: [core, data, ui]
         include:
           - group: core
-            suites: test:e2e test:network test:monitoring
+            suites: test:e2e test:network test:monitoring test:watch
           - group: data
-            suites: test:telemetry test:kaf test:data test:watch
+            suites: test:telemetry test:kaf test:data
           - group: ui
             suites: test:ui test:ai test:search test:project-facts
     steps:
