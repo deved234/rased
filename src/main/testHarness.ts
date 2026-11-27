@@ -3,6 +3,7 @@
 import { appendFileSync, existsSync, readFileSync, realpathSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import type { UpdaterPort } from './updates.js'
+import type { UpdateMode } from '../shared/updates.js'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isReleaseVersion } from '../shared/whatsNew.js'
@@ -163,6 +164,13 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
     if (suppressWhatsNew && settings.whatsNewSeen !== currentVersion) save({ ...settings, whatsNewSeen: currentVersion })
   }
   return { fetchImpl, aiFetchImpl, record, appVersion, suppressWhatsNew, initializeSettings }
+}
+
+export function testUpdaterMode(profile: string): UpdateMode {
+  const file = join(profile, 'update-fixture.json')
+  if (!existsSync(file)) return 'install'
+  const mode = (JSON.parse(readFileSync(file, 'utf8')) as { mode?: unknown }).mode
+  return mode === 'notify' || mode === 'open-installer' ? mode : 'install'
 }
 
 /** Only constructed after isolatedTestHarness validated the opt-in TEMP marker. */

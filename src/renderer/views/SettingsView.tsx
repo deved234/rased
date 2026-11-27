@@ -273,10 +273,10 @@ export function SettingsView({
               <div className="set-row">
                 <span className="hint">{t.testNotifNote}</span>
               </div>
-              {appInfo?.platform === 'win32' && (
+              {(appInfo?.platform === 'win32' || appInfo?.platform === 'darwin') && (
                 <div className="set-row">
-                  <button className="btn sm" onClick={() => void rased.openWindowsNotificationSettings()}>{t.windowsNotificationSettings}</button>
-                  <span className="hint">{t.windowsNotificationHint}</span>
+                  <button className="btn sm" onClick={() => void rased.openWindowsNotificationSettings()}>{appInfo?.platform === 'darwin' ? t.macNotificationSettings : t.windowsNotificationSettings}</button>
+                  <span className="hint">{appInfo?.platform === 'darwin' ? t.macNotificationHint : t.windowsNotificationHint}</span>
                 </div>
               )}
             </div>

@@ -117,6 +117,7 @@ export interface RasedApi {
   downloadUpdate(): Promise<MutationResult>
   installUpdate(): Promise<MutationResult>
   confirmUpdateInstall(): Promise<MutationResult>
+  openUpdatePage(): Promise<MutationResult>
   onUpdateState(cb: (state: UpdateState) => void): () => void
   onRequestUpdateInstall(cb: () => void): () => void
   getProjects(q: ProjectQuery): Promise<Project[]>

@@ -12,9 +12,9 @@ import { matchesKafKeywords } from '../collector/kaf.js'
 
 import { randomUUID } from 'node:crypto'
 import { release as osRelease } from 'node:os'
-import { NsisUpdater } from 'electron-updater'
 import { UpdateController } from './updates.js'
-import { testUpdater } from './testHarness.js'
+import { testUpdater, testUpdaterMode } from './testHarness.js'
+import { createUpdaterPort } from './platform/updater.js'
 import { version as APP_VERSION } from '../../package.json'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -2041,6 +2041,15 @@ function registerIpc(): void {
     updateInstallRequested = false
     return updates?.install()
   })
+  ipcMain.handle(IPC.openUpdatePage, async event => {
+    if (!mainSender(event)) return { ok: false, error: 'untrusted' }
+    const url = 'https://github.com/deved234/rased/releases/latest'
+    try {
+      if (testHarness) testHarness.record('open-external', url)
+      else await shell.openExternal(url)
+      return { ok: true }
+    } catch { return { ok: false, error: 'open-failed' } }
+  })
   ipcMain.handle(IPC.confirmClose, (event, v: { quit: boolean }) => {
     if (event.sender !== win?.webContents) return
     if (v.quit === true || !applicationAccessAllowed()) return shutdown()
@@ -2489,10 +2498,11 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.testNotification, () => sendTestNotification())
   ipcMain.handle(IPC.openWindowsNotificationSettings, async event => {
-    if (!mainSender(event) || process.platform !== 'win32') return { ok: false, error: 'unavailable' }
+    const url = process.platform === 'win32' ? 'ms-settings:quiethours' : process.platform === 'darwin' ? 'x-apple.systempreferences:com.apple.preference.notifications' : null
+    if (!mainSender(event) || !url) return { ok: false, error: 'unavailable' }
     try {
-      if (testHarness) testHarness.record('open-system-settings', 'ms-settings:quiethours')
-      else await shell.openExternal('ms-settings:quiethours')
+      if (testHarness) testHarness.record('open-system-settings', url)
+      else await shell.openExternal(url)
       return { ok: true }
     } catch {
       return { ok: false, error: 'open-failed' }
@@ -2816,9 +2826,12 @@ async function boot(): Promise<void> {
 
   // Development never installs updates over a working checkout. Test mode
   // replaces only the updater boundary inside the explicitly marked profile.
-  const updatePort = testHarness ? testUpdater(app.getPath('userData'), testHarness.record) : IS_PACKAGED && process.platform === 'win32' ? new NsisUpdater() : null
+  const updateSelection = testHarness
+    ? { port: testUpdater(app.getPath('userData'), testHarness.record), mode: testUpdaterMode(app.getPath('userData')) }
+    : IS_PACKAGED ? createUpdaterPort(process.platform, process.env) : null
+  const updatePort = updateSelection?.port ?? null
   let lastUpdateTelemetry = ''
-  updates = new UpdateController(updatePort, APP_VERSION, state => {
+  updates = new UpdateController(updatePort, updateSelection?.mode ?? 'install', APP_VERSION, state => {
     broadcast(IPC.updateState, state)
     if (state.phase === 'downloading') lastUpdateTelemetry = ''
     const result = state.phase === 'downloaded' ? 'success' : state.phase === 'error' && state.error === 'download' ? 'failed' : null

@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events'
-import type { UpdateState } from '../shared/updates.js'
+import type { UpdateMode, UpdateState } from '../shared/updates.js'
 import type { MutationResult } from '../shared/types.js'
 
 export interface UpdaterPort extends Pick<EventEmitter, 'on' | 'removeListener'> {
@@ -22,8 +22,8 @@ export class UpdateController {
   private busy = false
   private disposed = false
   private readonly listeners: [string, (...args: unknown[]) => void][] = []
-  constructor(private readonly port: UpdaterPort | null, currentVersion: string, private readonly emit: (state: UpdateState) => void, private readonly log: (error: unknown) => void = () => {}) {
-    this.state = { phase: port ? 'idle' : 'disabled', currentVersion, version: null, notes: '', percent: 0, transferred: 0, total: 0, checkedAt: null, error: null }
+  constructor(private readonly port: UpdaterPort | null, private readonly mode: UpdateMode = 'install', currentVersion: string, private readonly emit: (state: UpdateState) => void, private readonly log: (error: unknown) => void = () => {}) {
+    this.state = { phase: port ? 'idle' : 'disabled', mode, currentVersion, version: null, notes: '', percent: 0, transferred: 0, total: 0, checkedAt: null, error: null }
     if (!port) return
     port.autoDownload = false; port.autoInstallOnAppQuit = false
     port.allowPrerelease = false; port.allowDowngrade = false
@@ -62,6 +62,7 @@ export class UpdateController {
     finally { this.busy = false }
   }
   async download(): Promise<MutationResult> {
+    if (this.mode === 'notify') return { ok: false, error: 'not-available' }
     if (!this.port || this.busy || !this.state.version || !(this.state.phase === 'available' || this.state.phase === 'error' && this.state.error === 'download')) return { ok: false, error: 'not-available' }
     this.busy = true
     this.patch({ phase: 'downloading', percent: 0, transferred: 0, total: 0, error: null })
@@ -70,6 +71,7 @@ export class UpdateController {
     finally { this.busy = false }
   }
   install(): MutationResult {
+    if (this.mode === 'notify') return { ok: false, error: 'not-available' }
     if (!this.port || this.busy || this.state.phase !== 'downloaded') return { ok: false, error: 'not-downloaded' }
     this.patch({ phase: 'installing', error: null })
     try { this.port.quitAndInstall(true, true); return { ok: this.snapshot().phase === 'installing' } }
