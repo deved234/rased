@@ -108,7 +108,7 @@ try {
   await ev('window.rased.openProjectExternal(1)'); await flush()
   check('revocation clears queued events and stops subsequent capture', (await status()).queued === 0 && events().length === before)
   await eventually(() => ev('!!document.querySelector(".analytics-access")'))
-  check('withdrawal locks feature views but retains deletion support', !(await status()).accessAllowed && await ev('!document.querySelector(".sidebar") && !!document.querySelector(".analytics-reference")'))
+  check('withdrawal locks feature views but retains deletion support', await eventually(async () => !(await status()).accessAllowed && await ev('!document.querySelector(".sidebar") && !!document.querySelector(".analytics-reference")')))
   check('stopping retains the reference for a deletion request', (await status()).reference === identity)
   await ev('window.rased.analyticsConsent("forget")')
   check('forget removes local reference and keeps sharing disabled', !(await status()).reference && (await status()).state === 'disabled')

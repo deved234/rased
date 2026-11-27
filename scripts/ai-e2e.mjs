@@ -118,41 +118,44 @@ try {
   check('standing consent defaults off in actual main', !(await ev('window.rased.getAiSetup()')).quickConsent)
   check('standing grant names the active provider and model', (await ev('window.rased.setQuickConsent(true,{provider:"anthropic",model:"claude-sonnet-4-5"})')).ok)
   check('missing extension prevents a paid standing request', (await ev('window.rased.quickApplyAssistant(1)')).error==='not-ready')
-  check('test extension files prepared', (await ev('window.rased.extensionAction({action:"prepare"})')).ok)
-  const root=join(profile,'chrome-link'),token=readFileSync(join(root,'bridge-token'),'utf8'),pipe='\\\\.\\pipe\\rased-extension-'+createHash('sha256').update(root).digest('hex').slice(0,24)
-  const messages=[];let buffer=Buffer.alloc(0)
-  bridgeSocket=createConnection(pipe)
-  bridgeSocket.on('error',()=>undefined)
-  bridgeSocket.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=4&&buffer.length>=buffer.readUInt32LE(0)+4){const n=buffer.readUInt32LE(0);messages.push(JSON.parse(buffer.subarray(4,4+n)));buffer=buffer.subarray(4+n)}})
-  const send=value=>{const b=Buffer.from(JSON.stringify(value)),h=Buffer.alloc(4);h.writeUInt32LE(b.length);bridgeSocket.write(Buffer.concat([h,b]))}
-  await new Promise(resolve=>bridgeSocket.once('connect',resolve));send({type:'bridge-auth',token});await eventually(()=>messages.some(m=>m.type==='bridge-ready'))
-  send({type:'hello',clientId:'d'.repeat(32),token:null,version:'0.1.0',protocol:1});await eventually(()=>messages.some(m=>m.type==='unpaired'));send({type:'pair-request'})
-  const pending=await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.pairing.length===1),pair=pending.pairing[0]
-  check('AI test profile paired', (await ev(`window.rased.extensionAction(${JSON.stringify({action:'approve',id:pair.id,code:pair.code,label:'Synthetic AI profile'})})`)).ok)
-  await ev('(async()=>{const {set}=await window.rased.getProfileSet();set.profiles.find(p=>p.id===set.defaultId).quickTemplate="Synthetic template";return window.rased.saveProfileSet(set)})()')
-  await ev('window.rased.updateSettings({quickApply:{enabled:true,template:"Synthetic template",budgetPositionPercent:50,extraDays:1}})')
-  const beforeStanding=traces().filter(t=>t.kind==='ai-request').length
-  check('standing generation and handoff complete in main', (await ev('window.rased.quickApplyAssistant(1)')).ok)
-  await eventually(()=>messages.some(m=>m.type==='prepare'))
-  check('standing uses exactly one request and saves its generated draft', traces().filter(t=>t.kind==='ai-request').length===beforeStanding+1&&db.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=1').get()?.proposal==='A focused proposal for the review project.')
-  await ev('window.rased.extensionAction({action:"cancel"})');await ev('window.rased.deleteProposalDraft(1)')
-  for(const mutation of ['revoke','model','provider','key']){
-    await ev('window.rased.setQuickConsent(true,{provider:"anthropic",model:"claude-sonnet-4-5"})')
-    writeFileSync(join(profile,'ai-fixture.json'),'{"delay":2000}')
-    await ev('window.__standing=window.rased.quickApplyAssistant(1);true')
-    await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.assistant?.phase==='writing')
-    if(mutation==='revoke')await ev('window.rased.setQuickConsent(false)')
-    if(mutation==='model'||mutation==='provider'){
-      const previous=(await ev('window.rased.getAiSetup()')).settings
-      const next=mutation==='provider'?{...previous,activeProvider:'gemini'}:{...previous,modelByProvider:{...previous.modelByProvider,anthropic:'other-model'}}
-      await ev(`window.rased.saveAiSettings(${JSON.stringify(next)})`)
-      await ev(`window.rased.saveAiSettings(${JSON.stringify(previous)})`)
+  if (process.platform === 'win32') {
+    // Quick Apply and its named-pipe bridge are Windows-only in this release.
+    check('test extension files prepared', (await ev('window.rased.extensionAction({action:"prepare"})')).ok)
+    const root=join(profile,'chrome-link'),token=readFileSync(join(root,'bridge-token'),'utf8'),pipe='\\\\.\\pipe\\rased-extension-'+createHash('sha256').update(root).digest('hex').slice(0,24)
+    const messages=[];let buffer=Buffer.alloc(0)
+    bridgeSocket=createConnection(pipe)
+    bridgeSocket.on('error',()=>undefined)
+    bridgeSocket.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=4&&buffer.length>=buffer.readUInt32LE(0)+4){const n=buffer.readUInt32LE(0);messages.push(JSON.parse(buffer.subarray(4,4+n)));buffer=buffer.subarray(4+n)}})
+    const send=value=>{const b=Buffer.from(JSON.stringify(value)),h=Buffer.alloc(4);h.writeUInt32LE(b.length);bridgeSocket.write(Buffer.concat([h,b]))}
+    await new Promise(resolve=>bridgeSocket.once('connect',resolve));send({type:'bridge-auth',token});await eventually(()=>messages.some(m=>m.type==='bridge-ready'))
+    send({type:'hello',clientId:'d'.repeat(32),token:null,version:'0.1.0',protocol:1});await eventually(()=>messages.some(m=>m.type==='unpaired'));send({type:'pair-request'})
+    const pending=await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.pairing.length===1),pair=pending.pairing[0]
+    check('AI test profile paired', (await ev(`window.rased.extensionAction(${JSON.stringify({action:'approve',id:pair.id,code:pair.code,label:'Synthetic AI profile'})})`)).ok)
+    await ev('(async()=>{const {set}=await window.rased.getProfileSet();set.profiles.find(p=>p.id===set.defaultId).quickTemplate="Synthetic template";return window.rased.saveProfileSet(set)})()')
+    await ev('window.rased.updateSettings({quickApply:{enabled:true,template:"Synthetic template",budgetPositionPercent:50,extraDays:1}})')
+    const beforeStanding=traces().filter(t=>t.kind==='ai-request').length
+    check('standing generation and handoff complete in main', (await ev('window.rased.quickApplyAssistant(1)')).ok)
+    await eventually(()=>messages.some(m=>m.type==='prepare'))
+    check('standing uses exactly one request and saves its generated draft', traces().filter(t=>t.kind==='ai-request').length===beforeStanding+1&&db.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=1').get()?.proposal==='A focused proposal for the review project.')
+    await ev('window.rased.extensionAction({action:"cancel"})');await ev('window.rased.deleteProposalDraft(1)')
+    for(const mutation of ['revoke','model','provider','key']){
+      await ev('window.rased.setQuickConsent(true,{provider:"anthropic",model:"claude-sonnet-4-5"})')
+      writeFileSync(join(profile,'ai-fixture.json'),'{"delay":2000}')
+      await ev('window.__standing=window.rased.quickApplyAssistant(1);true')
+      await eventually(()=>ev('window.rased.getExtensionStatus()'),v=>v.assistant?.phase==='writing')
+      if(mutation==='revoke')await ev('window.rased.setQuickConsent(false)')
+      if(mutation==='model'||mutation==='provider'){
+        const previous=(await ev('window.rased.getAiSetup()')).settings
+        const next=mutation==='provider'?{...previous,activeProvider:'gemini'}:{...previous,modelByProvider:{...previous.modelByProvider,anthropic:'other-model'}}
+        await ev(`window.rased.saveAiSettings(${JSON.stringify(next)})`)
+        await ev(`window.rased.saveAiSettings(${JSON.stringify(previous)})`)
+      }
+      if(mutation==='key')await ev('window.rased.saveAiKey("anthropic","fake-integration-anthropic-key-rotated")')
+      check(mutation+' invalidates consent and cancels generation without a late draft', (await ev('window.__standing')).error==='cancelled'&&!(await ev('window.rased.getAiSetup()')).quickConsent&&!db.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=1').get())
     }
-    if(mutation==='key')await ev('window.rased.saveAiKey("anthropic","fake-integration-anthropic-key-rotated")')
-    check(mutation+' invalidates consent and cancels generation without a late draft', (await ev('window.__standing')).error==='cancelled'&&!(await ev('window.rased.getAiSetup()')).quickConsent&&!db.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=1').get())
+    writeFileSync(join(profile,'ai-fixture.json'),'{}')
+    bridgeSocket.destroy();bridgeSocket=null
   }
-  writeFileSync(join(profile,'ai-fixture.json'),'{}')
-  bridgeSocket.destroy();bridgeSocket=null
   // The key rotation above intentionally invalidated the revision-bound catalog; restore the original key and refresh the catalog.
   await ev('window.rased.saveAiKey("anthropic","fake-integration-anthropic-key")')
   check('Claude catalog refreshes after intentional key rotation', (await ev('window.rased.listAiModels("anthropic")')).ok)
