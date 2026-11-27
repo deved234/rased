@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 export async function testWhatsNew(exeOverride) {
   const version = '0.12.1' // Injected through the marked TEMP harness, independent of package.json.
@@ -44,7 +44,7 @@ export async function testWhatsNew(exeOverride) {
     ws = await pageWs(port)
     await wait('!!window.rased && !!document.querySelector(".splash")')
     await wait('document.querySelector(".splash")?.dataset.phase === "ready"')
-    check('splash precedes the dialog', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('splash precedes the dialog', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await ev('document.querySelector(".splash-enter").click()')
   }
   const stop = async () => {
@@ -71,8 +71,8 @@ export async function testWhatsNew(exeOverride) {
     await wait('!document.querySelector(".analytics-consent-actions .primary").disabled')
     await ev('document.querySelector(".analytics-consent-actions .primary").click()')
     await wait('!!document.querySelector(".whats-new-dialog")')
-    check('0.12.1 fixes lead, then 0.12.0 project watch and 0.11.0 profiles',await ev('(()=>{const d=document.querySelector(".whats-new-dialog").textContent;return d.indexOf("متابعة مستقل تعمل الآن")>=0 && d.indexOf("متابعة مستقل تعمل الآن")<d.indexOf("تابع مشاريعك") && d.indexOf("تابع مشاريعك")<d.indexOf("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length===10})()'))
-    check('acceptance reveals the upgrade dialog over the inert workspace', await ev('!document.querySelector(".analytics-access") && document.querySelector(".app").inert && document.querySelector(".whats-new-dialog").getAttribute("aria-modal")==="true" && document.querySelector(".whats-new-dialog").getAttribute("role")==="dialog"'))
+    check('0.12.1 fixes lead, then 0.12.0 project watch and 0.11.0 profiles',await settles(() => ev('(()=>{const d=document.querySelector(".whats-new-dialog").textContent;return d.indexOf("متابعة مستقل تعمل الآن")>=0 && d.indexOf("متابعة مستقل تعمل الآن")<d.indexOf("تابع مشاريعك") && d.indexOf("تابع مشاريعك")<d.indexOf("ملفات مهنية متعددة") && document.querySelectorAll(".whats-new-card").length===10})()')))
+    check('acceptance reveals the upgrade dialog over the inert workspace', await settles(() => ev('!document.querySelector(".analytics-access") && document.querySelector(".app").inert && document.querySelector(".whats-new-dialog").getAttribute("aria-modal")==="true" && document.querySelector(".whats-new-dialog").getAttribute("role")==="dialog"')))
     await ev('window.rased.openCompact()')
     const compact = await pageWs(port, target => target.url.includes('compact'))
     await eventually(() => evaluate(compact, '!!document.querySelector(".compact")'))
@@ -92,7 +92,7 @@ export async function testWhatsNew(exeOverride) {
     await ev('location.hash="#/settings/about"')
     await wait('!!document.querySelector(".about-version")')
     await reload()
-    check('Escape dismissal survives renderer reload', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('Escape dismissal survives renderer reload', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await stop(); await boot(legacy)
     await wait('!!document.querySelector(".about-version") || !!document.querySelector(".sidebar")')
     await ev('location.hash="#/settings/about"')
@@ -102,15 +102,15 @@ export async function testWhatsNew(exeOverride) {
     // Simulate the next unseen upgrade, then exercise the primary close path.
     await ev('window.rased.updateSettings({whatsNewSeen:null})')
     await wait('!!document.querySelector(".whats-new-dialog")')
-    check('focus starts at the primary action', await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
+    check('focus starts at the primary action', await settles(() => ev('document.activeElement === document.querySelector(".whats-new-footer .primary")')))
     const modalRoute = await ev('location.hash')
     await key('k', 'KeyK', 75, 2)
     await paint()
     check('Ctrl+K cannot navigate or move focus into the inert workspace', await ev('location.hash') === modalRoute && await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
     await key('Tab', 'Tab', 9, 8)
-    check('Shift+Tab wraps to the secondary action', await ev('document.activeElement === document.querySelector(".whats-new-footer button:last-child")'))
+    check('Shift+Tab wraps to the secondary action', await settles(() => ev('document.activeElement === document.querySelector(".whats-new-footer button:last-child")')))
     await key('Tab', 'Tab', 9)
-    check('Tab wraps back to primary action', await ev('document.activeElement === document.querySelector(".whats-new-footer .primary")'))
+    check('Tab wraps back to primary action', await settles(() => ev('document.activeElement === document.querySelector(".whats-new-footer .primary")')))
     const locked = new DatabaseSync(join(legacy, 'rased.db'))
     try {
       locked.exec("CREATE TRIGGER reject_whats_new_save BEFORE UPDATE ON settings WHEN NEW.key='app' BEGIN SELECT RAISE(ABORT,'fixture save failure'); END")
@@ -126,7 +126,7 @@ export async function testWhatsNew(exeOverride) {
     await wait('!document.querySelector(".whats-new-dialog")')
     check('primary action saves current version using keyboard only', (await ev('window.rased.getSettings()')).whatsNewSeen === version)
     await reload()
-    check('primary dismissal survives reload', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('primary dismissal survives reload', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await stop(); await boot(legacy)
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
     check('primary dismissal survives restart', (await ev('window.rased.getSettings()')).whatsNewSeen === version && await ev('!document.querySelector(".whats-new-dialog")'))
@@ -149,7 +149,7 @@ export async function testWhatsNew(exeOverride) {
       check(`${language}/${theme} 900px/125% fits without horizontal overflow and with visible buttons`, metrics.fits && !metrics.overflow && metrics.buttons && metrics.dir === (language === 'ar' ? 'rtl' : 'ltr') && metrics.scale === '125')
       writeFileSync(join(output, `${language}-${theme}-900-125.png`), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
       await session.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
-      check(`${language}/${theme} reduced motion disables card animation`, await ev('getComputedStyle(document.querySelector(".whats-new-card")).animationName==="none"'))
+      check(`${language}/${theme} reduced motion disables card animation`, await settles(() => ev('getComputedStyle(document.querySelector(".whats-new-card")).animationName==="none"')))
       await ev('document.querySelector(".whats-new-footer button:last-child").click()')
       await key('Escape', 'Escape', 27); await wait('!document.querySelector(".whats-new-dialog")')
       // Focus returns just after the dialog unmounts; wait for it (seen late on Ubuntu CI).
@@ -166,7 +166,7 @@ export async function testWhatsNew(exeOverride) {
     await ev('document.querySelector(".analytics-consent-actions .primary").click()')
     await wait('!!document.querySelector(".sidebar")')
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
-    check('fresh install shows no dialog after acceptance', await ev('!document.querySelector(".whats-new-dialog")'))
+    check('fresh install shows no dialog after acceptance', await settles(() => ev('!document.querySelector(".whats-new-dialog")')))
     await stop(); await boot(fresh)
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
     check('fresh install remains silent after restart', (await ev('window.rased.getSettings()')).whatsNewSeen === version && await ev('!document.querySelector(".whats-new-dialog")'))
@@ -179,7 +179,7 @@ export async function testWhatsNew(exeOverride) {
     await ev('location.hash="#/settings/about"'); await wait('!!document.querySelector(".about-version")')
     await ev('window.rased.getAppInfo()')
     await paint()
-    check('About hides manual review when all authored notes are newer than the installed version', await ev('!document.querySelector(".about-hero button") && !document.querySelector(".whats-new-dialog")'))
+    check('About hides manual review when all authored notes are newer than the installed version', await settles(() => ev('!document.querySelector(".about-hero button") && !document.querySelector(".whats-new-dialog")')))
     console.log(`WHAT’S NEW E2E PASSED (${passed} assertions).`)
   } finally { await stop() }
 }

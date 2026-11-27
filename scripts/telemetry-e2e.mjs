@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, startApp, stopApp, electronPath } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, settles, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2)), profile = newProfile(), port = Number(args.port ?? 9581)
 const exe = args.exe ?? electronPath(), app = args.app === '' ? '' : args.app ?? 'out/main/index.js'
@@ -89,7 +89,7 @@ try {
   check('test notification never increments project notification analytics', events().filter(e => e.name === 'project_open_result').length === 1)
   await ev('window.location.hash="#/settings/analytics"')
   await eventually(() => ev('!!document.getElementById("analytics-heading")'))
-  check('Arabic settings disclose WhatsApp, opt-in and remote deletion limits', await ev('document.body.innerText.includes("01201780258") && document.body.innerText.includes("لا يحذف")'))
+  check('Arabic settings disclose WhatsApp, opt-in and remote deletion limits', await settles(() => ev('document.body.innerText.includes("01201780258") && document.body.innerText.includes("لا يحذف")')))
   check('copy-reference works without sending it externally', (await ev('window.rased.analyticsAction("copy-reference")')).ok)
   check('contact opens only the fixed WhatsApp destination', (await ev('window.rased.analyticsAction("contact")')).ok)
   const trace = readFileSync(join(profile, 'test-trace.jsonl'), 'utf8')
@@ -122,12 +122,12 @@ try {
   for (const [lang, theme] of [['ar', 'dark'], ['en', 'light']]) {
     await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)},ui:{theme:${JSON.stringify(theme)}}})`)
     await eventually(() => ev(`document.body.innerText.includes(${JSON.stringify(lang === 'ar' ? 'لا يحدد راصد موعد حذف دوري' : 'no scheduled expiry')})`))
-    check(`${lang} settings disclose no scheduled expiry and the provider storage limitation`, await ev(lang === 'ar' ? 'document.body.innerText.includes("لا يحدد راصد موعد حذف دوري") && document.body.innerText.includes("لا نضمن بقاء البيانات للأبد")' : 'document.body.innerText.includes("no scheduled expiry") && document.body.innerText.includes("Permanent availability is not guaranteed")'))
-    check(`${lang} settings disclose pending cloud-event deletion verification before consent`, await ev(lang === 'ar' ? 'document.body.innerText.includes("التحقق النهائي من اكتمال حذف الأحداث") && document.body.innerText.includes("لم يكتمل بعد")' : 'document.body.innerText.includes("verification of completed event deletion") && document.body.innerText.includes("still pending")'))
+    check(`${lang} settings disclose no scheduled expiry and the provider storage limitation`, await settles(() => ev(lang === 'ar' ? 'document.body.innerText.includes("لا يحدد راصد موعد حذف دوري") && document.body.innerText.includes("لا نضمن بقاء البيانات للأبد")' : 'document.body.innerText.includes("no scheduled expiry") && document.body.innerText.includes("Permanent availability is not guaranteed")')))
+    check(`${lang} settings disclose pending cloud-event deletion verification before consent`, await settles(() => ev(lang === 'ar' ? 'document.body.innerText.includes("التحقق النهائي من اكتمال حذف الأحداث") && document.body.innerText.includes("لم يكتمل بعد")' : 'document.body.innerText.includes("verification of completed event deletion") && document.body.innerText.includes("still pending")')))
     await call(ws, 'Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false })
     const shot = await call(ws, 'Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
     writeFileSync(join(out, `analytics-${lang}-${theme}.png`), Buffer.from(shot.data, 'base64'))
-    check(`${lang} analytics settings have no horizontal document overflow`, await ev('document.documentElement.scrollWidth <= innerWidth + 2'))
+    check(`${lang} analytics settings have no horizontal document overflow`, await settles(() => ev('document.documentElement.scrollWidth <= innerWidth + 2')))
   }
   const consentFile = join(profile, 'telemetry/consent.json'), retainedReference = (await status()).reference
   await stop()
@@ -166,7 +166,7 @@ try {
   for (const lang of ['ar','en']) {
     await ev(`window.rased.updateSettings({language:${JSON.stringify(lang)}})`)
     await eventually(()=>ev('!!document.querySelector(".analytics-purge-retry")'))
-    check(lang+' incomplete purge message and retry remain accessible without identity',await ev(`document.body.innerText.includes(${JSON.stringify(lang==='ar'?'لم يكتمل النسيان المحلي':'Local forgetting is incomplete')}) && document.querySelector('.analytics-purge-retry').disabled===false`))
+    check(lang+' incomplete purge message and retry remain accessible without identity',await settles(() => ev(`document.body.innerText.includes(${JSON.stringify(lang==='ar'?'لم يكتمل النسيان المحلي':'Local forgetting is incomplete')}) && document.querySelector('.analytics-purge-retry').disabled===false`)))
     const button=await ev('document.querySelector(".analytics-purge-retry").focus(); document.activeElement.className')
     check(lang+' retry button accepts keyboard focus',button.includes('analytics-purge-retry'))
     const shots=resolve('.local/analytics-repair-2026-10-20/screenshots');mkdirSync(shots,{recursive:true})

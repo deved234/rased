@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const profile = newProfile()
 const port = 9377
@@ -76,11 +76,11 @@ try {
     await wait(`window.rased.getAiSetup().then(s=>s.providers.${provider}.verification?.model===${JSON.stringify(model)})`)
     check(provider + ' test uses synthetic data without a draft', traces().filter(t => t.kind === 'ai-request' && t.data.provider === provider && t.data.method === 'POST').at(-1)?.data.synthetic && !db.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=1').get())
     await nav('#/proposal/1'); await wait('!!document.querySelector(".proposal-fields")')
-    check(provider + ' preview names the recipient/model', await ev(`document.querySelector('.proposal-page').textContent.includes(${JSON.stringify(model)})`))
+    check(provider + ' preview names the recipient/model', await settles(() => ev(`document.querySelector('.proposal-page').textContent.includes(${JSON.stringify(model)})`)))
     await ev('document.querySelector(".proposal-consent input").click()')
     await click('توليد المسودة', '.proposal-card button'); await wait('!!document.querySelector(".proposal-editor")')
     check(provider + ' generation saves actual provider provenance', db.prepare('SELECT provider,model FROM proposal_drafts WHERE project_id=1').get().provider === provider)
-    check(provider + ' consumed consent cannot trigger a second paid call', await ev('!document.querySelector(".proposal-consent input").checked'))
+    check(provider + ' consumed consent cannot trigger a second paid call', await settles(() => ev('!document.querySelector(".proposal-consent input").checked')))
     await ev('window.rased.deleteProposalDraft(1)')
   }
   await nav('#/proposal/1'); await wait('!!document.querySelector(".proposal-fields")')
@@ -92,7 +92,7 @@ try {
   await ev('document.querySelector(".proposal-consent input").click()')
   await select('#proposal-profile',extraProfile.id)
   await wait('!!document.querySelector(".proposal-fields")')
-  check('profile selector refreshes facts and clears per-request approval',await ev('!document.querySelector(".proposal-consent input").checked && document.querySelector(".profile-preview").textContent.includes("Manual profile facts")'))
+  check('profile selector refreshes facts and clears per-request approval',await settles(() => ev('!document.querySelector(".proposal-consent input").checked && document.querySelector(".profile-preview").textContent.includes("Manual profile facts")')))
   check('preload rejects invalid profile IDs',(await ev('window.rased.generateProposal(1,"","a".repeat(64),undefined,"bad-id")')).error==='bad-request')
   await select('#proposal-profile',profileSet.defaultId);await wait('!!document.querySelector(".proposal-fields")')
   const oldPreview = await ev('window.rased.getProposalPreview(1,"")')
@@ -101,7 +101,7 @@ try {
   check('changing target rejects stale consent without an API call', mismatch.error === 'preview-changed' && traces().filter(t => t.kind === 'ai-request').length === count)
   await ev('document.querySelector(".proposal-consent input").click()')
   await select('#ai-provider', 'openai')
-  check('UI target change invalidates the preview and consent', await ev('!document.querySelector(".proposal-fields") && !document.querySelector(".proposal-consent input").checked && document.querySelector(".proposal-consent input").disabled'))
+  check('UI target change invalidates the preview and consent', await settles(() => ev('!document.querySelector(".proposal-fields") && !document.querySelector(".proposal-consent input").checked && document.querySelector(".proposal-consent input").disabled')))
   await click('تحديث المعاينة', '.proposal-card button'); await wait('!!document.querySelector(".proposal-fields")')
   check('temporary selection keeps the saved provider', (await ev('window.rased.getAiSetup()')).settings.activeProvider === 'anthropic')
   writeFileSync(join(profile, 'ai-fixture.json'), JSON.stringify({ delay: 2000 }))
@@ -174,7 +174,7 @@ try {
   writeFileSync('.local/qa/screenshots/ai-providers/ar-settings.png', Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
   await ev('window.rased.updateSettings({language:"en"})'); await wait('document.documentElement.dir==="ltr" && !!document.querySelector("#ai-key")')
   writeFileSync('.local/qa/screenshots/ai-providers/en-settings.png', Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
-  check('English settings show all providers and model controls', await ev('document.querySelectorAll("#setup-provider option").length===3 && document.querySelector(".proposal-settings").textContent.includes("Test generation")'))
+  check('English settings show all providers and model controls', await settles(() => ev('document.querySelectorAll("#setup-provider option").length===3 && document.querySelector(".proposal-settings").textContent.includes("Test generation")')))
   await ev('window.rased.confirmClose(true)').catch(() => {})
   await eventually(() => child.exitCode !== null, Boolean, 5000)
   child = null
@@ -196,7 +196,7 @@ try {
   const afterCrash = await ev('window.rased.getAiSetup()')
   check('keys survive forced restart after initial Chromium state was persisted', afterCrash.providers.gemini.keyReadable && afterCrash.providers.anthropic.keyReadable && !afterCrash.providers.openai.hasKey)
   await nav('#/settings/legal'); await wait('!!document.querySelector(".legal-page")')
-  check('legal text names all API providers', await ev('document.querySelector(".legal-page").textContent.includes("OpenAI") && document.querySelector(".legal-page").textContent.includes("Anthropic")'))
+  check('legal text names all API providers', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("OpenAI") && document.querySelector(".legal-page").textContent.includes("Anthropic")')))
   console.log(`\n${passed} AI integration checks passed. Network simulated; no live provider authentication claimed. Profile: ${profile}`)
 } finally {
   bridgeSocket?.destroy(); db.close(); if (child) await stopApp(child)

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
@@ -35,7 +35,7 @@ try {
   storage = new DatabaseSync(join(profile, 'rased.db'))
   await ev('window.rased.resumeKaf()'); await eventually(() => rowCount() === 2)
   check('silent baseline through real main/preload/SQLite', storage.prepare('SELECT count(*) AS n FROM notification_events').get().n === 0)
-  check('independent KAF resume leaves the other three paused', await ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth(),window.rased.getNafezlyHealth()]).then(all=>all.every(s=>s.paused))'))
+  check('independent KAF resume leaves the other three paused', await settles(() => ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth(),window.rased.getNafezlyHealth()]).then(all=>all.every(s=>s.paused))')))
   writeList(noPaging(fixture).replace('project/300-', 'project/298-').replace('تطوير واجهة React', 'مشروع جديد React'))
   await eventually(() => rowCount() === 3, Boolean, 15000)
   await eventually(() => traces().some(t => t.kind === 'toast'), Boolean, 8000)
@@ -52,9 +52,9 @@ try {
   check('validated stored project opens through default-browser boundary', traces().some(t => t.kind === 'open-external' && t.data === p.url))
   await ev(`location.hash='#/project/${p.id}'`); await wait('!!document.querySelector(".detail-rail")')
   await wait(`window.rased.getProjectDetails(${p.id}).then(d=>d.status==='ready')`)
-  check('on-demand details expose actual category/duration and keep timestamp raw', await ev(`window.rased.getProject(${p.id}).then(p=>p.durationDays===5 && p.publishedAt===null && p.publishedRaw==='2026-10-14 09:37:20')`))
-  check('KAF detail offers the Assistant but no Quick Apply buttons', await ev('!document.querySelector(".detail-rail .quick-template-action") && !document.querySelector(".detail-rail .quick-assistant-action") && [...document.querySelectorAll(".detail-rail button")].some(b=>/مساعد العروض|Proposal Assistant/.test(b.textContent))'))
-  check('synthetic Assistant key saves for manual KAF generation', await ev("window.rased.saveAiKey('gemini','SYNTHETIC_KAF_ASSISTANT_KEY')"))
+  check('on-demand details expose actual category/duration and keep timestamp raw', await settles(() => ev(`window.rased.getProject(${p.id}).then(p=>p.durationDays===5 && p.publishedAt===null && p.publishedRaw==='2026-10-14 09:37:20')`)))
+  check('KAF detail offers the Assistant but no Quick Apply buttons', await settles(() => ev('!document.querySelector(".detail-rail .quick-template-action") && !document.querySelector(".detail-rail .quick-assistant-action") && [...document.querySelectorAll(".detail-rail button")].some(b=>/مساعد العروض|Proposal Assistant/.test(b.textContent))')))
+  check('synthetic Assistant key saves for manual KAF generation', await settles(() => ev("window.rased.saveAiKey('gemini','SYNTHETIC_KAF_ASSISTANT_KEY')")))
   const fetchesBeforePreview = sourceFetches().length
   const cooldownBeforePreview = storage.prepare("SELECT backoff_until FROM source_state WHERE source='kaf'").get()?.backoff_until ?? null
   const preview = await ev(`window.rased.getProposalPreview(${p.id},'')`)
@@ -62,19 +62,19 @@ try {
   const generated = await ev(`window.rased.generateProposal(${p.id},'',${JSON.stringify(preview.fingerprint)})`)
   check('KAF generation with the synthetic provider saves the approved draft', generated.ok && storage.prepare('SELECT proposal FROM proposal_drafts WHERE project_id=?').get(p.id)?.proposal === 'A focused proposal for the review project.' && sourceFetches().length === fetchesBeforePreview)
   await ev(`location.hash='#/proposal/${p.id}'`); await wait('!!document.querySelector(".proposal-editor")')
-  check('KAF proposal page offers copy/open but no Quick Apply or Chrome preparation', await ev("!document.querySelector('.quick-template-action') && !document.querySelector('.quick-assistant-action') && ![...document.querySelectorAll('.proposal-card button')].some(b=>/Prepare in Chrome|تجهيز بهذا العرض في Chrome/.test(b.textContent)) && [...document.querySelectorAll('.proposal-card button')].some(b=>/Copy proposal|نسخ العرض/.test(b.textContent))"))
+  check('KAF proposal page offers copy/open but no Quick Apply or Chrome preparation', await settles(() => ev("!document.querySelector('.quick-template-action') && !document.querySelector('.quick-assistant-action') && ![...document.querySelectorAll('.proposal-card button')].some(b=>/Prepare in Chrome|تجهيز بهذا العرض في Chrome/.test(b.textContent)) && [...document.querySelectorAll('.proposal-card button')].some(b=>/Copy proposal|نسخ العرض/.test(b.textContent))")))
   check('Quick Apply main service still refuses KAF', !(await ev(`window.rased.quickApplyProject(${p.id})`)).ok && !(await ev(`window.rased.quickApplyAssistant(${p.id})`)).ok)
   await ev('window.rased.pauseKaf()'); const count = sourceFetches().length
   await ev('window.rased.refresh()'); await sleep(1500)
   check('pause cancels KAF while global refresh cannot restart it', sourceFetches().length === count)
   await ev('window.rased.updateSettings({kafKeywordsAny:["React"],kafExcludeKeywords:["WordPress"]})')
   await ev('location.hash="#/settings/notifications"'); await wait('!!document.querySelector("#kaf-any")')
-  check('KAF keyword settings persist and render with labeled fields', await ev('document.querySelector("#kaf-any").value==="React" && document.querySelector("label[for=kaf-any]")!==null'))
+  check('KAF keyword settings persist and render with labeled fields', await settles(() => ev('document.querySelector("#kaf-any").value==="React" && document.querySelector("label[for=kaf-any]")!==null')))
   await ev('location.hash="#/"'); session = await persistentSession(ws)
   for (const language of ['ar', 'en']) {
     await ev(`(async()=>{const s=await window.rased.getSettings();await window.rased.updateSettings({language:${JSON.stringify(language)},ui:{...s.ui,textScale:125}})})()`)
     await session.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 650, deviceScaleFactor: 1, mobile: false }); await sleep(350)
-    check(`${language}: four source controls fit 900px at 125% text`, await ev('document.body.scrollWidth<=innerWidth && document.querySelectorAll(".source-health-strip .source-pill").length===4 && [...document.querySelectorAll(".source-health-strip button")].every(b=>{const r=b.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth})'))
+    check(`${language}: four source controls fit 900px at 125% text`, await settles(() => ev('document.body.scrollWidth<=innerWidth && document.querySelectorAll(".source-health-strip .source-pill").length===4 && [...document.querySelectorAll(".source-health-strip button")].every(b=>{const r=b.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth})')))
     writeFileSync(join(output, language + '-900.png'), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
   }
   session.close(); session = null

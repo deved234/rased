@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 import { notificationDestination } from './notification-test-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2))
@@ -89,7 +89,7 @@ try {
   writeFileSync('.local/qa/screenshots/startup/ar-ready.png', Buffer.from(splashShot.data, 'base64'))
   await ev('document.querySelector(".splash-enter")?.click()')
   await wait('document.querySelectorAll("[data-row]").length === 50')
-  check('real bootstrap with cached 450 rows and no RSS dependency', await ev('!document.querySelector(".splash")'))
+  check('real bootstrap with cached 450 rows and no RSS dependency', await settles(() => ev('!document.querySelector(".splash")')))
   mkdirSync('.local/qa/screenshots/identity', { recursive: true })
   const mainShot = await call(ws, 'Page.captureScreenshot', { format: 'png' })
   writeFileSync('.local/qa/screenshots/identity/ar-main.png', Buffer.from(mainShot.data, 'base64'))
@@ -111,12 +111,12 @@ try {
     check('custom minimize control minimizes the real window', true)
     await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>s.maximized)'); await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
   }
-  check('window chrome keeps platform-appropriate controls', await ev(process.platform === 'darwin' ? '!document.querySelector(".window-controls") && !!document.querySelector(".window-titlebar.mac")' : 'document.querySelectorAll(".window-controls button").length===3'))
+  check('window chrome keeps platform-appropriate controls', await settles(() => ev(process.platform === 'darwin' ? '!document.querySelector(".window-controls") && !!document.querySelector(".window-titlebar.mac")' : 'document.querySelectorAll(".window-controls button").length===3')))
   await nav('#/settings/legal'); await wait('!!document.querySelector(".legal-page")')
-  check('offline legal terms render in Arabic', await ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")'))
-  await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")'))
-  check('privacy discloses optional Gemini transfer and free-tier processing', await ev('document.querySelector(".legal-page").textContent.includes("مساعد العروض وGemini") && document.querySelector(".legal-page").textContent.includes("مراجعون بشريون")'))
-  await click('الرخص', '.legal-page .chips button'); check('licenses include actual dependency texts', await ev('document.querySelector(".license-text")?.textContent.includes("MIT License")'))
+  check('offline legal terms render in Arabic', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")')))
+  await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")')))
+  check('privacy discloses optional Gemini transfer and free-tier processing', await settles(() => ev('document.querySelector(".legal-page").textContent.includes("مساعد العروض وGemini") && document.querySelector(".legal-page").textContent.includes("مراجعون بشريون")')))
+  await click('الرخص', '.legal-page .chips button'); check('licenses include actual dependency texts', await settles(() => ev('document.querySelector(".license-text")?.textContent.includes("MIT License")')))
   const legalOpens=traces().filter(t=>t.kind==='open-external').length
   await click('شروط مستقل الرسمية','.legal-page button'); await eventually(()=>traces().filter(t=>t.kind==='open-external').length===legalOpens+1)
   check('legal source button opens the fixed official destination',traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/p/terms')
@@ -201,7 +201,7 @@ try {
   await ev(`window.rased.createSavedFilter('Audit search',{...${JSON.stringify(def)},search:'Review project 1'})`)
   await nav('#/filters'); await click('تطبيق|Apply'); await wait('document.querySelector(".search-top").value==="Review project 1"')
   await wait('document.querySelector(".list-head")?.textContent.includes("111")')
-  check('saved filter preserves search and actual matching count', await ev('document.querySelector(".list-head").textContent.includes("111")'))
+  check('saved filter preserves search and actual matching count', await settles(() => ev('document.querySelector(".list-head").textContent.includes("111")')))
   await fill('.search-top',''); await wait('document.querySelector(".list-head").textContent.includes("450")')
   // Dirty note guard catches sidebar routes and allows save/discard/cancel.
   await nav('#/project/450'); await wait('!!document.querySelector("textarea")'); await fill('textarea','PERSISTENT NOTE')
@@ -263,7 +263,7 @@ try {
   await viewportSession.call('Emulation.setDeviceMetricsOverride',{width:900,height:600,deviceScaleFactor:1.5,mobile:false})
   await wait('innerWidth===900 && innerHeight===600'); await ev('window.dispatchEvent(new Event("resize"))')
   await wait('!!document.querySelector(".preview-pane:not(.overlay)")')
-  check('900px preview stays beside the list without dimming it', await ev('!document.querySelector(".scrim") && !!document.querySelector(".preview-pane:not(.overlay)")'))
+  check('900px preview stays beside the list without dimming it', await settles(() => ev('!document.querySelector(".scrim") && !!document.querySelector(".preview-pane:not(.overlay)")')))
   await click('View full details|عرض التفاصيل كاملة', '.preview-pane button')
   await wait('location.hash.startsWith("#/project/")')
   check('full details button works at minimum desktop width', true)
@@ -273,14 +273,14 @@ try {
   await viewportSession.call('Emulation.setDeviceMetricsOverride',{width:760,height:600,deviceScaleFactor:1.5,mobile:false})
   await wait('innerWidth===760'); await ev('window.dispatchEvent(new Event("resize"))')
   await wait('!!document.querySelector(".preview-pane.overlay")')
-  check('narrow preview details button is above the dimming scrim', await ev('(()=>{const b=[...document.querySelectorAll(".preview-pane.overlay button")].find(x=>/View full details|عرض التفاصيل كاملة/.test(x.textContent));if(!b)return false;const r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()'))
+  check('narrow preview details button is above the dimming scrim', await settles(() => ev('(()=>{const b=[...document.querySelectorAll(".preview-pane.overlay button")].find(x=>/View full details|عرض التفاصيل كاملة/.test(x.textContent));if(!b)return false;const r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()')))
   await ev('document.querySelector(".preview-pane.overlay button:last-of-type").focus()')
   await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
-  check('preview focus stays in overlay below the desktop minimum width', await ev('document.querySelector(".preview-pane.overlay").contains(document.activeElement)'))
+  check('preview focus stays in overlay below the desktop minimum width', await settles(() => ev('document.querySelector(".preview-pane.overlay").contains(document.activeElement)')))
   await call(ws,'Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27}); await wait('!document.querySelector(".preview-pane")')
   await nav('#/project/450'); await wait('!!document.querySelector("textarea")')
   await ev('document.querySelector("textarea").scrollIntoView({block:"center"})')
-  check('detail notes remain accessible in small viewport', await ev('(()=>{const r=document.querySelector("textarea").getBoundingClientRect();return r.height>0 && r.top>=0 && r.bottom<=innerHeight})()'))
+  check('detail notes remain accessible in small viewport', await settles(() => ev('(()=>{const r=document.querySelector("textarea").getBoundingClientRect();return r.height>0 && r.top>=0 && r.bottom<=innerHeight})()')))
   await viewportSession.call('Emulation.clearDeviceMetricsOverride'); viewportSession.close(); viewportSession=null
   await fill('textarea','CANCEL CLOSE DRAFT'); if(process.platform==='darwin')await ev('window.rased.windowControl("close")');else await ev('document.querySelector(".window-close").click()'); await wait('!!document.querySelector(".dialog")')
   check('native close asks before discarding note', await ev('document.querySelector("textarea").value')==='CANCEL CLOSE DRAFT')
@@ -327,18 +327,18 @@ try {
   await ev('window.rased.updateSettings({khamsatEnabled:true})')
   await ev('window.rased.resumeKhamsat()')
   await eventually(() => db.prepare("SELECT baseline_complete n FROM source_state WHERE source='khamsat'").get()?.n === 1)
-  check('Khamsat scans while Mostaql remains paused', await ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>m.paused&&!k.paused)'))
+  check('Khamsat scans while Mostaql remains paused', await settles(() => ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>m.paused&&!k.paused)')))
   await ev('window.rased.pauseKhamsat()')
   check('Khamsat first scan stores a silent baseline', db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 1 && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 0)
   await nav('#/settings')
   await click('Resume Khamsat|استئناف خمسات', '.settings button')
   await wait('window.rased.getKhamsatHealth().then(h=>!h.paused)')
-  check('settings resume acts only on Khamsat', await ev('window.rased.getHealth().then(h=>h.paused)'))
+  check('settings resume acts only on Khamsat', await settles(() => ev('window.rased.getHealth().then(h=>h.paused)')))
   await click('Pause Khamsat|إيقاف مؤقت خمسات', '.settings button')
   await wait('window.rased.getKhamsatHealth().then(h=>h.paused)')
   await nav('#/')
   await ev('window.rased.resume()')
-  check('Mostaql resumes without resuming Khamsat', await ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>!m.paused&&k.paused)'))
+  check('Mostaql resumes without resuming Khamsat', await settles(() => ev('Promise.all([window.rased.getHealth(),window.rased.getKhamsatHealth()]).then(([m,k])=>!m.paused&&k.paused)')))
   await ev('window.rased.pause()')
   const khamsatToastStart = traces().filter(t => t.kind === 'toast').length
   writeKhamsat([{id:790001,slug:'baseline',title:'Old Khamsat request',publishedAt:Date.now()-3600000},{id:790002,slug:'fresh',title:'New Khamsat request',publishedAt:Date.now()},{id:790003,slug:'old-return',title:'Old discussion returned',publishedAt:Date.now()-9*3600000}])
@@ -362,7 +362,7 @@ try {
   child = launchApp(); ws=await pageWs(port)
   await call(ws, 'Page.reload')
   await wait('document.querySelector(".splash")?.dataset.phase === "ready" || !!document.querySelector(".app")')
-  check('restart splash uses persisted English preferences', await ev('document.documentElement.lang === "en" && document.documentElement.dir === "ltr" && (document.querySelector(".splash-enter")?.textContent === "Explore opportunities" || !!document.querySelector(".app"))'))
+  check('restart splash uses persisted English preferences', await settles(() => ev('document.documentElement.lang === "en" && document.documentElement.dir === "ltr" && (document.querySelector(".splash-enter")?.textContent === "Explore opportunities" || !!document.querySelector(".app"))')))
   await sleep(600)
   const englishSplash = await call(ws, 'Page.captureScreenshot', { format: 'png' })
   writeFileSync('.local/qa/screenshots/startup/en-ready.png', Buffer.from(englishSplash.data, 'base64'))
@@ -387,7 +387,7 @@ try {
   await click('Retry', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="available")')
   check('available update shows banner and plain text without auto-download', await ev('!!document.querySelector(".update-banner") && document.querySelector(".update-notes").textContent.includes("Safe release notes") && !document.querySelector(".update-notes h2")') && !traces().some(t=>t.kind==='update-download'))
   await click('Download update', '.updates-page button'); await wait('!!document.querySelector(".update-progress progress")')
-  check('download progress reaches renderer through actual IPC', await ev('window.rased.getUpdateState().then(s=>s.phase==="downloading")'))
+  check('download progress reaches renderer through actual IPC', await settles(() => ev('window.rased.getUpdateState().then(s=>s.phase==="downloading")')))
   await wait('window.rased.getUpdateState().then(s=>s.phase==="downloaded")')
   check('download waits for explicit install', !traces().some(t=>t.kind==='update-install'))
   mkdirSync('.local/qa/screenshots/updates', { recursive: true })
@@ -409,7 +409,7 @@ try {
   await wait('!!document.querySelector(".app")')
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
   await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="notify")')
-  check('notify mode shows open download page button without download button', await ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open download page")) && !!Array.from(document.querySelectorAll(".update-banner button")).find(b=>b.textContent?.includes("Open download page")) && !Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Download update"))'))
+  check('notify mode shows open download page button without download button', await settles(() => ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open download page")) && !!Array.from(document.querySelectorAll(".update-banner button")).find(b=>b.textContent?.includes("Open download page")) && !Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Download update"))')))
   const openExternalBefore = traces().filter(t=>t.kind==='open-external' && t.data==='https://github.com/deved234/rased/releases/latest').length
   const updateDownloadBefore = traces().filter(t=>t.kind==='update-download').length
   await click('Open download page', '.updates-page button')
@@ -423,7 +423,7 @@ try {
   await nav('#/settings/updates'); await wait('!!document.querySelector(".updates-page")')
   await checkUpdates(); await wait('window.rased.getUpdateState().then(s=>s.phase==="available" && s.mode==="open-installer")')
   await click('Download update', '.updates-page button'); await wait('window.rased.getUpdateState().then(s=>s.phase==="downloaded" && s.mode==="open-installer")')
-  check('open-installer mode shows Open installer button', await ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open installer"))'))
+  check('open-installer mode shows Open installer button', await settles(() => ev('!!Array.from(document.querySelectorAll(".updates-page button")).find(b=>b.textContent?.includes("Open installer"))')))
   const installBefore = traces().filter(t=>t.kind==='update-install').length
   await click('Open installer', '.updates-page button'); await wait('!!document.querySelector(".dialog")')
   await click('Open installer', '.dialog button'); await eventually(() => traces().filter(t=>t.kind==='update-install').length > installBefore)

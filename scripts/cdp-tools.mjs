@@ -41,6 +41,9 @@ export async function eventually(fn, predicate = Boolean, timeout = 10000) {
   }
   throw Error(`Timed out; last value: ${JSON.stringify(value)}`)
 }
+export async function settles(read, timeout = 5000) {
+  try { await eventually(() => Promise.resolve().then(read).catch(() => false), Boolean, timeout); return true } catch { return false }
+}
 export function startApp({ exe, app, profile, port, url, test = true, captureOutput = false }) {
   const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`]
   if (test) args.push('--rased-test')

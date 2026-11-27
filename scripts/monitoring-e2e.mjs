@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
+import { call, evaluate, eventually, newProfile, pageWs, parseArgs, persistentSession, settles, sleep, startApp, stopApp, electronPath } from './cdp-tools.mjs'
 
 const args = parseArgs(process.argv.slice(2)), port = Number(args.port ?? 9498)
 let profile = newProfile()
@@ -64,9 +64,9 @@ try {
   for (const id of Object.keys(methods)) check(id + ' starts disabled', (await health(id)).state === 'disabled')
   await nav('#/settings/watching')
   await eventually(() => ev('document.querySelectorAll(".monitoring-source").length === 4'))
-  check('four capability-driven settings cards render', await ev('document.querySelectorAll(".monitoring-source").length === 4'))
+  check('four capability-driven settings cards render', await settles(() => ev('document.querySelectorAll(".monitoring-source").length === 4')))
   check('disabled Mostaql has no pause shortcut in top bar', await ev('!document.querySelector(".source-pill:first-child .source-pause-btn")'))
-  check('all-disabled state is visible', await ev('document.querySelector(".statusbar").textContent.includes("Disabled")'))
+  check('all-disabled state is visible', await settles(() => ev('document.querySelector(".statusbar").textContent.includes("Disabled")')))
   await invoke('updateSettings', { mostaqlEnabled: true, khamsatEnabled: true, nafezlyEnabled: true, kafEnabled: true })
   for (const id of Object.keys(methods)) {
     await invoke(methods[id][1]); await eventually(async () => !!(await health(id)).lastSuccessAt)
@@ -135,7 +135,7 @@ try {
   check('support report has all sources and excludes private values', JSON.parse(report).sources.length === 4 && !/SYNTHETIC_SECRET|Synthetic React|Synthetic description|Users|test-trace/.test(report))
   await nav('#/settings/about')
   await ev('document.querySelector(".about-diagnostics").open = true')
-  check('diagnostics includes KAF from the shared source registry', await ev('document.querySelector(".about-diagnostics").textContent.includes("kafiil.com/projects")'))
+  check('diagnostics includes KAF from the shared source registry', await settles(() => ev('document.querySelector(".about-diagnostics").textContent.includes("kafiil.com/projects")')))
 
   await nav('#/settings/watching'); session = await persistentSession(ws)
   for (const language of ['ar', 'en']) for (const theme of ['dark', 'light']) {
@@ -148,12 +148,12 @@ try {
     writeFileSync(join(shots, language + '-' + theme + '-settings.png'), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
   }
   await ev('document.querySelector(".source-health-btn").click()')
-  check('health dialog exposes all four platforms including disabled ones', await ev('document.querySelectorAll(".health-source").length === 4'))
-  check('health dialog initially focuses its close control without scrolling past the heading', await ev('document.activeElement?.getAttribute("aria-label")==="Close" && document.querySelector(".popover").scrollTop===0'))
-  check('health dialog fits the viewport and scrolls internally', await ev('(()=>{const p=document.querySelector(".popover"),b=p.getBoundingClientRect();return b.left>=0 && b.right<=innerWidth+1 && b.bottom<=innerHeight && getComputedStyle(p).overflowY==="auto"})()'))
+  check('health dialog exposes all four platforms including disabled ones', await settles(() => ev('document.querySelectorAll(".health-source").length === 4')))
+  check('health dialog initially focuses its close control without scrolling past the heading', await settles(() => ev('document.activeElement?.getAttribute("aria-label")==="Close" && document.querySelector(".popover").scrollTop===0')))
+  check('health dialog fits the viewport and scrolls internally', await settles(() => ev('(()=>{const p=document.querySelector(".popover"),b=p.getBoundingClientRect();return b.left>=0 && b.right<=innerWidth+1 && b.bottom<=innerHeight && getComputedStyle(p).overflowY==="auto"})()')))
   writeFileSync(join(shots, 'en-light-health-dialog.png'), Buffer.from((await call(ws, 'Page.captureScreenshot', { format: 'png' })).data, 'base64'))
   await call(ws, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
-  check('health dialog supports Escape', await ev('!document.querySelector(".popover")'))
+  check('health dialog supports Escape', await settles(() => ev('!document.querySelector(".popover")')))
   }
 
   // Reproduce three historical gaps without touching the user's database.
