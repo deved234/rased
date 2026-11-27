@@ -19,7 +19,7 @@ db.prepare("INSERT INTO settings(key,value) VALUES('app',?)").run(JSON.stringify
 db.prepare("INSERT INTO projects(id,source,external_id,url,title,first_seen_at,last_seen_at,discovery_kind,created_at,updated_at) VALUES(1,'mostaql','123','https://mostaql.com/go/123',?,?,?,'initial',?,?)").run(canary, stamp, stamp, stamp, stamp)
 db.close()
 let child, ws, passed = 0
-const check = (label, value) => { assert.ok(value, label); passed++; console.log('PASS ' + label) }
+const check = (label, value, detail = '') => { assert.ok(value, `${label}${detail ? ` — ${detail}` : ''}`); passed++; console.log('PASS ' + label) }
 const ev = expression => evaluate(ws, expression)
 const status = () => ev('window.rased.getAnalyticsStatus()')
 const events = () => existsSync(eventsFile) ? readFileSync(eventsFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []
@@ -96,7 +96,8 @@ try {
   check('WhatsApp URL contains no prefilled identity or message', trace.includes('https://wa.me/201201780258') && !trace.includes('wa.me/201201780258?'))
   const archive = join(profile, 'analytics-exclusion.rased-backup')
   writeFileSync(join(profile, 'data-dialog.json'), JSON.stringify({ 'save-backup': archive }))
-  check('portable backup succeeds with active separate analytics store', (await ev('window.rased.createBackup()')).ok)
+  const backup = await ev('window.rased.createBackup()')
+  check('portable backup succeeds with active separate analytics store', backup.ok, JSON.stringify(backup))
   check('portable backup never includes analytics identity', !readFileSync(archive).includes(Buffer.from(identity)))
   await stop(); await boot()
   check('ordinary app restart preserves participating identity', (await status()).reference === identity && (await status()).state === 'enabled')

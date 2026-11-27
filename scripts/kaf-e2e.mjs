@@ -43,6 +43,11 @@ try {
   const events = storage.prepare("SELECT e.status,p.external_id FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='kaf'").all()
   check('only newly visible open lower-ID project has one notification event', events.length === 1 && events[0].external_id === '298')
   const p = (await query()).rows.find(r => r.externalId === '298')
+  const toast = traces().find(t => t.kind === 'toast')?.data
+  if (process.platform === 'win32') check('KAF toast uses a persistent HTTPS destination with no Quick Apply action', notificationDestination(storage, toast?.toastXml) === p.url && !toast.toastXml.includes('quick-apply') && !toast.toastXml.includes('<actions>'))
+  // Windows-only by design: toast XML and protocol activation tickets. Elsewhere the
+  // same recorded toast carries no XML and its click callback opens the validated URL.
+  else check('KAF toast without Windows XML falls back to the validated project destination', toast?.toastXml === undefined && traces().some(t => t.kind === 'open-external' && t.data === p.url))
   await ev(`window.rased.openProjectExternal(${p.id})`)
   check('validated stored project opens through default-browser boundary', traces().some(t => t.kind === 'open-external' && t.data === p.url))
   await ev(`location.hash='#/project/${p.id}'`); await wait('!!document.querySelector(".detail-rail")')
@@ -59,8 +64,6 @@ try {
   await ev(`location.hash='#/proposal/${p.id}'`); await wait('!!document.querySelector(".proposal-editor")')
   check('KAF proposal page offers copy/open but no Quick Apply or Chrome preparation', await ev("!document.querySelector('.quick-template-action') && !document.querySelector('.quick-assistant-action') && ![...document.querySelectorAll('.proposal-card button')].some(b=>/Prepare in Chrome|تجهيز بهذا العرض في Chrome/.test(b.textContent)) && [...document.querySelectorAll('.proposal-card button')].some(b=>/Copy proposal|نسخ العرض/.test(b.textContent))"))
   check('Quick Apply main service still refuses KAF', !(await ev(`window.rased.quickApplyProject(${p.id})`)).ok && !(await ev(`window.rased.quickApplyAssistant(${p.id})`)).ok)
-  const toast = traces().find(t => t.kind === 'toast')?.data?.toastXml
-  check('KAF toast uses a persistent HTTPS destination with no Quick Apply action', notificationDestination(storage,toast) === p.url && !toast.includes('quick-apply') && !toast.includes('<actions>'))
   await ev('window.rased.pauseKaf()'); const count = sourceFetches().length
   await ev('window.rased.refresh()'); await sleep(1500)
   check('pause cancels KAF while global refresh cannot restart it', sourceFetches().length === count)

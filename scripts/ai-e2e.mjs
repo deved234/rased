@@ -39,9 +39,19 @@ const fill = async (selector, value) => {
 async function launch() {
   child = startApp({ exe, app, profile, port })
   ws = await pageWs(port)
-  await wait('document.querySelector(".splash")?.dataset.phase==="ready"')
-  await ev('document.querySelector(".splash-enter").click()')
-  await wait('!!document.querySelector(".app")')
+  try {
+    // The ready splash auto-enters after 800 ms, so a fast start can already show
+    // the workspace before CDP attaches. Accept either state, then click if present.
+    await wait('document.querySelector(".splash")?.dataset.phase==="ready" || !!document.querySelector(".app")')
+    await ev('document.querySelector(".splash-enter")?.click()')
+    await wait('!!document.querySelector(".app")')
+  } catch (error) {
+    // CI has no interactive console: expose the renderer state and recorded OS
+    // boundaries that explain why the workspace never mounted.
+    console.error('Launch failure state:', await ev('JSON.stringify({hash:location.hash,phase:document.querySelector(".splash")?.dataset.phase,dir:document.documentElement.dir,text:document.body.innerText.slice(0,1500)})').catch(e => 'No renderer: ' + e.message))
+    console.error('Launch trace tail:', traces().slice(-6).map(t => JSON.stringify(t)).join('\n') || '(empty)')
+    throw error
+  }
 }
 const providers = [['gemini', 'gemini-2.5-flash'], ['openai', 'gpt-4.1-mini'], ['anthropic', 'claude-sonnet-4-5']]
 try {

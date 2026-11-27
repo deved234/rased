@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isolatedTestHarness } from '../src/main/testHarness.js'
+import { isolatedTestHarness, insideTestProfile } from '../src/main/testHarness.js'
 import { loadAppSettings } from '../src/storage/appSettings.js'
 import { openDatabase } from '../src/storage/db.js'
 import { getSettingRaw, setSettingRaw } from '../src/storage/repositories.js'
@@ -135,5 +135,39 @@ describe('isolated harness TEMP containment', () => {
     writeFileSync(join(outside, '.rased-test-profile'), marker)
     const alias = newLink(outside, join(newOutsideDir(), 'rased-test-escape'))
     expect(isolatedTestHarness(alias, ['--rased-test'])).toBeNull()
+  })
+})
+
+describe('fixture-selected file containment', () => {
+  it('accepts a new file inside the profile', () => {
+    const profile = newProfile()
+    expect(insideTestProfile(profile, join(profile, 'exports', 'full.rased-backup'))).toBe(true)
+  })
+
+  it('rejects the profile itself and files outside it', () => {
+    const profile = newProfile()
+    expect(insideTestProfile(profile, profile)).toBe(false)
+    expect(insideTestProfile(profile, join(profile, '..', 'full.rased-backup'))).toBe(false)
+    expect(insideTestProfile(profile, join(newOutsideDir(), 'full.rased-backup'))).toBe(false)
+  })
+
+  it.skipIf(!symlinksSupported)('accepts macOS /var and /private/var style aliases of the same profile', () => {
+    const real = newProfile()
+    const alias = newLink(real, join(newOutsideDir(), 'rased-test-alias'))
+    expect(insideTestProfile(alias, join(alias, 'analytics-exclusion.rased-backup'))).toBe(true)
+    expect(insideTestProfile(real, join(alias, 'analytics-exclusion.rased-backup'))).toBe(true)
+    expect(insideTestProfile(alias, join(real, 'analytics-exclusion.rased-backup'))).toBe(true)
+  })
+
+  it.skipIf(!symlinksSupported)('rejects a target whose resolved parent escapes the profile', () => {
+    const profile = newProfile()
+    newLink(newOutsideDir(), join(profile, 'escape'))
+    expect(insideTestProfile(profile, join(profile, 'escape', 'full.rased-backup'))).toBe(false)
+  })
+
+  it('keeps the textual check when the parent cannot be resolved yet', () => {
+    const profile = newProfile()
+    expect(insideTestProfile(profile, join(profile, 'missing', 'full.rased-backup'))).toBe(true)
+    expect(insideTestProfile(profile, join(newOutsideDir(), 'missing', 'full.rased-backup'))).toBe(false)
   })
 })

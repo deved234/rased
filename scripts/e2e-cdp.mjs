@@ -96,15 +96,19 @@ try {
   writeFileSync('.local/qa/screenshots/identity/ar-watching.png', Buffer.from(watchingShot.data, 'base64'))
   await nav('#/')
   await wait('document.querySelectorAll("[data-row]").length === 50')
-  await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>s.maximized)')
-  await wait('document.querySelector(".window-controls button:nth-child(2)").getAttribute("aria-pressed")==="true"')
-  check('custom maximize control synchronizes real window state', true)
-  await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
-  check('custom restore control restores window', true)
-  await ev('document.querySelector(".window-controls button:first-child").click()')
-  await wait('window.rased.getWindowState().then(s=>s.minimized)')
-  check('custom minimize control minimizes the real window', true)
-  await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>s.maximized)'); await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
+  // Custom frameless controls drive the real window manager; xvfb on Linux has no WM and
+  // macOS later swaps in native traffic lights, so only Windows proves the real state.
+  if (process.platform === 'win32') {
+    await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>s.maximized)')
+    await wait('document.querySelector(".window-controls button:nth-child(2)").getAttribute("aria-pressed")==="true"')
+    check('custom maximize control synchronizes real window state', true)
+    await ev('document.querySelector(".window-controls button:nth-child(2)").click()'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
+    check('custom restore control restores window', true)
+    await ev('document.querySelector(".window-controls button:first-child").click()')
+    await wait('window.rased.getWindowState().then(s=>s.minimized)')
+    check('custom minimize control minimizes the real window', true)
+    await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>s.maximized)'); await ev('window.rased.windowControl("maximize")'); await wait('window.rased.getWindowState().then(s=>!s.maximized)')
+  }
   await nav('#/settings/legal'); await wait('!!document.querySelector(".legal-page")')
   check('offline legal terms render in Arabic', await ev('document.querySelector(".legal-page").textContent.includes("لا تمنح هذه الصفحات إذنًا")'))
   await click('الخصوصية', '.legal-page .chips button'); check('privacy discloses local unencrypted storage', await ev('document.querySelector(".legal-page").textContent.includes("ليست مشفرة")'))
@@ -143,9 +147,12 @@ try {
   await click('فتح المشروع في المتصفح', '.proposal-card button')
   check('proposal browser action opens project externally', traces().filter(t=>t.kind==='open-external').length===proposalOpens+1)
   await nav('#/settings/notifications')
-  await wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.includes("إعدادات إشعارات Windows"))')
-  await click('إعدادات إشعارات Windows')
-  check('notification guidance opens fixed Windows Focus assist settings', traces().filter(t=>t.kind==='open-system-settings').at(-1)?.data==='ms-settings:quiethours')
+  // The Focus Assist deep link and its Windows settings entry exist only on Windows.
+  if (process.platform === 'win32') {
+    await wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.includes("إعدادات إشعارات Windows"))')
+    await click('إعدادات إشعارات Windows')
+    check('notification guidance opens fixed Windows Focus assist settings', traces().filter(t=>t.kind==='open-system-settings').at(-1)?.data==='ms-settings:quiethours')
+  }
   await nav('#/'); await wait('document.querySelectorAll("[data-row]").length===50')
 
 
@@ -286,7 +293,9 @@ try {
   await ev('window.__events=[];window.rased.onProjectsChanged(e=>window.__events.push(e))'); writeRss([{title:'New matching project',external:'91000001'}]); await ev('window.rased.resume()')
   await wait('!!document.querySelector(".pill")').catch(async e=>{console.error('Arrival debug',await ev('JSON.stringify({events:window.__events,scroll:document.querySelector(".list-scroll").scrollTop,rows:Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row),text:document.body.innerText,settings:await window.rased.getSettings()})'));throw e}); await sleep(2700)
   check('new arrival/enrichment preserves loaded ids until reveal', JSON.stringify(visible)===JSON.stringify(await ev('Array.from(document.querySelectorAll("[data-row]")).map(e=>e.dataset.row)')))
-  check('single toast requests high priority and persistent browser activation without in-app navigation', traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="foreground"') && notificationDestination(db,traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml)==='https://mostaql.com/go/91000001' && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001' && await ev('location.hash')==='#/')
+  check('single toast requests high priority and persistent browser activation without in-app navigation', await ev('location.hash')==='#/' && traces().filter(t=>t.kind==='toast').at(-1)?.data.urgency==='critical' && traces().filter(t=>t.kind==='open-external').at(-1)?.data==='https://mostaql.com/go/91000001')
+  // Windows-only by design: the urgent scenario, toast XML and its activation ticket are built only on win32.
+  if (process.platform === 'win32') check('single toast uses the persistent Windows activation ticket', traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml.includes('activationType="foreground"') && notificationDestination(db,traces().filter(t=>t.kind==='toast').at(-1)?.data.toastXml)==='https://mostaql.com/go/91000001')
   check('single Mostaql toast identifies its platform before the project title', traces().filter(t=>t.kind==='toast').at(-1)?.data.title.startsWith('Mostaql — New matching project'))
   await click('.', '.pill'); await wait('document.querySelector("[data-row] article").textContent.includes("New matching project")')
   check('arrival reveal fetches new row', true)
@@ -297,7 +306,9 @@ try {
   const items = Array.from({length:7},(_,i)=>({title:'Summary project '+i,external:String(92000001+i)}))
   writeRss(items); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===458)'); await ev('window.rased.pause()')
   const newToasts = traces().filter(t=>t.kind==='toast').slice(toastCount)
-  check('summary native activation targets newest persisted project once', newToasts.length===1 && notificationDestination(db,newToasts[0].data.toastXml)==='https://mostaql.com/go/92000007' && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
+  check('summary native activation targets newest persisted project once', newToasts.length===1 && traces().filter(t=>t.kind==='open-external').length===summaryOpens+1 && traces().filter(t=>t.kind==='open-external').at(-1).data==='https://mostaql.com/go/92000007')
+  // Windows-only by design: the summary activation ticket is resolved from Windows toast XML.
+  if (process.platform === 'win32') check('summary native activation resolves through the Windows toast ticket', notificationDestination(db,newToasts[0].data.toastXml)==='https://mostaql.com/go/92000007')
   const mutedToasts = traces().filter(t=>t.kind==='toast').length
   await ev('window.rased.setDnd(new Date(Date.now()+60000).toISOString())'); writeRss([{title:'Muted project',external:'93000001'}]); await ev('window.rased.resume()'); await wait('window.rased.getProjectCount({}).then(r=>r.total===459)'); await ev('window.rased.pause()')
   check('DND suppresses actual main dispatch while discovery continues', traces().filter(t=>t.kind==='toast').length===mutedToasts && db.prepare("SELECT COUNT(*) n FROM notification_events WHERE status='suppressed'").get().n>=1)
@@ -330,7 +341,9 @@ try {
   await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='khamsat'").get().n === 3)
   await ev('window.rased.pauseKhamsat()')
   const khamsatToasts = traces().filter(t => t.kind === 'toast').slice(khamsatToastStart)
-  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && notificationDestination(db,khamsatToasts[0].data.toastXml)==='https://khamsat.com/community/requests/790002-fresh' && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
+  check('only the fresh Khamsat request notifies and opens its own link', khamsatToasts.length === 1 && db.prepare("SELECT COUNT(*) n FROM notification_events e JOIN projects p ON p.id=e.project_id WHERE p.source='khamsat'").get().n === 1)
+  // Windows-only by design: the Khamsat activation ticket is resolved from Windows toast XML.
+  if (process.platform === 'win32') check('fresh Khamsat toast activation resolves to its own project link', notificationDestination(db,khamsatToasts[0].data.toastXml)==='https://khamsat.com/community/requests/790002-fresh')
   check('single Khamsat toast identifies its platform before the request title', khamsatToasts[0].data.title === 'Khamsat — New Khamsat request')
   check('old Khamsat discussion is marked recovered', db.prepare("SELECT discovery_kind FROM projects WHERE source='khamsat' AND external_id='790003'").get()?.discovery_kind === 'recovered')
   const khamsatOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"khamsat"},50,0)})()')
@@ -394,7 +407,9 @@ try {
   await eventually(() => db.prepare("SELECT COUNT(*) n FROM projects WHERE source='nafezly'").get().n===2)
   await ev('window.rased.pauseNafezly()')
   const nafezlyToasts = traces().filter(t=>t.kind==='toast').slice(nafezlyToastStart)
-  check('Nafezly fresh project stores full RSS description and browser toast destination', nafezlyToasts.length===1 && notificationDestination(db,nafezlyToasts[0].data.toastXml)==='https://nafezly.com/project/50002-fresh' && db.prepare("SELECT d.description_text FROM project_details d JOIN projects p ON p.id=d.project_id WHERE p.source='nafezly' AND p.external_id='50002'").get()?.description_text==='Full RSS description for integration')
+  check('Nafezly fresh project stores full RSS description and browser toast destination', nafezlyToasts.length===1 && db.prepare("SELECT d.description_text FROM project_details d JOIN projects p ON p.id=d.project_id WHERE p.source='nafezly' AND p.external_id='50002'").get()?.description_text==='Full RSS description for integration')
+  // Windows-only by design: the Nafezly activation ticket is resolved from Windows toast XML.
+  if (process.platform === 'win32') check('fresh Nafezly toast activation resolves to its own project link', notificationDestination(db,nafezlyToasts[0].data.toastXml)==='https://nafezly.com/project/50002-fresh')
   check('single Nafezly toast identifies its platform before the project title', nafezlyToasts[0].data.title === 'Nafezly — New Nafezly project')
   const nafezlyOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"nafezly",categoryFilter:{mode:"all",categories:[],keywordsAny:[],keywordsAll:[],excludeKeywords:[]}},50,0)})()')
   check('Nafezly source filter returns only its projects', nafezlyOnly.total===2 && nafezlyOnly.rows.every(p=>p.source==='nafezly'))

@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, readFileSync, realpathSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import type { UpdaterPort } from './updates.js'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isReleaseVersion } from '../shared/whatsNew.js'
 import type { AppSettings } from '../shared/types.js'
 
@@ -15,6 +15,25 @@ function canonicalInsideTemp(profile: string): boolean {
     return !rel.startsWith('..') && !isAbsolute(rel) && rel !== ''
   } catch {
     return false
+  }
+}
+
+/**
+ * Test-only containment for fixture-selected files. Compare canonical paths so
+ * macOS /var/... aliases still match Electron's /private/var/... profile; a target
+ * whose real parent escapes the profile stays outside. Fall back to the textual
+ * check only when an alias cannot be resolved (for example a missing parent).
+ */
+export function insideTestProfile(profile: string, target: string): boolean {
+  const inside = (root: string, path: string): boolean => {
+    const rel = relative(root, path)
+    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+  }
+  try {
+    // The selected file may not exist yet; its parent must.
+    return inside(realpathSync.native(profile), join(realpathSync.native(dirname(target)), basename(target)))
+  } catch {
+    return inside(profile, target)
   }
 }
 

@@ -117,7 +117,7 @@ import type { ProjectFacts } from '../shared/projectFacts.js'
 import { SourceArbiter, type ArbiterClaim } from '../collector/sourceArbiter.js'
 import { arbiterBudget } from '../collector/arbiterBudget.js'
 import { mergeSettings, notificationsAllowed, pickLatestProjectId } from './policies.js'
-import { isolatedTestHarness } from './testHarness.js'
+import { isolatedTestHarness, insideTestProfile } from './testHarness.js'
 import { evaluateFilter, toFilterable } from '../shared/filters.js'
 import { dispatchPending, recoverPreviousSession, type SinglePayload, type SummaryPayload } from './notifier.js'
 import {
@@ -2997,8 +2997,8 @@ async function chooseDataFile(kind: 'save-settings' | 'open-settings' | 'save-ba
     const selected = fixture[kind]
     if (selected === null || selected === undefined) return null
     if (typeof selected !== 'string') throw Error('bad-schema')
-    const path = resolve(app.getPath('userData'), selected), rel = relative(app.getPath('userData'), path)
-    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw Error('protected-location')
+    const path = resolve(app.getPath('userData'), selected)
+    if (!insideTestProfile(app.getPath('userData'), path)) throw Error('protected-location')
     testHarness.record('data-dialog', kind)
     return path
   }
