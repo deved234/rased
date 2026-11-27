@@ -40,7 +40,8 @@ try{
  writeFileSync(join(profile,'monitoring-config.json'),'{"mostaql":{"status":503}}')
  await ev('window.rased.resume()');await eventually(()=>ev('window.rased.getHealth()'),h=>!!h.lastError,15000);await ev('window.rased.pause()')
  writeFileSync(join(profile,'monitoring-config.json'),'{}');rss([990002,990001])
- await ev('window.rased.resume()');await eventually(()=>counters().success===2,Boolean,25000)
+ // After one failure the scheduler waits 20s times jitter (BACKOFF_LADDER_MS), so 25s was on the edge on slow runners.
+ await ev('window.rased.resume()');await eventually(()=>counters().success===2,Boolean,60000)
  check('real collector success/failure/success reaches hourly telemetry exactly',counters().success===2&&counters().failure===1)
  await eventually(()=>rows().some(e=>e.name==='notification_summary'&&e.properties.mostaql_shown===1),Boolean,40000)
  await ev('window.rased.pause()')
