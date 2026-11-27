@@ -21,7 +21,10 @@ const check=(name,value)=>{assert.ok(value,name);passed++;console.log('PASS '+na
 const ev=x=>evaluate(ws,x)
 // The app's worker briefly holds the queue exclusively (e.g. truncating checkpoint on restore); wait instead of failing.
 const rows=()=>{const d=new DatabaseSync(join(profile,'telemetry/queue.sqlite'),{timeout:5000});try{return d.prepare('SELECT body FROM queue UNION ALL SELECT body FROM buckets').all().map(r=>JSON.parse(r.body))}finally{d.close()}}
-const counters=()=>rows().filter(e=>e.name==='monitoring_hourly').reduce((n,e)=>({success:n.success+(e.properties.mostaql_success??0),failure:n.failure+(e.properties.mostaql_failure??0)}),{success:0,failure:0})
+const counters=()=>events().filter(e=>e.name==='monitoring_hourly').reduce((n,e)=>({success:n.success+(e.properties.mostaql_success??0),failure:n.failure+(e.properties.mostaql_failure??0)}),{success:0,failure:0})
+// The worker may deliver queued events to the fixture sink at any time, which removes them from the queue.
+// Count what is still local plus what was already delivered, once per event, so delivery cannot lower totals.
+const events=()=>{const local=rows(),seen=new Set(local.map(e=>e.eventId));return [...local,...sink().filter(e=>!seen.has(e.eventId))]}
 const sink=()=>{const file=join(profile,'telemetry-fixture-sink/fixture-events.jsonl');return existsSync(file)?readFileSync(file,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[]}
 async function boot(){child=startApp({exe,app,profile,port});ws=await pageWs(port);await eventually(()=>ev('!!window.rased'));await ev('document.querySelector(".splash-enter")?.click()')}
 async function graceful(){await ev('window.rased.confirmClose(true);true');await eventually(()=>child.exitCode,code=>code!==null,15000);await eventually(async()=>{try{await fetch(`http://127.0.0.1:${port}/json/list`);return false}catch{return true}})}
@@ -43,9 +46,9 @@ try{
  // After one failure the scheduler waits 20s times jitter (BACKOFF_LADDER_MS), so 25s was on the edge on slow runners.
  await ev('window.rased.resume()');await eventually(()=>counters().success===2,Boolean,60000)
  check('real collector success/failure/success reaches hourly telemetry exactly',counters().success===2&&counters().failure===1)
- await eventually(()=>rows().some(e=>e.name==='notification_summary'&&e.properties.mostaql_shown===1),Boolean,40000)
+ await eventually(()=>events().some(e=>e.name==='notification_summary'&&e.properties.mostaql_shown===1),Boolean,40000)
  await ev('window.rased.pause()')
- const notices=rows().filter(e=>e.name==='notification_summary')
+ const notices=events().filter(e=>e.name==='notification_summary')
  check('project notification records requested and OS-fixture shown outcomes',notices.reduce((n,e)=>n+(e.properties.mostaql_requested??0),0)===1&&notices.reduce((n,e)=>n+(e.properties.mostaql_shown??0),0)===1)
  await graceful()
  const state=new DatabaseSync(join(profile,'telemetry/queue.sqlite'),{timeout:5000})
