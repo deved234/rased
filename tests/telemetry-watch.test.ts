@@ -22,15 +22,17 @@ const event = (patch: Partial<TelemetryEnvelope> = {}): TelemetryEnvelope => ({
   name: 'watch_started',
   occurredAt: '2026-10-17T12:00:00.000Z',
   distinctId: randomUUID(),
-  schemaVersion: 1,
+  schemaVersion: 2,
   environment: 'qa',
   appVersion: '0.8.1',
   language: 'ar',
-  windowsFamily: '10',
+  osFamily: 'windows-10',
+  osMajor: 'none',
+  cpuArch: 'x64',
   count: 1,
   properties: { source: 'mostaql', entry: 'list', result: 'active' },
   ...patch
-})
+} as TelemetryEnvelope)
 const store = (now = () => Date.parse('2026-10-17T12:15:00Z')): TelemetryStore => {
   const value = new TelemetryStore(join(root(), 'queue.sqlite'), now)
   stores.push(value)
@@ -352,7 +354,7 @@ describe('Watch telemetry contracts', () => {
       else parentPort.postMessage({type:'status',request:m.request,transport:'idle'});
     });
     parentPort.postMessage({type:'status',transport:'idle'});`)
-    const service = new TelemetryService({ root: dir, entry, version: '0.8.1', language: 'en', windowsFamily: '10', config: null, fixture: true, changed: () => {} })
+    const service = new TelemetryService({ root: dir, entry, version: '0.8.1', language: 'en', device: { osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64' }, config: null, fixture: true, changed: () => {} })
     try {
       service.start(false)
       await service.change('enable')

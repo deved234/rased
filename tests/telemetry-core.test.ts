@@ -10,18 +10,18 @@ import type { SourceHealth } from '../src/shared/types.js'
 import { telemetryConfig } from '../src/main/telemetry/config.js'
 import { posthogEvent, sendPosthog } from '../src/main/telemetry/transports/posthog.js'
 import { TelemetryStore } from '../src/storage/telemetryStore.js'
-import { TELEMETRY_DISCLOSURE, validTelemetryEnvelope, validTelemetryProperties, durationBucket, telemetryError, type TelemetryEnvelope } from '../src/shared/telemetry.js'
+import { TELEMETRY_DISCLOSURE, deviceContext, validTelemetryEnvelope, validTelemetryProperties, durationBucket, telemetryError, type TelemetryEnvelope } from '../src/shared/telemetry.js'
 
 const roots: string[] = [], stores: TelemetryStore[] = []
 const root = (): string => { const dir = mkdtempSync(join(tmpdir(), 'rased-test-analytics-')); roots.push(dir); return dir }
-const event = (patch: Partial<TelemetryEnvelope> = {}): TelemetryEnvelope => ({ eventId: randomUUID(), name: 'feature_used', occurredAt: '2026-10-17T12:00:00.000Z', distinctId: randomUUID(), schemaVersion: 1, environment: 'qa', appVersion: '0.8.1', language: 'ar', windowsFamily: '10', count: 1, properties: { feature: 'bookmark', outcome: 'success' }, ...patch })
+const event = (patch: Partial<TelemetryEnvelope> = {}): TelemetryEnvelope => ({ eventId: randomUUID(), name: 'feature_used', occurredAt: '2026-10-17T12:00:00.000Z', distinctId: randomUUID(), schemaVersion: 2, environment: 'qa', appVersion: '0.8.1', language: 'ar', osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64', count: 1, properties: { feature: 'bookmark', outcome: 'success' }, ...patch } as TelemetryEnvelope)
 const store = (now = () => Date.parse('2026-10-17T12:15:00Z')): TelemetryStore => { const value = new TelemetryStore(join(root(), 'queue.sqlite'), now); stores.push(value); return value }
 afterEach(() => { for (const s of stores.splice(0)) s.close(); for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true }); vi.unstubAllEnvs() })
 
 describe('Analytics consent and identity', () => {
   it('requires acceptance only in configured builds and does not lock accepted use on a transport outage', async () => {
     const dir = root(), consent = new ConsentStore(dir)
-    const options = { root: dir, entry: 'not started', version: '0.9.1', language: 'en' as const, windowsFamily: '10' as const, config: null, changed: () => {} }
+    const options = { root: dir, entry: 'not started', version: '0.9.1', language: 'en' as const, device: { osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64' } as const, config: null, changed: () => {} }
     const dev = new TelemetryService(options)
     const configured = new TelemetryService({ ...options, fixture: true })
     expect(dev.status()).toMatchObject({ available: false, accessAllowed: true })
@@ -41,7 +41,7 @@ describe('Analytics consent and identity', () => {
   it('terminates the old sender after a failed consent write and cannot revive it on wake', async () => {
     const dir = root(), entry = join(dir, 'worker.cjs')
     writeFileSync(entry, `const {parentPort}=require('node:worker_threads'); parentPort.on('message',m=>parentPort.postMessage({type:'status',request:m.request,transport:'idle'})); parentPort.postMessage({type:'status',transport:'idle'});`)
-    const service = new TelemetryService({ root: dir, entry, version: '0.8.1', language: 'en', windowsFamily: '10', config: null, fixture: true, changed: () => {} })
+    const service = new TelemetryService({ root: dir, entry, version: '0.8.1', language: 'en', device: { osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64' }, config: null, fixture: true, changed: () => {} })
     const internals = service as unknown as { consent: ConsentStore; worker: Worker | null }
     try {
       service.start(false)
@@ -94,6 +94,14 @@ describe('Analytics consent and identity', () => {
     expect(upgraded.change('enable')).toMatchObject({ state: 'enabled', disclosure: TELEMETRY_DISCLOSURE, identity: granted.identity })
     expect(validTelemetryProperties('analytics_enrolled', { disclosure: '2026-10-17-v1' })).toBe(false)
   })
+  it('re-prompts enabled v5 consent and preserves disabled v5 consent under v6', () => {
+    const dir = root(), consent = new ConsentStore(dir), enabled = consent.change('enable')
+    writeFileSync(join(dir, 'telemetry/consent.json'), JSON.stringify({ ...enabled, disclosure: '2026-11-15-v5' }))
+    expect(new ConsentStore(dir).snapshot()).toMatchObject({ state: 'unknown', prompted: false, identity: enabled.identity, disclosure: TELEMETRY_DISCLOSURE, generation: enabled.generation + 1 })
+    const dir2 = root(), consent2 = new ConsentStore(dir2), disabled = consent2.change('disable')
+    writeFileSync(join(dir2, 'telemetry/consent.json'), JSON.stringify({ ...disabled, disclosure: '2026-11-15-v5' }))
+    expect(new ConsentStore(dir2).snapshot()).toMatchObject({ state: 'disabled', prompted: true, identity: disabled.identity, disclosure: TELEMETRY_DISCLOSURE, generation: disabled.generation })
+  })
   it('blocks dev and isolated fixtures even with production build settings', () => {
     vi.stubEnv('RASED_ANALYTICS_BUILD_TOKEN', 'phc_synthetic_fixture_never_usable')
     vi.stubEnv('RASED_ANALYTICS_BUILD_READY', 'true')
@@ -111,7 +119,7 @@ describe('Analytics consent and identity', () => {
 })
 describe('Explicit event contracts', () => {
   it('counts new completed checks once and distinguishes pause/disable/cooldown from failures', () => {
-    const service = new TelemetryService({ root: root(), entry: 'unused', version: '0.8.1', language: 'en', windowsFamily: '10', config: null, changed: () => {} })
+    const service = new TelemetryService({ root: root(), entry: 'unused', version: '0.8.1', language: 'en', device: { osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64' }, config: null, changed: () => {} })
     const counter = vi.spyOn(service, 'counter').mockImplementation(() => {})
     const activity = vi.spyOn(service, 'activity').mockImplementation(() => {})
     const h: SourceHealth = { state: 'watching', paused: false, enabled: true, lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: null, consecutiveFailures: 0, lastError: null, lastDurationMs: null, lastItemCount: null, effectiveIntervalMs: 5000 }
@@ -155,6 +163,53 @@ describe('Explicit event contracts', () => {
     expect(mapped.properties).toMatchObject({ record_type: 'app', environment: 'qa', $geoip_disable: true })
     expect(mapped.properties).not.toHaveProperty('$ip')
     expect(() => posthogEvent({ ...e, properties: { ...e.properties, title: 'PRIVATE_CANARY' } })).toThrow()
+  })
+})
+describe('Device context and envelope schema v2', () => {
+  it('computes deviceContext across platforms and architectures', () => {
+    expect(deviceContext('win32', '10.0.19045', '10.0.19045', 'x64')).toEqual({ osFamily: 'windows-10', osMajor: 'none', cpuArch: 'x64' })
+    expect(deviceContext('win32', '10.0.22000', '10.0.22000', 'arm64')).toEqual({ osFamily: 'windows-11', osMajor: 'none', cpuArch: 'arm64' })
+    expect(deviceContext('win32', '10.0.26100', '10.0.26100', 'x64')).toEqual({ osFamily: 'windows-11', osMajor: 'none', cpuArch: 'x64' })
+    expect(deviceContext('darwin', '24.0.0', '15.1.0', 'arm64')).toEqual({ osFamily: 'macos', osMajor: '15', cpuArch: 'arm64' })
+    expect(deviceContext('darwin', '25.0.0', '26.0', 'x64')).toEqual({ osFamily: 'macos', osMajor: '26', cpuArch: 'x64' })
+    expect(deviceContext('darwin', '24.0.0', 'garbage', 'arm64')).toEqual({ osFamily: 'macos', osMajor: 'none', cpuArch: 'arm64' })
+    expect(deviceContext('linux', '6.8.0', '6.8.0', 'x64')).toEqual({ osFamily: 'linux', osMajor: 'none', cpuArch: 'x64' })
+    expect(deviceContext('freebsd', '14.0', '14.0', 'ia32')).toEqual({ osFamily: 'other', osMajor: 'none', cpuArch: 'other' })
+  })
+  it('validates v2 envelopes and rejects bad values and extra keys', () => {
+    const v2 = event()
+    expect(validTelemetryEnvelope(v2)).toBe(true)
+    expect(validTelemetryEnvelope({ ...v2, osFamily: 'windows' })).toBe(false)
+    expect(validTelemetryEnvelope({ ...v2, osMajor: '15.1' })).toBe(false)
+    expect(validTelemetryEnvelope({ ...v2, cpuArch: 'ia32' })).toBe(false)
+    expect(validTelemetryEnvelope({ ...v2, extra: 'nope' })).toBe(false)
+    expect(validTelemetryEnvelope({ ...v2, osFamily: 'linux', osMajor: '6' })).toBe(false)
+    // An unreadable macOS version must not silently drop every event from that Mac.
+    expect(validTelemetryEnvelope({ ...v2, osFamily: 'macos', osMajor: 'none' })).toBe(true)
+    for (const [platform, release, version, arch] of [['win32', '10.0.19045', '', 'x64'], ['win32', '10.0.26100', '', 'arm64'], ['darwin', '24.0.0', '15.1.0', 'arm64'], ['darwin', '24.0.0', 'garbage', 'x64'], ['linux', '6.8.0', '', 'x64'], ['freebsd', '14.0', '', 'ia32']] as const)
+      expect(validTelemetryEnvelope({ ...v2, ...deviceContext(platform, release, version, arch) })).toBe(true)
+  })
+  it('still accepts queued v1 envelopes', () => {
+    const v1: TelemetryEnvelope = { eventId: randomUUID(), name: 'feature_used', occurredAt: '2026-10-17T12:00:00.000Z', distinctId: randomUUID(), schemaVersion: 1, environment: 'qa', appVersion: '0.8.1', language: 'ar', windowsFamily: '11', count: 1, properties: { feature: 'bookmark', outcome: 'success' } }
+    expect(validTelemetryEnvelope(v1)).toBe(true)
+    expect(validTelemetryEnvelope({ ...v1, windowsFamily: '12' })).toBe(false)
+    expect(validTelemetryEnvelope({ ...v1, extra: 'nope' })).toBe(false)
+  })
+  it('maps posthog properties for v1 and v2 envelopes', () => {
+    const v2 = event({ osFamily: 'windows-11', osMajor: 'none', cpuArch: 'arm64' })
+    const p2 = (posthogEvent(v2) as { properties: Record<string, unknown> }).properties
+    expect(p2.schema_version).toBe(2)
+    expect(p2.os_family).toBe('windows-11')
+    expect(p2.os_major).toBe('none')
+    expect(p2.cpu_arch).toBe('arm64')
+    expect(p2.windows_family).toBe('11')
+    const v1: TelemetryEnvelope = { eventId: randomUUID(), name: 'feature_used', occurredAt: '2026-10-17T12:00:00.000Z', distinctId: randomUUID(), schemaVersion: 1, environment: 'qa', appVersion: '0.8.1', language: 'ar', windowsFamily: '10', count: 1, properties: { feature: 'bookmark', outcome: 'success' } }
+    const p1 = (posthogEvent(v1) as { properties: Record<string, unknown> }).properties
+    expect(p1.schema_version).toBe(1)
+    expect(p1.windows_family).toBe('10')
+    expect(p1.os_family).toBe('windows-10')
+    expect(p1).not.toHaveProperty('os_major')
+    expect(p1).not.toHaveProperty('cpu_arch')
   })
 })
 describe('Separate bounded persistent queue', () => {

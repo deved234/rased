@@ -1,10 +1,10 @@
 # الخصوصية
 
-2026-11-15 · RASED · david atef
+2026-11-27 · RASED · david atef
 
 ## شرط إحصائيات الاستخدام
 
-في البناء المهيأ فقط، تقبل صراحة من شاشة البدء إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة قبل القبول. القبول شرط لتشغيل الرصد والتنبيهات والميزات في هذه النسخة؛ عند الرفض يمكنك الخروج وتبقى بياناتك المحلية محفوظة. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة وعائلة Windows العامة، ونشاطًا يوميًا وملخصات رصد ونتائج ميزات من فئات محددة، وملخصات متابعة المشاريع: عدد المشاريع المتابَعة والمنتظرة في فئات تقريبية، ونجاح أو تعثر فحوصها، ونوع التغيير الذي رُصد ونتيجة إشعاره، ومن أين بدأت المتابعة وسبب انتهائها. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو هوية المشروع أو صاحبه أو أعداد العروض والتواصلات، أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
+في البناء المهيأ فقط، تقبل صراحة من شاشة البدء إرسال إحصائيات محدودة إلى PostHog US Cloud. المشاركة مغلقة قبل القبول. القبول شرط لتشغيل الرصد والتنبيهات والميزات في هذه النسخة؛ عند الرفض يمكنك الخروج وتبقى بياناتك المحلية محفوظة. تشمل معرّف تثبيت عشوائيًا، الإصدار واللغة ومعلومات عامة عن الجهاز (عائلة نظام التشغيل ورقم إصداره الرئيسي، مثل Windows 11 أو macOS 15، ونوع المعالج x64 أو arm64)، ونشاطًا يوميًا وملخصات رصد وهل استُخدمت كل ميزة في راصد وهل نجحت أو فشلت (من غير أي محتوى)، وملخصات متابعة المشاريع: عدد المشاريع المتابَعة والمنتظرة في فئات تقريبية، ونجاح أو تعثر فحوصها، ونوع التغيير الذي رُصد ونتيجة إشعاره، ومن أين بدأت المتابعة وسبب انتهائها. لا تشمل اسمك أو محتوى المشاريع أو روابطها أو هوية المشروع أو صاحبه أو أعداد العروض والتواصلات، أو عروضك وملاحظاتك أو كلمات البحث أو مفاتيح API أو جلسات المتصفح. لا تسجيل شاشة أو autocapture أو تقارير انهيار خام. لن يجمع راصد أي نوع بيانات خارج هذا الوصف من غير ما يطلب موافقتك من جديد. يصل IP إلى مزود الشبكة أثناء الاتصال؛ يطلب راصد عدم استخدامه في GeoIP ويشترط استبعاده من أحداث المشروع المخزنة. يظل المزود طرفًا سحابيًا، راجع https://posthog.com/privacy .
 
 ## الاحتفاظ وإيقاف الإحصائيات وطلب الحذف
 
@@ -70,11 +70,11 @@
 
 # Privacy
 
-2026-11-15 · RASED · david atef
+2026-11-27 · RASED · david atef
 
 ## Required usage analytics acceptance
 
-Only a configured build can send limited usage analytics to PostHog US Cloud after explicit startup acceptance. Sharing starts off; this distribution requires acceptance to use its features. Declining leaves an exit option and preserves local data. Data includes a random installation identifier, version, language, broad Windows family, daily activity, aggregated monitoring counters and allow-listed feature outcomes, and project-watch summaries: bucketed counts of watched and waiting projects, check success or failure, the kind of change detected and its notification result, where watching started and why it ended. No name, project content or links, project or client identity, offer or contact numbers, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
+Only a configured build can send limited usage analytics to PostHog US Cloud after explicit startup acceptance. Sharing starts off; this distribution requires acceptance to use its features. Declining leaves an exit option and preserves local data. Data includes a random installation identifier, version, language, general device information (operating system family and major version, such as Windows 11 or macOS 15, and processor type, x64 or arm64), daily activity, aggregated monitoring counters and whether each RASED feature was used and whether it succeeded or failed (never its content), and project-watch summaries: bucketed counts of watched and waiting projects, check success or failure, the kind of change detected and its notification result, where watching started and why it ended. No name, project content or links, project or client identity, offer or contact numbers, proposals, notes, searches, API keys or browser sessions. No screen recording, autocapture or raw crash dumps. RASED will not collect any category of data outside this description without asking for your acceptance again. Network infrastructure receives the connecting IP; RASED suppresses GeoIP and requires client IP discard in stored project events. The provider is a cloud third party: https://posthog.com/privacy .
 
 ## Analytics retention, withdrawal and deletion requests
 

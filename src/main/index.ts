@@ -36,7 +36,7 @@ import {
 import { IPC } from '../shared/channels.js'
 import { TelemetryService, telemetryWorkerEntry } from './telemetry/service.js'
 import { telemetryConfig } from './telemetry/config.js'
-import { ANALYTICS_SUPPORT, UI_SURFACES, durationBucket, quickApplyTelemetryError } from '../shared/telemetry.js'
+import { ANALYTICS_SUPPORT, UI_SURFACES, deviceContext, durationBucket, quickApplyTelemetryError } from '../shared/telemetry.js'
 import type { SourceId } from '../shared/sources.js'
 import { repairLegacyDevShortcut, RASED_APP_ID, RASED_DEV_APP_ID, taskbarDetails } from './taskbar.js'
 import { backupError, DataBackupManager, isCorruptDatabaseError, recoverCorruptDatabase, recoverPendingRestore } from './dataBackup.js'
@@ -2771,7 +2771,7 @@ async function boot(): Promise<void> {
   testHarness?.initializeSettings(settings, testHarness.appVersion ?? APP_VERSION, saveSettings)
   startupStage = 'later'
   if (testHarness && existsSync(join(app.getPath('userData'), 'startup-failure.json'))) throw Error('synthetic startup failure')
-  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, windowsFamily: Number(osRelease().split('.')[2]) >= 22000 ? '11' : process.platform === 'win32' ? '10' : 'other', config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) { syncAnalyticsAccess(); broadcast(IPC.analyticsChanged, telemetry.status()) } } })
+  telemetry = new TelemetryService({ root: app.getPath('userData'), entry: telemetryWorkerEntry(__dirname), version: APP_VERSION, language: settings.language, device: deviceContext(process.platform, osRelease(), process.getSystemVersion(), process.arch), config: telemetryConfig(IS_PACKAGED, !!testHarness), fixture: !!testHarness && existsSync(join(app.getPath('userData'), 'telemetry-fixture.json')), changed: () => { if (telemetry && !quitRequested) { syncAnalyticsAccess(); broadcast(IPC.analyticsChanged, telemetry.status()) } } })
   telemetry.start(notificationBoot)
   aiService = new AiService(db, app.getPath('userData'), testHarness?.aiFetchImpl, auditUi, result => telemetry?.record('proposal_result', result))
   cleanupNotificationActivations(db)

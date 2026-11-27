@@ -1,6 +1,6 @@
 import type { AnalyticsConsent } from './consent.js'
 import type { TelemetryConfig } from './config.js'
-import type { TelemetryEnvelope, TelemetryName, TelemetrySummaryName, WatchSlotBucket } from '../../shared/telemetry.js'
+import type { DeviceContext, TelemetryName, TelemetrySummaryName, WatchSlotBucket } from '../../shared/telemetry.js'
 
 export interface TelemetryWorkerData {
   directory: string
@@ -8,7 +8,7 @@ export interface TelemetryWorkerData {
   config: TelemetryConfig | null
   fixture?: boolean
   purgeOnly?: boolean
-  context: Pick<TelemetryEnvelope, 'appVersion' | 'language' | 'windowsFamily' | 'environment'>
+  context: DeviceContext & { appVersion: string; language: 'ar' | 'en'; environment: 'production' | 'qa' }
 }
 export type TelemetryMessage =
   | { type: 'consent'; consent: AnalyticsConsent; request: number }

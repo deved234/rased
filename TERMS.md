@@ -1,6 +1,6 @@
 # شروط الاستخدام
 
-2026-11-15 · RASED · david atef
+2026-11-27 · RASED · david atef
 
 ## شرط إحصائيات النسخة المهيأة
 
@@ -50,7 +50,7 @@
 
 # Terms of use
 
-2026-11-15 · RASED · david atef
+2026-11-27 · RASED · david atef
 
 ## Configured distribution analytics requirement
 
