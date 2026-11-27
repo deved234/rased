@@ -228,6 +228,8 @@ try {
   await ev('window.rased.testSound()'); await wait('window.__audioStarts===1')
   check('main/preload sound event starts an oscillator exactly once', true)
   await ev('window.rased.openCompact()'); const compact = await pageWs(port,t=>t.url.includes('compact'))
+  // The target can appear before its preload runs (seen on macOS CI); wait for the bridge.
+  await eventually(()=>evaluate(compact,'!!window.rased?.setAlwaysOnTop').catch(()=>false))
   await evaluate(compact,'window.rased.setAlwaysOnTop(true)')
   await eventually(()=>evaluate(compact,'document.querySelector(".compact-top [aria-pressed]")?.getAttribute("aria-pressed")==="true"'))
   await ev('window.rased.updateSettings({language:"en"})'); await eventually(()=>evaluate(compact,'document.documentElement.dir==="ltr"'))
@@ -444,7 +446,8 @@ try {
   // Windows-only by design: the Nafezly activation ticket is resolved from Windows toast XML.
   if (process.platform === 'win32') check('fresh Nafezly toast activation resolves to its own project link', notificationDestination(db,nafezlyToasts[0].data.toastXml)==='https://nafezly.com/project/50002-fresh')
   check('single Nafezly toast identifies its platform before the project title', nafezlyToasts[0].data.title === 'Nafezly — New Nafezly project')
-  const nafezlyOnly = await ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"nafezly",categoryFilter:{mode:"all",categories:[],keywordsAny:[],keywordsAll:[],excludeKeywords:[]}},50,0)})()')
+  // Right after a relaunch the renderer's own list query can supersede this one; retry only that case.
+  const nafezlyOnly = await eventually(()=>ev('(async()=>{const s=await window.rased.getSettings();return window.rased.queryProjectsPage({...s.displayQuery,source:"nafezly",categoryFilter:{mode:"all",categories:[],keywordsAny:[],keywordsAll:[],excludeKeywords:[]}},50,0)})()').catch(e=>String(e?.message??e).includes('search-superseded')?null:Promise.reject(e)))
   check('Nafezly source filter returns only its projects', nafezlyOnly.total===2 && nafezlyOnly.rows.every(p=>p.source==='nafezly'))
   const nafezlyProjectId = db.prepare("SELECT id FROM projects WHERE source='nafezly' AND external_id='50002'").get().id
   await nav(`#/project/${nafezlyProjectId}`); await wait('!!document.querySelector(".detail-article")')
