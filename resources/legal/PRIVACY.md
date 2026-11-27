@@ -44,7 +44,7 @@
 
 ## مفاتيح API والتكلفة والتحقق
 
-كل مستخدم يضع مفتاحه لكل شركة؛ لا مفتاح مشترك. المفاتيح مستقلة ومشفرة بحماية Windows في ملفات خارج SQLite والتصدير والسجلات، ويمكن حذف مفتاح واحد من الإعدادات. نقل Gemini القديم يتحقق من النسخة الجديدة قبل حذف الأصل، والحذف يزيل كلا المسارين. التشفير لا يحمي من برامج تعمل بنفس حسابك. حفظ المفتاح ليس إثباتًا لصلاحيته. تحديث الموديلات بطلبك يرسل المفتاح للمصادقة وبيانات الاتصال، دون بيانات مشاريعك؛ تُحفظ القائمة وتاريخها محليًا. اختبار التوليد بطلبك يرسل بيانات وهمية فقط ويستهلك حصة أو رصيدًا محتملًا. تُحفظ حالة آخر نجاح مرتبطة بالمفتاح والموديل محليًا، ولا تعني ضمان الإتاحة مستقبلًا. لا إعادة محاولة مدفوعة تلقائية؛ التكلفة والحصص بحسب الشركة وحسابك.
+كل مستخدم يضع مفتاحه لكل شركة؛ لا مفتاح مشترك. المفاتيح مستقلة ومشفرة بمخزن النظام المحمي (حماية Windows على Windows، وسلسلة المفاتيح Keychain على macOS، وخدمة الأسرار GNOME Keyring/KWallet على Linux عبر safeStorage من Electron) في ملفات خارج SQLite والتصدير والسجلات، ويمكن حذف مفتاح واحد من الإعدادات. نقل Gemini القديم يتحقق من النسخة الجديدة قبل حذف الأصل، والحذف يزيل كلا المسارين. التشفير لا يحمي من برامج تعمل بنفس حسابك على هذا الجهاز. حفظ المفتاح ليس إثباتًا لصلاحيته. تحديث الموديلات بطلبك يرسل المفتاح للمصادقة وبيانات الاتصال، دون بيانات مشاريعك؛ تُحفظ القائمة وتاريخها محليًا. اختبار التوليد بطلبك يرسل بيانات وهمية فقط ويستهلك حصة أو رصيدًا محتملًا. تُحفظ حالة آخر نجاح مرتبطة بالمفتاح والموديل محليًا، ولا تعني ضمان الإتاحة مستقبلًا. لا إعادة محاولة مدفوعة تلقائية؛ التكلفة والحصص بحسب الشركة وحسابك.
 
 ## بيانات OpenAI وAnthropic
 
@@ -52,15 +52,15 @@
 
 ## تحديثات البرنامج
 
-تتصل نسخة Windows المجمّعة بـ GitHub ومضيفي ملفات الإصدارات تلقائيًا عند التشغيل وكل 6 ساعات للتحقق من التحديثات، وباختيارك لتحميلها. قد تستقبل هذه الخدمات عنوان IP ومعلومات الاتصال والطلب؛ لا تُرسل قاعدة المشاريع أو الملاحظات أو الفلاتر. ملف التحديث يُحفظ في ذاكرة تخزين مؤقت محلية. التثبيت بطلبك ويعيد تشغيل التطبيق، ولا يحدث بمجرد إغلاقه.
+تتحقق النسخ المجمّعة تلقائيًا عند التشغيل وكل 6 ساعات من GitHub ومضيفي ملفات الإصدارات، وباختيارك فقط تُحمّل التحديث. قد تستقبل هذه الخدمات عنوان IP ومعلومات الاتصال والطلب؛ لا تُرسل قاعدة المشاريع أو الملاحظات أو الفلاتر. يُحفظ ملف التحديث في ذاكرة تخزين مؤقت محلية. على Windows وLinux بصيغة AppImage يثبّت التحديث بطلبك ويعيد تشغيل التطبيق. على macOS يُحمّل التحديث وتُتحقق بصمته، ثم «فتح المثبّت» يغلق راصد ويفتح ملف dmg لتسحب راصد إلى Applications. على Linux بصيغة deb يكتفي راصد بالتنبيه ويفتح صفحة الإصدار على GitHub لتثبّت حزمة deb الجديدة بنفسك. لا يحدث التثبيت بمجرد إغلاق التطبيق.
 
 ## أمان التخزين والإشعارات
 
-قاعدة البيانات والنسخ الاحتياطية ليست مشفرة على مستوى التطبيق. من يستطيع الوصول إلى حساب Windows أو ملفاتك قد يقرأها. قد تظهر عناوين المشاريع في إشعارات Windows وسجل النظام؛ يمكنك تعطيل التنبيهات والصوت أو استخدام عدم الإزعاج. لا تضع كلمات مرور أو معلومات حساسة في الملاحظات.
+قاعدة البيانات والنسخ الاحتياطية ليست مشفرة على مستوى التطبيق. من يستطيع الوصول إلى حسابك على هذا الجهاز أو ملفاتك قد يقرأها. قد تظهر عناوين المشاريع في إشعارات النظام وسجل الإشعارات؛ يمكنك تعطيل التنبيهات والصوت أو استخدام عدم الإزعاج. لا تضع كلمات مرور أو معلومات حساسة في الملاحظات.
 
 ## الحذف والنسخ الاحتياطية
 
-من الإعدادات → البيانات تستطيع إنشاء نسخة محلية كاملة للمشاريع والتفاصيل والملاحظات ومسودات العروض والإعدادات وكل ملفاتك المهنية وقوالب التقديم السريع الخاصة بها واختيارات الموديلات، واستعادتها بعد معاينة وتأكيد وإعادة تشغيل. يمكن تفعيل نسخ يومية أو أسبوعية أثناء تشغيل راصد مع عدد نسخ محفوظة محدود. الملفات غير مشفرة، ولا تتضمن مفاتيح API أو جلسات المتصفح أو رموز ربط الإضافة؛ تظل هذه الأسرار على جهازها الأصلي. الاستعادة تستبدل البيانات وتُنشئ نسخة رجوع قبل التغيير، ولا تعيد إرسال التنبيهات القديمة أو العروض. حذف السجل يحافظ على المحفوظات والملاحظات ومسودات العروض وحالات الاهتمام/التقديم وينشئ نسخة قبل الحذف. إزالة البرنامج لا تحذف بياناته ونسخه تلقائيًا؛ أغلقه من Tray واحذف الملفات بنفسك إذا لم تعد تحتاجها. النسخ التي تحفظها خارج مجلد البيانات وسجل Windows خارج تحكم التطبيق.
+من الإعدادات → البيانات تستطيع إنشاء نسخة محلية كاملة للمشاريع والتفاصيل والملاحظات ومسودات العروض والإعدادات وكل ملفاتك المهنية وقوالب التقديم السريع الخاصة بها واختيارات الموديلات، واستعادتها بعد معاينة وتأكيد وإعادة تشغيل. يمكن تفعيل نسخ يومية أو أسبوعية أثناء تشغيل راصد مع عدد نسخ محفوظة محدود. الملفات غير مشفرة، ولا تتضمن مفاتيح API أو جلسات المتصفح أو رموز ربط الإضافة؛ تظل هذه الأسرار على جهازها الأصلي. الاستعادة تستبدل البيانات وتُنشئ نسخة رجوع قبل التغيير، ولا تعيد إرسال التنبيهات القديمة أو العروض. حذف السجل يحافظ على المحفوظات والملاحظات ومسودات العروض وحالات الاهتمام/التقديم وينشئ نسخة قبل الحذف. إزالة البرنامج لا تحذف بياناته ونسخه تلقائيًا؛ أغلقه من Tray واحذف الملفات بنفسك إذا لم تعد تحتاجها. النسخ التي تحفظها خارج مجلد البيانات وسجل إشعارات النظام خارج تحكم التطبيق.
 
 ## المشاركة الاختيارية
 
@@ -114,7 +114,7 @@ Under the Gemini API terms, Google uses unpaid-service inputs and outputs to imp
 
 ## API keys, costs and verification
 
-Use separate personal keys for each provider, encrypted using Windows protection outside SQLite, exports and logs. Delete each key in Settings. Legacy Gemini migration verifies its replacement before removing the original; deletion removes both paths. This does not protect against software running as your Windows user. Saved does not mean authenticated. Refreshing models explicitly sends authentication and connection data, not projects; catalogs stay local. An explicit generation test sends fictional input and may consume credits or quota. Last-success metadata is local and tied to key/model, not a future access guarantee. No automatic paid retry.
+Use separate personal keys for each provider, encrypted by your system’s protected storage (Windows protection on Windows, Keychain on macOS, or the secret service such as GNOME Keyring/KWallet on Linux via Electron safeStorage) in files outside SQLite, exports and logs. Delete each key in Settings. Legacy Gemini migration verifies its replacement before removing the original; deletion removes both paths. This does not protect against software running as the same user account on this device. Saved does not mean authenticated. Refreshing models explicitly sends authentication and connection data, not projects; catalogs stay local. An explicit generation test sends fictional input and may consume credits or quota. Last-success metadata is local and tied to key/model, not a future access guarantee. No automatic paid retry.
 
 ## OpenAI and Anthropic data handling
 
@@ -122,15 +122,15 @@ API policies differ from consumer chat products. Retention depends on account, m
 
 ## Software updates
 
-Packaged Windows builds automatically contact GitHub and release-asset hosts at startup and every 6 hours to check for updates, and on your request to download them. These services may receive your IP and request/connection metadata; projects, notes and filters are not uploaded. Downloads are cached locally. Installation requires your request and restarts the app; merely quitting does not install an update.
+Packaged builds automatically contact GitHub and release-asset hosts at startup and every 6 hours to check for updates, and download only on your request. These services may receive your IP and request/connection metadata; projects, notes and filters are not uploaded. Downloads are cached locally. On Windows and the Linux AppImage, installation requires your request and restarts the app. On macOS, the download is checksum-verified; “Open installer” closes RASED and opens the dmg so you can drag RASED into Applications. On the Linux deb package, RASED notifies you and opens the GitHub releases page so you can install the new .deb yourself. Merely quitting does not install an update.
 
 ## Storage and notifications
 
-The database and backups have no application-level encryption. Someone with access to your Windows account or files may read them. Project titles may appear in Windows notifications and system history. Disable notifications, mute sound or enable DND as needed; do not put passwords or sensitive data in notes.
+The database and backups have no application-level encryption. Someone with access to your user account on this device or files may read them. Project titles may appear in system notifications and their history. Disable notifications, mute sound or enable DND as needed; do not put passwords or sensitive data in notes.
 
 ## Deletion and backups
 
-Settings → Data can create a complete local backup of opportunities, details, notes, proposal drafts, settings, all your freelancer profiles and their Quick Apply templates, and model choices, and restore it after preview, confirmation and restart. Optional daily or weekly copies run while RASED is running with limited retention. Files are unencrypted and exclude API keys, browser sessions and extension pairing tokens; those secrets remain on their original device. Restore replaces data after creating a rollback copy and does not replay old notifications or submissions. History deletion protects bookmarks, notes, drafts and interested/submitted statuses and creates a backup first. Uninstalling does not delete data or backups automatically; quit from the tray and remove files yourself when no longer needed. Copies saved outside the data folder and Windows notification history are outside the application’s control.
+Settings → Data can create a complete local backup of opportunities, details, notes, proposal drafts, settings, all your freelancer profiles and their Quick Apply templates, and model choices, and restore it after preview, confirmation and restart. Optional daily or weekly copies run while RASED is running with limited retention. Files are unencrypted and exclude API keys, browser sessions and extension pairing tokens; those secrets remain on their original device. Restore replaces data after creating a rollback copy and does not replay old notifications or submissions. History deletion protects bookmarks, notes, drafts and interested/submitted statuses and creates a backup first. Uninstalling does not delete data or backups automatically; quit from the tray and remove files yourself when no longer needed. Copies saved outside the data folder and system notification history are outside the application’s control.
 
 ## Optional sharing
 

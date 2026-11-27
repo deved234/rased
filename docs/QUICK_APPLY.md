@@ -2,6 +2,8 @@
 
 Quick Apply fills a saved proposal on **Mostaql and Nafezly** using your normal Chrome session. Khamsat and KAF are not supported: they have no Quick Apply buttons and no Chrome preparation. On KAF the Proposal Assistant offers copy and open only.
 
+> **Windows only in 0.14.0.** Quick Apply and its Chrome extension are currently available on Windows. On macOS and Linux the app shows that Quick Apply is currently unavailable.
+
 ## Requirements, installation and compatibility
 
 - **Chrome 120 or newer.** The extension manifest declares `minimum_chrome_version` 120.

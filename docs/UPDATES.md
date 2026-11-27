@@ -12,6 +12,17 @@ The page displays current/new versions, plain-text release notes, progress, last
 
 The main process restricts check/download/install IPC to the main window. Installation needs a main-generated request and renderer confirmation after `requestAction` has handled dirty notes. `autoInstallOnAppQuit=false`, `autoDownload=false`, `allowPrerelease=false`, `allowDowngrade=false`. During the updater quit path, existing shutdown aborts source requests, drains writes, closes SQLite and quits without asking the same draft question twice. The app's ID and data location are unchanged.
 
+## Platforms
+
+| Platform | Package | Update behavior |
+| --- | --- | --- |
+| Windows (x64) | NSIS installer (`RASED-Setup-<version>.exe`) | Download inside the app, then **Restart and update**. |
+| macOS (Intel + Apple Silicon, beta) | Universal dmg/zip (`RASED-<version>-mac.dmg`) | Download inside the app (checksum verified), then **Open installer**. RASED closes and the dmg opens; drag RASED into Applications to replace the old version. |
+| Linux (x64) AppImage | `RASED-<version>-linux-x86_64.AppImage` | Same full in-app update as Windows: download, then restart and install. |
+| Linux (x64) deb | `RASED-<version>-linux-amd64.deb` | Notification only. **Open download page** opens the GitHub releases page; install the new `.deb` yourself. |
+
+All supported packages check GitHub at startup and every 6 hours, and download only when you ask.
+
 ## Feed and integrity
 
 `electron-updater@6.8.9` is a production dependency. Windows uses `NsisUpdater`. Packaged `resources/app-update.yml` points at public `deved234/rased` GitHub releases; no renderer-supplied URL or access token. Development builds show a disabled notice. A marked temporary integration profile uses a fixture boundary only; there is no production test IPC.

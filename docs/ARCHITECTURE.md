@@ -1,12 +1,13 @@
 # Architecture
 
-RASED is a Windows Electron/React/TypeScript app with SQLite (`node:sqlite`). It has no hosted backend.
+RASED is a desktop Electron/React/TypeScript app for Windows, macOS and Linux with SQLite (`node:sqlite`). It has no hosted backend.
 
 | Directory | Responsibility |
 | --- | --- |
 | `src/main/` | App lifecycle, trusted IPC, polling orchestration, notifications and updates |
+| `src/main/platform/` | Platform adapters for autostart, updater behavior and tray/menu template |
 | `src/main/ai/` | Provider contracts, encrypted keys, catalogs, consent and generation |
-| `src/main/extension/` | Local broker, pairing, native-host setup and job delivery |
+| `src/main/extension/` | Local broker, pairing, native-host setup and job delivery (Windows only) |
 | `src/main/search/` | Bounded isolated SQL reader and on-demand public index builder |
 | `src/preload/` | Restricted typed bridge; no renderer Node access |
 | `src/renderer/` | React views, shared components, RTL/LTR and theme CSS |
@@ -21,7 +22,7 @@ RASED is a Windows Electron/React/TypeScript app with SQLite (`node:sqlite`). It
 
 Mostaql uses public RSS with optional detail enrichment; Khamsat uses its public requests listing; Nafezly uses its public RSS description and fetches public project-card budget/duration on demand when a project is previewed or opened. Healthy polling is approximately five seconds for Mostaql/Khamsat and 15–18 seconds for Nafezly. Each source has its own baseline, scheduler, pause and notification settings. Errors and `Retry-After` trigger backoff. Publication/feed delays remain outside the app's control.
 
-From 0.12.1 all collector requests (RSS/listings, details, enrichment and project watch) go through `src/main/systemFetch.ts`: a `fetch`-compatible adapter over Electron `net.request` on the in-memory `rased-network` session, so Windows proxy/PAC settings apply. It supports `redirect` manual (returns the 3xx with its `Location`), follow (up to 20 hops, final `response.url`) and error; sends no cookies, uses no HTTP cache, never answers auth prompts and closes any body still open 60 s after its response. `net.fetch` is not used because it rejects manual redirects. AI providers and the telemetry worker keep Node `fetch`. `npm run test:network` checks the adapter in real Electron with a loopback server and a fake proxy.
+From 0.12.1 all collector requests (RSS/listings, details, enrichment and project watch) go through `src/main/systemFetch.ts`: a `fetch`-compatible adapter over Electron `net.request` on the in-memory `rased-network` session, so the operating system's proxy/PAC settings apply. It supports `redirect` manual (returns the 3xx with its `Location`), follow (up to 20 hops, final `response.url`) and error; sends no cookies, uses no HTTP cache, never answers auth prompts and closes any body still open 60 s after its response. `net.fetch` is not used because it rejects manual redirects. AI providers and the telemetry worker keep Node `fetch`. `npm run test:network` checks the adapter in real Electron with a loopback server and a fake proxy.
 
 The first successful fetch creates a silent baseline. Later discoveries are deduplicated and saved before filtered notification dispatch. The UI reads local data; it does not scrape account pages to monitor opportunities.
 
@@ -39,7 +40,7 @@ Windows project notifications use Electron's persistent foreground activation ha
 
 AI generation is user initiated, uses one chosen provider and requires a preview/consent fingerprint. The app saves editable drafts and never submits them. [Assistant guide](AI_ASSISTANT.md).
 
-Quick Apply sends a snapshot to one paired Chrome profile through an authenticated local broker/native host. The content script checks the destination and fills permitted fields, preserving existing drafts. The retired embedded browser is not used. [Extension guide](QUICK_APPLY.md).
+Quick Apply (Windows only in 0.14.0) sends a snapshot to one paired Chrome profile through an authenticated local broker/native host. The content script checks the destination and fills permitted fields, preserving existing drafts. The retired embedded browser is not used. [Extension guide](QUICK_APPLY.md).
 
 ## Builds and data
 

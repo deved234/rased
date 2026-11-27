@@ -1,12 +1,12 @@
 # Contributing to RASED
 
-RASED monitors Mostaql, Nafezly, Khamsat and KAF on Windows. Reliability, accessibility, Arabic/English usability and reproducible tests are welcome contributions.
+RASED monitors Mostaql, Nafezly, Khamsat and KAF on Windows, macOS and Linux. Reliability, accessibility, Arabic/English usability and reproducible tests are welcome contributions.
 
 Current release: **0.12.1** — fixes Mostaql project watch and follows the Windows proxy settings, including VPNs in system-proxy mode ([release notes](docs/RELEASE_0.12.1.md)), on top of 0.12.0: project watch for Mostaql, Nafezly and KAF: a Watch button, a Watched projects screen, Mostaql contact and status alerts and a "While you were away" summary, always yielding to primary monitoring. See the [release notes](docs/RELEASE_0.12.0.md) and [project watch guide](docs/PROJECT_WATCH.md). Analytics disclosure `2026-11-15-v5` adds watch events and requires renewed acceptance; the configured-build acceptance requirement applies since 0.10.0.
 
 ## Get started
 
-Use Windows x64 and Node.js 24. Fork/clone the repository, run `npm ci`, then `npm run dev`. Electron, SQLite, the Chrome extension and its native host are built by the project; no separate SQLite installation is required.
+Use Windows, macOS or Linux with Node.js 24. Fork/clone the repository, run `npm ci`, then `npm run dev`. Electron, SQLite, the Chrome extension and its native host are built by the project; no separate SQLite installation is required.
 
 Open an issue for substantial changes. Small fixes may go straight to a pull request. Follow neighboring TypeScript/CSS style: two spaces, single quotes, generally no semicolons. React components use PascalCase; functions use camelCase. ESLint and TypeScript are the configured checks.
 
@@ -19,6 +19,8 @@ npm test
 npm run build
 npm run test:e2e
 ```
+
+Package locally without publishing: `npm run dist` (Windows), `npm run dist:mac` (macOS), or `npm run dist:linux` (Linux).
 
 Vitest tests belong in `tests/*.test.ts`; deterministic samples belong in `tests/fixtures/`. Add regression coverage for behavior changes. There is no numeric coverage target.
 
