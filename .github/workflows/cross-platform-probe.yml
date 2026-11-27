@@ -68,13 +68,14 @@ jobs:
         # test:notification-activation (COM toasts), test:quick-apply,
         # test:extension (Quick Apply deferred) and test:update-install (NSIS).
         run: |
-          exe="$(node -p "require('electron')")"
+          # Suites resolve the platform Electron binary themselves (scripts/cdp-tools.mjs electronPath);
+          # passing --exe would make some suites treat it as a packaged app and skip out/main/index.js.
           run() { if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a "$@"; else "$@"; fi; }
           mkdir -p probe-logs
           failed=()
           for suite in test:e2e test:search test:project-facts test:network test:telemetry test:ai test:kaf test:ui test:data test:monitoring test:watch; do
             echo "::group::$suite"
-            if (set -o pipefail; run npm run "$suite" -- --exe="$exe" 2>&1 | tee "probe-logs/${suite#test:}.log"); then echo "::endgroup::"; echo "PASS $suite" >> probe-suites.txt
+            if (set -o pipefail; run npm run "$suite" 2>&1 | tee "probe-logs/${suite#test:}.log"); then echo "::endgroup::"; echo "PASS $suite" >> probe-suites.txt
             else echo "::endgroup::"; echo "FAIL $suite" >> probe-suites.txt; failed+=("$suite"); fi
           done
           if [ ${#failed[@]} -gt 0 ]; then exit 1; fi
