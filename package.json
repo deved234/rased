@@ -12,7 +12,11 @@
       "out/preload/**/*",
       "out/renderer/**/*",
       "package.json",
-      "resources/*.png"
+      "resources/*.png",
+      "!node_modules/@koromix/koffi-darwin-*{,/**/*}",
+      "!node_modules/@koromix/koffi-linux-*{,/**/*}",
+      "!node_modules/@koromix/koffi-freebsd-*{,/**/*}",
+      "!node_modules/@koromix/koffi-openbsd-*{,/**/*}"
     ],
     "nsis": {
       "allowToChangeInstallationDirectory": true,
@@ -76,10 +80,7 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "notarize": false,
-      "artifactName": "RASED-${version}-mac.${ext}",
-      "files": [
-        "!node_modules/@koromix/koffi-win32-x64/**"
-      ]
+      "artifactName": "RASED-${version}-mac.${ext}"
     },
     "linux": {
       "target": [
@@ -102,10 +103,7 @@
       "synopsis": "Local desktop watcher for freelance opportunities",
       "description": "RASED (راصد) — local desktop watcher for freelance opportunities across supported platforms. No cloud backend or app account.",
       "maintainer": "RASED (deved234) <deved234@users.noreply.github.com>",
-      "artifactName": "RASED-${version}-linux-${arch}.${ext}",
-      "files": [
-        "!node_modules/@koromix/koffi-win32-x64/**"
-      ]
+      "artifactName": "RASED-${version}-linux-${arch}.${ext}"
     },
     "extraResources": [
       {
