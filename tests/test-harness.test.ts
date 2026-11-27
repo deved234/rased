@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isolatedTestHarness } from '../src/main/testHarness.js'
 import { loadAppSettings } from '../src/storage/appSettings.js'
@@ -10,6 +10,7 @@ import { defaultSettings, sanitizeSettings, type AppSettings } from '../src/shar
 import { selectWhatsNew } from '../src/shared/whatsNew.js'
 
 const profiles: string[] = []
+const links: string[] = []
 const marker = 'RASED isolated integration test'
 
 function newProfile(): string {
@@ -19,7 +20,35 @@ function newProfile(): string {
   return profile
 }
 
+// Outside-TEMP scratch space for containment cases; .local/ is ignored by git.
+function newOutsideDir(): string {
+  mkdirSync('.local', { recursive: true })
+  const dir = mkdtempSync(join(resolve('.local'), 'rased-test-outside-'))
+  profiles.push(dir)
+  return dir
+}
+
+function newLink(target: string, link: string): string {
+  symlinkSync(target, link, 'junction')
+  links.push(link)
+  return link
+}
+
+const symlinksSupported = (() => {
+  const base = mkdtempSync(join(tmpdir(), 'rased-test-symlink-'))
+  try {
+    symlinkSync(base, join(base, 'link'), 'junction')
+    return true
+  } catch {
+    return false
+  } finally {
+    rmSync(join(base, 'link'), { recursive: true, force: true })
+    rmSync(base, { recursive: true, force: true })
+  }
+})()
+
 afterEach(() => {
+  for (const link of links.splice(0)) rmSync(link, { recursive: true, force: true })
   for (const profile of profiles.splice(0)) rmSync(profile, { recursive: true, force: true })
 })
 
@@ -83,5 +112,28 @@ describe('isolated harness What’s New opt-in', () => {
     expect(isolatedTestHarness(profile, ['--rased-test'])).toBeNull()
     rmSync(join(profile, '.rased-test-profile'))
     expect(isolatedTestHarness(profile, ['--rased-test'])).toBeNull()
+  })
+})
+
+describe('isolated harness TEMP containment', () => {
+  it.skipIf(!symlinksSupported)('accepts a profile whose TEMP path only matches after realpath canonicalisation', () => {
+    // macOS: tmpdir() is /var/folders/... while Electron's --user-data-dir is /private/var/folders/...
+    const real = newProfile()
+    const alias = newLink(real, join(newOutsideDir(), 'rased-test-alias'))
+    const harness = isolatedTestHarness(alias, ['--rased-test'])
+    expect(harness?.suppressWhatsNew).toBe(true)
+  })
+
+  it('rejects a marked profile outside TEMP', () => {
+    const outside = newOutsideDir()
+    writeFileSync(join(outside, '.rased-test-profile'), marker)
+    expect(isolatedTestHarness(outside, ['--rased-test'])).toBeNull()
+  })
+
+  it.skipIf(!symlinksSupported)('rejects a symlink that resolves outside TEMP', () => {
+    const outside = newOutsideDir()
+    writeFileSync(join(outside, '.rased-test-profile'), marker)
+    const alias = newLink(outside, join(newOutsideDir(), 'rased-test-escape'))
+    expect(isolatedTestHarness(alias, ['--rased-test'])).toBeNull()
   })
 })

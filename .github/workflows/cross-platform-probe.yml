@@ -27,13 +27,20 @@ jobs:
           node-version: '24'
           cache: npm
       - if: runner.os == 'Linux'
-        name: Prepare a headless display and Electron's sandbox on the runner
+        name: Prepare a headless display, Electron's sandbox and a keyring on the runner
         # Ubuntu 24.04 blocks unprivileged user namespaces through AppArmor, which
         # Electron's sandbox needs. This only relaxes the disposable CI runner.
+        # Chromium refuses its basic_text password store, so key-saving suites need
+        # a real secret service on the session bus.
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb gnome-keyring dbus-x11
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          # No desktop session on the runner, so tell Chromium which password store to pick.
+          echo "XDG_CURRENT_DESKTOP=GNOME" >> "$GITHUB_ENV"
+          echo -n 'rased-ci' | gnome-keyring-daemon --unlock --components=secrets | tee -a "$GITHUB_ENV"
       - id: install
         continue-on-error: true
         run: npm ci && node scripts/ensure-electron.mjs

@@ -7,7 +7,8 @@ import { relative } from 'node:path'
 const os = process.env.PROBE_OS ?? process.platform
 const steps = ['install', 'typecheck', 'lint', 'unit', 'build', 'suites'].map(name => [name, process.env['PROBE_' + name.toUpperCase()] ?? 'unknown'])
 const read = file => existsSync(file) ? readFileSync(file, 'utf8') : ''
-const tail = (text, lines) => text.split(/\r?\n/).filter(line => line.trim()).slice(-lines).join('\n')
+// Chromium's dbus chatter on headless Linux would otherwise hide the real failure.
+const tail = (text, lines) => text.split(/\r?\n/).filter(line => line.trim() && !line.includes(':ERROR:dbus/')).slice(-lines).join('\n')
 const escape = text => text.slice(-3000).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A')
 const note = (level, title, text) => console.log(`::${level} title=${os} ${title}::${escape(text || '(no output)')}`)
 

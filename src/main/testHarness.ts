@@ -1,12 +1,22 @@
 // Explicit opt-in for integration tests, isolated to a newly marked TEMP profile.
 // No test channel is exposed to renderer; only network/OS boundaries are replaced.
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, realpathSync } from 'node:fs'
 import { EventEmitter } from 'node:events'
 import type { UpdaterPort } from './updates.js'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { isReleaseVersion } from '../shared/whatsNew.js'
 import type { AppSettings } from '../shared/types.js'
+
+/** macOS reports /var/folders/... while Electron resolves --user-data-dir to /private/var/.... */
+function canonicalInsideTemp(profile: string): boolean {
+  try {
+    const rel = relative(realpathSync.native(tmpdir()), realpathSync.native(profile))
+    return !rel.startsWith('..') && !isAbsolute(rel) && rel !== ''
+  } catch {
+    return false
+  }
+}
 
 export function isolatedTestHarness(profile: string, argv: string[]): null | {
   fetchImpl: typeof fetch
@@ -17,7 +27,8 @@ export function isolatedTestHarness(profile: string, argv: string[]): null | {
   initializeSettings: (settings: AppSettings, currentVersion: string, save: (settings: AppSettings) => void) => void
 } {
   const rel = relative(resolve(tmpdir()), resolve(profile))
-  if (!argv.includes('--rased-test') || rel.startsWith('..') || isAbsolute(rel) || rel === '' || !basename(profile).startsWith('rased-test-')) return null
+  const insideTemp = !rel.startsWith('..') && !isAbsolute(rel) && rel !== ''
+  if (!argv.includes('--rased-test') || (!insideTemp && !canonicalInsideTemp(profile)) || !basename(profile).startsWith('rased-test-')) return null
   const marker = join(profile, '.rased-test-profile')
   if (!existsSync(marker) || readFileSync(marker, 'utf8') !== 'RASED isolated integration test') return null
   const searchPerformance = existsSync(join(profile, 'search-performance.json'))
