@@ -196,5 +196,5 @@
     "test:watch": "node scripts/project-watch-e2e.mjs",
     "test:network": "node scripts/network-e2e.mjs"
   },
-  "version": "0.12.1"
+  "version": "0.14.0"
 }
