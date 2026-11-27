@@ -15,6 +15,7 @@ import { release as osRelease } from 'node:os'
 import { UpdateController } from './updates.js'
 import { testUpdater, testUpdaterMode } from './testHarness.js'
 import { createUpdaterPort } from './platform/updater.js'
+import { toTemplateBitmap } from './platform/trayTemplate.js'
 import { version as APP_VERSION } from '../../package.json'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -1623,7 +1624,12 @@ function updateTray(): void {
 
 function createTray(): void {
   const loaded = nativeImage.createFromPath(iconPath('tray.png'))
-  const img = loaded.isEmpty() ? nativeImage.createEmpty() : process.platform === 'darwin' ? loaded.resize({ width: 18, height: 18 }) : loaded
+  let img = loaded.isEmpty() ? nativeImage.createEmpty() : loaded
+  if (!loaded.isEmpty() && process.platform === 'darwin') {
+    const resized = loaded.resize({ width: 36, height: 36 })
+    img = nativeImage.createFromBitmap(toTemplateBitmap(resized.toBitmap()), { width: 36, height: 36, scaleFactor: 2 })
+    img.setTemplateImage(true)
+  }
   tray = new Tray(img)
   tray.on('double-click', () => win?.show())
   updateTray()

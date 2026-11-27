@@ -61,3 +61,112 @@ jobs:
             release/latest.yml
             release/SHA256SUMS.txt
             release/build-verification.json
+  mac:
+    if: github.repository == 'deved234/rased' && github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validate requested version
+        run: node -e "if(require('./package.json').version!==process.env.REQUESTED_VERSION)throw Error('Committed version mismatch')"
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Build configured macOS release with reviewed ingest token
+        run: npm run dist:mac
+        env:
+          RASED_ANALYTICS_BUILD_READY: 'true'
+          RASED_ANALYTICS_BUILD_ENVIRONMENT: production
+          RASED_ANALYTICS_BUILD_TOKEN: ${{ secrets.RASED_POSTHOG_PROJECT_TOKEN }}
+      - name: Verify production configuration, consent isolation and package contents
+        run: node scripts/analytics/verify-package.mjs --platform=mac
+      - run: node scripts/verify-release-files.mjs --platform=mac
+      - run: node scripts/telemetry-e2e.mjs --exe=release/mac-universal/RASED.app/Contents/MacOS/RASED --app=
+      - run: node scripts/e2e-cdp.mjs --exe=release/mac-universal/RASED.app/Contents/MacOS/RASED --app=
+      - run: node scripts/search-e2e.mjs --exe=release/mac-universal/RASED.app/Contents/MacOS/RASED --app=
+      - run: node scripts/data-e2e.mjs --exe=release/mac-universal/RASED.app/Contents/MacOS/RASED --app=
+      - run: node scripts/monitoring-e2e.mjs --exe=release/mac-universal/RASED.app/Contents/MacOS/RASED --app=
+      - name: Upload verified release artifacts (not a public release)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rased-configured-${{ inputs.version }}-mac
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            release/RASED-${{ inputs.version }}-mac.dmg
+            release/RASED-${{ inputs.version }}-mac.dmg.blockmap
+            release/RASED-${{ inputs.version }}-mac.zip
+            release/RASED-${{ inputs.version }}-mac.zip.blockmap
+            release/latest-mac.yml
+            release/SHA256SUMS-mac.txt
+            release/build-verification-mac.json
+  linux:
+    if: github.repository == 'deved234/rased' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validate requested version
+        run: node -e "if(require('./package.json').version!==process.env.REQUESTED_VERSION)throw Error('Committed version mismatch')"
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+      - name: Prepare a headless display, Electron's sandbox and a keyring on the runner
+        # Ubuntu 24.04 blocks unprivileged user namespaces through AppArmor, which
+        # Electron's sandbox needs. This only relaxes the disposable CI runner.
+        # Chromium refuses its basic_text password store, so key-saving suites need
+        # a real secret service on the session bus.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb gnome-keyring dbus-x11
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          # No desktop session on the runner, so tell Chromium which password store to pick.
+          echo "XDG_CURRENT_DESKTOP=GNOME" >> "$GITHUB_ENV"
+          echo -n 'rased-ci' | gnome-keyring-daemon --unlock --components=secrets | tee -a "$GITHUB_ENV"
+      - run: npm ci
+      - run: node scripts/ensure-electron.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Build configured Linux release with reviewed ingest token
+        run: npm run dist:linux
+        env:
+          RASED_ANALYTICS_BUILD_READY: 'true'
+          RASED_ANALYTICS_BUILD_ENVIRONMENT: production
+          RASED_ANALYTICS_BUILD_TOKEN: ${{ secrets.RASED_POSTHOG_PROJECT_TOKEN }}
+      - name: Verify production configuration, consent isolation and package contents
+        run: node scripts/analytics/verify-package.mjs --platform=linux
+      - run: node scripts/verify-release-files.mjs --platform=linux
+      - run: xvfb-run -a node scripts/telemetry-e2e.mjs --exe=release/linux-unpacked/rased --app=
+      - run: xvfb-run -a node scripts/e2e-cdp.mjs --exe=release/linux-unpacked/rased --app=
+      - run: xvfb-run -a node scripts/search-e2e.mjs --exe=release/linux-unpacked/rased --app=
+      - run: xvfb-run -a node scripts/data-e2e.mjs --exe=release/linux-unpacked/rased --app=
+      - run: xvfb-run -a node scripts/monitoring-e2e.mjs --exe=release/linux-unpacked/rased --app=
+      - name: Upload verified release artifacts (not a public release)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rased-configured-${{ inputs.version }}-linux
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            release/RASED-${{ inputs.version }}-linux-x86_64.AppImage
+            release/RASED-${{ inputs.version }}-linux-x86_64.AppImage.blockmap
+            release/RASED-${{ inputs.version }}-linux-amd64.deb
+            release/latest-linux.yml
+            release/SHA256SUMS-linux.txt
+            release/build-verification-linux.json
