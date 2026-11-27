@@ -1,91 +1,116 @@
-# تثبيت راصد على macOS
+# تثبيت راصد على الماك
 
-راصد متاح على macOS بنسخة تجريبية (Beta) تدعم معالجات Intel وApple Silicon في ملف تثبيت واحد. لو جرّبته، قولنا عمل معاك إزاي في [جروب راصد](https://t.me/rased_chat).
+نسخة الماك **تجريبية**: تعمل على كل أجهزة الماك الحديثة والقديمة (Intel وApple Silicon). لو قابلتك أي مشكلة أو جرّبتها ونجحت، قولنا في [جروب راصد على تليجرام](https://t.me/rased_chat).
 
-## الخطوات
+## التثبيت (مرة واحدة فقط)
 
-1. **حمّل المثبّت**
-   - من [صفحة آخر إصدار](https://github.com/deved234/rased/releases/latest) حمّل ملف `RASED-<version>-mac.dmg` (أو `.zip`).
+1. **حمّل البرنامج** من هذا الرابط:
+   **[⬇️ تحميل راصد للماك](https://github.com/deved234/rased/releases/download/v0.14.0/RASED-0.14.0-mac.dmg)**
+2. **افتح الملف** الذي نزل، وستجده غالبًا في مجلد **Downloads** (التنزيلات).
+3. ستظهر نافذة فيها أيقونة **راصد** وبجانبها مجلد **Applications**. **اسحب أيقونة راصد وأفلتها فوق مجلد Applications.**
+4. افتح **Applications** واضغط مرتين على **راصد**.
 
-2. **التثبيت**
-   - افتح ملف `.dmg` ثم اسحب **RASED** إلى مجلد **Applications**.
+## أول مرة تفتح راصد: الماك سيرفض فتحه، وهذا طبيعي
 
-3. **أول تشغيل (Gatekeeper)**
-   - النسخة الحالية غير موقّعة notarization من Apple (توقيع ad-hoc تجريبي)، لذلك قد يمنعها Gatekeeper عند أول تشغيل.
-   - على **macOS 15 أو أحدث**: افتح **System Settings → Privacy & Security**، ثم اضغط **Open Anyway** بجانب RASED، وأكّد الفتح.
-   - على إصدارات macOS الأقدم: يمكنك أيضًا النقر بزر الفأرة الأيمن على RASED ثم اختيار **Open**.
+الماك يمنع أي برنامج لم يُسجَّل عند Apple، فستظهر رسالة تقول إنه لا يستطيع التأكد من البرنامج. اضغط **Done** أو **OK**، ثم:
 
-4. **الإشعارات**
-   - يطلب macOS إذن الإشعارات عند أول تنبيه، أو يمكنك تفعيل راصد يدويًا من **System Settings → Notifications**.
-   - يوجد زر في إعدادات راصد يفتح إعدادات إشعارات النظام.
+1. افتح **System Settings** (إعدادات النظام) من أيقونة التفاحة  أعلى الشاشة.
+2. اختر **Privacy & Security** (الخصوصية والأمان) من القائمة الجانبية.
+3. انزل لأسفل الصفحة، وستجد سطرًا عن **RASED**. اضغط **Open Anyway** (افتح على أي حال).
+4. اكتب كلمة سر جهازك، ثم اضغط **Open**.
 
-5. **سلوك التطبيق**
-   - يظهر راصد في شريط القوائم (menu bar) وفي Dock.
-   - إغلاق النافذة مع اختيار «إبقاء التشغيل في الخلفية» يبقي راصد يعمل؛ الضغط على أيقونة Dock يعيد فتح النافذة.
+هذا يحدث **مرة واحدة فقط**. بعد ذلك يفتح راصد عاديًا.
 
-6. **تخزين مفاتيح AI**
-   - تُحفظ مفاتيح المزودين في **Keychain** على macOS. قد يطلب macOS مرة واحدة السماح لراصد باستخدامها.
-   - تبقى المفاتيح خارج قاعدة البيانات والتصدير والسجلات.
+## التنبيهات
 
-7. **التحديثات**
-   - يتحقق راصد من GitHub عند التشغيل وكل 6 ساعات، ولا يحمّل التحديث إلا بطلبك.
-   - على macOS: يحمّل راصد التحديث داخل التطبيق ويتحقق من بصمته، ثم زر **فتح المثبّت** يغلق راصد ويفتح ملف dmg؛ اسحب RASED إلى Applications لاستبدال النسخة القديمة.
+عند أول تنبيه سيسألك الماك: «هل تسمح لراصد بإرسال الإشعارات؟». اضغط **Allow** (سماح).
 
-8. **مجلد البيانات**
-   - `~/Library/Application Support/RASED`
+لو ضغطت «لا» بالخطأ: افتح راصد ← **الإعدادات ← التنبيهات** واضغط زر **«إعدادات الإشعارات في macOS»**، ثم فعّل راصد.
 
-## غير متاح على macOS في 0.14.0
+## التحديث
 
-- **التقديم السريع** وإضافة Chrome (متاح على Windows حاليًا).
-- اختصار إعدادات **Focus Assist** الخاص بـ Windows.
+راصد يخبرك عندما يصدر تحديث جديد:
+1. اضغط **«تحميل التحديث»**.
+2. بعد التحميل اضغط **«فتح ملف التثبيت»**. سيُغلق راصد ويفتح الملف الجديد.
+3. **اسحب أيقونة راصد إلى مجلد Applications** كما فعلت أول مرة. لو سألك الماك عن استبدال النسخة القديمة، اختر **Replace** (استبدال).
 
-## الإبلاغ عن مشكلة
+بياناتك وملاحظاتك تبقى كما هي.
 
-إذا واجهت مشكلة في تثبيت أو تشغيل راصد على macOS، أبلغنا في [مجموعة تليجرام](https://t.me/rased_chat) مع ذكر إصدار macOS ونوع المعالج وخطوات إعادة المشكلة.
+## ما الذي لا يعمل على الماك حاليًا؟
+
+**التقديم السريع** عن طريق إضافة Chrome متاح على Windows فقط حاليًا. كل شيء آخر يعمل: الرصد، والتنبيهات، والبحث، ومساعد العروض، ومتابعة المشاريع، والنسخ الاحتياطي.
+
+## أسئلة شائعة
+
+- **راصد مختفي ولا أجد نافذته؟** اضغط أيقونته في شريط **Dock** أسفل الشاشة، أو أيقونته الصغيرة في الشريط العلوي بجانب الساعة.
+- **الماك يطلب السماح لراصد باستخدام Keychain؟** هذا عند حفظ مفتاح مساعد العروض. اضغط **Always Allow** (السماح دائمًا).
+- **أريد إغلاق راصد تمامًا؟** من أيقونته في الشريط العلوي اختر **خروج**.
+
+---
+
+### تفاصيل تقنية (للمهتمين فقط)
+
+- **حالة التوقيع:** النسخة موقّعة توقيعًا مؤقتًا (ad-hoc)، وغير موثّقة (notarized) من Apple.
+- **ملف zip:** موجود في صفحة الإصدار للتحديثات.
+- **مكان البيانات:** `~/Library/Application Support/RASED`.
+- **مفاتيح مساعد العروض:** تُحفظ في Keychain، خارج قاعدة البيانات والتصدير والسجلات.
+- **التحقق من سلامة الملف:** `shasum -a 256 RASED-0.14.0-mac.dmg`، وقارن الناتج بملف `SHA256SUMS.txt` في [صفحة الإصدار](https://github.com/deved234/rased/releases/tag/v0.14.0).
 
 ---
 
 ## English
 
-RASED is available on macOS as a beta build with a universal installer for Intel and Apple Silicon. If you try it, tell us how it went in the [RASED group](https://t.me/rased_chat).
+# Installing RASED on a Mac
 
-## Steps
+The Mac version is a **beta**. It runs on both newer and older Macs (Apple Silicon and Intel). If something goes wrong, or if it works for you, tell us in the [RASED Telegram group](https://t.me/rased_chat).
 
-1. **Download the installer**
-   - From the [latest release page](https://github.com/deved234/rased/releases/latest), download `RASED-<version>-mac.dmg` (or `.zip`).
+## Install (only once)
 
-2. **Install**
-   - Open the `.dmg` and drag **RASED** into **Applications**.
+1. **Download RASED:** **[⬇️ Download RASED for Mac](https://github.com/deved234/rased/releases/download/v0.14.0/RASED-0.14.0-mac.dmg)**
+2. **Open the downloaded file.** You will usually find it in your **Downloads** folder.
+3. A window shows the **RASED** icon next to an **Applications** folder. **Drag the RASED icon onto the Applications folder.**
+4. Open **Applications** and double-click **RASED**.
 
-3. **First launch (Gatekeeper)**
-   - The current build is an unsigned beta (ad-hoc signed, not notarized), so Gatekeeper may block the first launch.
-   - On **macOS 15 or newer**: open **System Settings → Privacy & Security**, click **Open Anyway** for RASED, then confirm.
-   - On older macOS versions: you can also right-click RASED and choose **Open**.
+## The first time you open RASED, your Mac will refuse. This is normal
 
-4. **Notifications**
-   - macOS asks for notification permission on the first notification, or you can enable RASED in **System Settings → Notifications**.
-   - RASED has a button in Settings that opens the system notification settings.
+Macs block apps that are not registered with Apple, so you will see a message saying the Mac cannot verify the app. Click **Done** or **OK**, then:
 
-5. **App behavior**
-   - RASED lives in the menu bar and the Dock.
-   - Closing the window while “keep running in background” is selected keeps RASED running; clicking the Dock icon reopens it.
+1. Open **System Settings** from the Apple menu  at the top of the screen.
+2. Choose **Privacy & Security** in the sidebar.
+3. Scroll to the bottom. Next to the line about **RASED**, click **Open Anyway**.
+4. Enter your Mac password, then click **Open**.
 
-6. **AI key storage**
-   - Provider keys are stored in **Keychain** on macOS. macOS may ask once to allow RASED to use it.
-   - Keys remain outside the database, exports and logs.
+This happens **only once**. After that, RASED opens normally.
 
-7. **Updates**
-   - RASED checks GitHub at startup and every 6 hours, and downloads only when you ask.
-   - On macOS: RASED downloads the update inside the app and verifies its checksum, then **Open installer** closes RASED and opens the dmg; drag RASED into Applications to replace the old version.
+## Notifications
 
-8. **Data folder**
-   - `~/Library/Application Support/RASED`
+At the first alert, your Mac asks whether RASED may send notifications. Click **Allow**.
 
-## Not available on macOS in 0.14.0
+If you clicked "Don't Allow" by mistake: in RASED, open **Settings → Notifications**, click **"macOS notification settings"** and turn RASED on.
 
-- **Quick Apply** and the Chrome extension (currently available on Windows only).
-- The Windows **Focus Assist** settings shortcut.
+## Updating
 
-## Reporting a problem
+RASED tells you when an update is available:
+1. Click **"Download update"**.
+2. When it finishes, click **"Open installer"**. RASED closes and the new file opens.
+3. **Drag the RASED icon onto Applications** as you did the first time. If your Mac asks whether to replace the old version, choose **Replace**.
 
-If you hit an installation or runtime issue on macOS, report it in the [Telegram group](https://t.me/rased_chat) with your macOS version, processor type and steps to reproduce.
+Your data and notes stay as they are.
+
+## What does not work on a Mac yet?
+
+**Quick Apply** through the Chrome extension is Windows-only for now. Everything else works: monitoring, alerts, search, the Proposal Assistant, project watch and backups.
+
+## Common questions
+
+- **RASED disappeared and I can't find its window?** Click its icon in the **Dock** at the bottom of the screen, or its small icon in the top bar next to the clock.
+- **My Mac asks to let RASED use the Keychain?** This happens when you save a Proposal Assistant key. Click **Always Allow**.
+- **How do I quit RASED completely?** Click its icon in the top bar and choose **Quit**.
+
+### Technical details (optional)
+
+- **Signing:** the build is ad-hoc signed and not notarized by Apple.
+- **zip file:** a `.zip` is also on the release page; it is used for updates.
+- **Data folder:** `~/Library/Application Support/RASED`.
+- **Proposal Assistant keys:** stored in the Keychain, outside the database, exports and logs.
+- **Checking the file:** run `shasum -a 256 RASED-0.14.0-mac.dmg` and compare the result with `SHA256SUMS.txt` on the [release page](https://github.com/deved234/rased/releases/tag/v0.14.0).

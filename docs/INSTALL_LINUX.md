@@ -1,115 +1,137 @@
 # تثبيت راصد على Linux
 
-راصد متاح على Linux بنسخة **تجريبية (Beta)** بصيغتي AppImage وdeb (x64). اختباراته الأوتوماتيكية بتشتغل على Ubuntu 24.04، بس لسه ما اتجرّبش يدويًا على أجهزة كتير. لو جرّبته، قولنا عمل معاك إزاي في [جروب راصد](https://t.me/rased_chat).
+نسخة Linux **تجريبية**، وتعمل على أجهزة الكمبيوتر العادية (64-bit). لو قابلتك أي مشكلة أو جرّبتها ونجحت، قولنا في [جروب راصد على تليجرام](https://t.me/rased_chat).
 
-## الخطوات
+## أي ملف أحمّل؟
 
-1. **حمّل الحزمة المناسبة**
-   - من [صفحة آخر إصدار](https://github.com/deved234/rased/releases/latest) حمّل أحد الملفين:
-     - `RASED-<version>-linux-x86_64.AppImage`
-     - `RASED-<version>-linux-amd64.deb`
+- **تستخدم Ubuntu أو Linux Mint أو Debian أو Zorin؟** (الأكثر انتشارًا) ← حمّل **ملف deb**:
+  **[⬇️ تحميل راصد (deb)](https://github.com/deved234/rased/releases/download/v0.14.0/RASED-0.14.0-linux-amd64.deb)**
+- **تستخدم نظامًا آخر مثل Fedora؟** ← حمّل **ملف AppImage**:
+  **[⬇️ تحميل راصد (AppImage)](https://github.com/deved234/rased/releases/download/v0.14.0/RASED-0.14.0-linux-x86_64.AppImage)**
 
-2. **التثبيت والتشغيل**
+**لو مش متأكد:** جرّب ملف deb أولًا.
 
-   **AppImage:**
-   - اجعل الملف قابلًا للتنفيذ ثم شغّله:
-     ```bash
-     chmod +x RASED-<version>-linux-x86_64.AppImage
-     ./RASED-<version>-linux-x86_64.AppImage
-     ```
-   - على Ubuntu 22.04 أو أحدث قد تحتاج `libfuse2`. على Ubuntu 24.04 اسم الحزمة هو `libfuse2t64`:
-     ```bash
-     sudo apt install libfuse2t64
-     ```
+## التثبيت بملف deb (Ubuntu وما يشبهه)
 
-   **deb (Ubuntu/Debian):**
-   ```bash
-   sudo apt install ./RASED-<version>-linux-amd64.deb
-   ```
+1. حمّل ملف **deb** من الرابط فوق.
+2. افتح مجلد **Downloads** (التنزيلات)، واضغط بالزر الأيمن على الملف، واختر **Open With ← App Center** (أو **Software Install**).
+3. اضغط **Install** (تثبيت)، واكتب كلمة سر جهازك.
+4. افتح قائمة البرامج، واكتب **RASED**، واضغط عليه.
 
-3. **الإشعارات وأيقونة Tray**
-   - إشعارات النظام تعمل حسب بيئة سطح المكتب.
-   - بعض إعدادات GNOME لا تعرض أيقونة Tray بدون امتداد AppIndicator. في هذه الحالة، اختيار «إبقاء التشغيل في الخلفية» عند الإغلاق يصغّر النافذة بدل إخفائها.
+**لو لم تنجح الخطوة 2:** افتح **Terminal** (اضغط `Ctrl` + `Alt` + `T` معًا)، والصق هذا السطر ثم اضغط Enter واكتب كلمة السر:
 
-4. **تخزين مفاتيح AI (Keyring)**
-   - حفظ مفاتيح AI يحتاج خدمة أسرار نظام مثل **GNOME Keyring** أو **KWallet**.
-   - إذا لم تتوفر خدمة أسرار، يرفض راصد حفظ المفاتيح ويعرض رسالة توضيحية.
+```
+sudo apt install ~/Downloads/RASED-0.14.0-linux-amd64.deb
+```
 
-5. **التشغيل مع بدء الجلسة**
-   - خيار «التشغيل مع بدء تشغيل الجهاز» يكتب ملف `~/.config/autostart/rased.desktop`.
+## التثبيت بملف AppImage
 
-6. **التحديثات**
-   - يتحقق راصد من GitHub عند التشغيل وكل 6 ساعات، ولا يحمّل التحديث إلا بطلبك.
-   - **AppImage:** نفس تحديث التطبيق الداخلي الكامل (تحميل ثم إعادة تشغيل وتثبيت).
-   - **deb:** يكتفي راصد بالتنبيه، وزر «فتح صفحة التحميل» يفتح صفحة إصدارات GitHub؛ ثبّت ملف `.deb` الجديد بنفسك.
+1. حمّل ملف **AppImage** من الرابط فوق.
+2. اضغط بالزر الأيمن على الملف ← **Properties** (الخصائص) ← **Permissions**، وفعّل خيار **Allow executing file as program** (السماح بتشغيله كبرنامج).
+3. اضغط على الملف مرتين لفتحه.
 
-7. **مجلد البيانات**
-   - `~/.config/RASED`
+**لو لم يفتح على Ubuntu 22.04 أو أحدث:** افتح **Terminal** (`Ctrl` + `Alt` + `T`) والصق هذا السطر، ثم جرّب مرة أخرى:
 
-## غير متاح على Linux في 0.14.0
+```
+sudo apt install libfuse2t64
+```
 
-- **التقديم السريع** وإضافة Chrome (متاح على Windows حاليًا).
-- اختصار إعدادات **Focus Assist** الخاص بـ Windows.
+(على Ubuntu 22.04 اكتب `libfuse2` بدل `libfuse2t64`.)
 
-## الإبلاغ عن مشكلة
+## التحديث
 
-إذا واجهت مشكلة في تثبيت أو تشغيل راصد على Linux، أبلغنا في [مجموعة تليجرام](https://t.me/rased_chat) مع ذكر التوزيعة وإصدارها وبيئة سطح المكتب وخطوات إعادة المشكلة.
+راصد يخبرك عندما يصدر تحديث جديد:
+- **لو ثبّته بملف AppImage:** اضغط **«تحميل التحديث»** ثم **«إعادة التشغيل والتحديث»**. وهذا كل شيء.
+- **لو ثبّته بملف deb:** اضغط **«فتح صفحة التحميل»**، ثم حمّل ملف deb الجديد وثبّته بنفس خطوات التثبيت.
+
+بياناتك وملاحظاتك تبقى كما هي.
+
+## ما الذي لا يعمل على Linux حاليًا؟
+
+**التقديم السريع** عن طريق إضافة Chrome متاح على Windows فقط حاليًا. كل شيء آخر يعمل: الرصد، والتنبيهات، والبحث، ومساعد العروض، ومتابعة المشاريع، والنسخ الاحتياطي.
+
+## أسئلة شائعة
+
+- **أغلقت النافذة ولم يختفِ البرنامج؟** هذا مقصود: راصد يبقى يعمل ليرصد المشاريع، ونافذته تُصغَّر في شريط البرامج. للإغلاق التام اختر **خروج** من أيقونة راصد، أو غيّر هذا من **الإعدادات**.
+- **رسالة تقول إن حفظ مفتاح مساعد العروض يحتاج «خزنة مفاتيح النظام»؟** نظامك لا يحتوي خزنة مفاتيح مفعّلة. على Ubuntu العادي تكون موجودة. ولو ظهرت الرسالة، اسأل في الجروب ونساعدك.
+
+---
+
+### تفاصيل تقنية (للمهتمين فقط)
+
+- **الاختبارات:** تعمل أوتوماتيكيًا على Ubuntu 24.04. يُفتح ملف AppImage وحزمة deb المثبّتة مع قيد AppArmor الافتراضي.
+- **أيقونة Tray:** بعض إعدادات GNOME لا تعرضها بدون امتداد AppIndicator، ولذلك الإغلاق مع «الاستمرار في الخلفية» يصغّر النافذة بدل إخفائها.
+- **مفاتيح مساعد العروض:** تُحفظ عبر خدمة أسرار النظام (GNOME Keyring أو KWallet، عن طريق safeStorage في Electron). بدونها يرفض راصد الحفظ.
+- **التشغيل مع الجهاز:** يكتب الملف `~/.config/autostart/rased.desktop`.
+- **مكان البيانات:** `~/.config/RASED`.
+- **التحقق من سلامة الملف:** `sha256sum <file>`، وقارن الناتج بملف `SHA256SUMS.txt` في [صفحة الإصدار](https://github.com/deved234/rased/releases/tag/v0.14.0).
 
 ---
 
 ## English
 
-RASED is available on Linux as a **beta** in x64 AppImage and deb packages. Its automated tests run on Ubuntu 24.04, but it has not yet been tried by hand on many machines. If you try it, tell us how it went in the [RASED group](https://t.me/rased_chat).
+# Installing RASED on Linux
 
-## Steps
+The Linux version is a **beta** for regular 64-bit computers. If something goes wrong, or if it works for you, tell us in the [RASED Telegram group](https://t.me/rased_chat).
 
-1. **Download the right package**
-   - From the [latest release page](https://github.com/deved234/rased/releases/latest), download one of:
-     - `RASED-<version>-linux-x86_64.AppImage`
-     - `RASED-<version>-linux-amd64.deb`
+## Which file should I download?
 
-2. **Install and run**
+- **Using Ubuntu, Linux Mint, Debian or Zorin?** (the most common) → download the **deb file**:
+  **[⬇️ Download RASED (deb)](https://github.com/deved234/rased/releases/download/v0.14.0/RASED-0.14.0-linux-amd64.deb)**
+- **Using another system such as Fedora?** → download the **AppImage**:
+  **[⬇️ Download RASED (AppImage)](https://github.com/deved234/rased/releases/download/v0.14.0/RASED-0.14.0-linux-x86_64.AppImage)**
 
-   **AppImage:**
-   - Make it executable, then run it:
-     ```bash
-     chmod +x RASED-<version>-linux-x86_64.AppImage
-     ./RASED-<version>-linux-x86_64.AppImage
-     ```
-   - Ubuntu 22.04+ may need `libfuse2`. On Ubuntu 24.04 the package name is `libfuse2t64`:
-     ```bash
-     sudo apt install libfuse2t64
-     ```
+**Not sure?** Try the deb file first.
 
-   **deb (Ubuntu/Debian):**
-   ```bash
-   sudo apt install ./RASED-<version>-linux-amd64.deb
-   ```
+## Installing the deb file (Ubuntu and similar)
 
-3. **Notifications and tray icon**
-   - System notifications depend on your desktop environment.
-   - Some GNOME setups do not show tray icons without the AppIndicator extension. In that case, closing with “keep running in background” minimizes the window instead of hiding it.
+1. Download the **deb** file above.
+2. Open your **Downloads** folder, right-click the file and choose **Open With → App Center** (or **Software Install**).
+3. Click **Install** and enter your password.
+4. Open your apps menu, type **RASED** and click it.
 
-4. **AI key storage (keyring)**
-   - Saving AI keys needs a system secret service such as **GNOME Keyring** or **KWallet**.
-   - Without one, RASED refuses to save keys and shows a clear message.
+**If step 2 does not work:** open **Terminal** (press `Ctrl` + `Alt` + `T` together), paste this line, press Enter and type your password:
 
-5. **Run at startup**
-   - The “Run when you sign in to your computer” option writes `~/.config/autostart/rased.desktop`.
+```
+sudo apt install ~/Downloads/RASED-0.14.0-linux-amd64.deb
+```
 
-6. **Updates**
-   - RASED checks GitHub at startup and every 6 hours, and downloads only when you ask.
-   - **AppImage:** the same full in-app update (download, then restart and install).
-   - **deb:** RASED notifies only; “Open download page” opens the GitHub releases page so you can install the new `.deb` yourself.
+## Installing the AppImage
 
-7. **Data folder**
-   - `~/.config/RASED`
+1. Download the **AppImage** above.
+2. Right-click the file → **Properties** → **Permissions**, and turn on **Allow executing file as program**.
+3. Double-click the file to open it.
 
-## Not available on Linux in 0.14.0
+**If it does not open on Ubuntu 22.04 or newer:** open **Terminal** (`Ctrl` + `Alt` + `T`), paste this line, then try again:
 
-- **Quick Apply** and the Chrome extension (currently available on Windows only).
-- The Windows **Focus Assist** settings shortcut.
+```
+sudo apt install libfuse2t64
+```
 
-## Reporting a problem
+(On Ubuntu 22.04, use `libfuse2` instead of `libfuse2t64`.)
 
-If you hit an installation or runtime issue on Linux, report it in the [Telegram group](https://t.me/rased_chat) with your distro/version, desktop environment and steps to reproduce.
+## Updating
+
+RASED tells you when an update is available:
+- **If you installed the AppImage:** click **"Download update"**, then **"Restart and update"**. That's all.
+- **If you installed the deb file:** click **"Open download page"**, download the new deb file and install it the same way.
+
+Your data and notes stay as they are.
+
+## What does not work on Linux yet?
+
+**Quick Apply** through the Chrome extension is Windows-only for now. Everything else works: monitoring, alerts, search, the Proposal Assistant, project watch and backups.
+
+## Common questions
+
+- **I closed the window but RASED is still running?** That is on purpose: RASED keeps watching for projects, and its window is minimized to your taskbar. To quit completely, choose **Quit** from the RASED icon, or change this in **Settings**.
+- **A message says saving a Proposal Assistant key needs the "system keyring"?** Your system has no keyring turned on. Regular Ubuntu has one. If you see this message, ask in the group and we will help.
+
+### Technical details (optional)
+
+- **Tests:** run automatically on Ubuntu 24.04. The AppImage and the installed deb are both launched under the default AppArmor restriction.
+- **Tray icon:** some GNOME setups hide tray icons without the AppIndicator extension. That is why closing with "keep running" minimizes the window instead of hiding it.
+- **Proposal Assistant keys:** stored through the system secret service (GNOME Keyring or KWallet, via Electron safeStorage). Without one, RASED refuses to save keys.
+- **Run at startup:** writes `~/.config/autostart/rased.desktop`.
+- **Data folder:** `~/.config/RASED`.
+- **Checking the file:** run `sha256sum <file>` and compare the result with `SHA256SUMS.txt` on the [release page](https://github.com/deved234/rased/releases/tag/v0.14.0).
