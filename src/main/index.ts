@@ -154,6 +154,8 @@ import { notificationActivationArguments, notificationScheme, parseNotificationA
 import { claimNotificationActivation, cleanupNotificationActivations, issueNotificationActivation, watchActivationTarget, type NotificationOrigin } from '../storage/notificationActivations.js'
 import { getProposalProfile, saveProposalProfile, saveProfileSet } from './proposals.js'
 import { AiService } from './ai/service.js'
+import { keyStorageAvailable } from './ai/keyStore.js'
+import { applyAutoStart as applyPlatformAutoStart } from './platform/autostart.js'
 import { QuickAssistant } from './extension/quickAssistant.js'
 import { loadAppSettings } from '../storage/appSettings.js'
 import { isAiProvider, sanitizeSelection } from '../shared/ai.js'
@@ -436,6 +438,7 @@ function publishSettings(s: AppSettings): void {
   applyAutoStart()
   broadcast(IPC.settingsChanged, s)
   updateTray()
+  if (previous.language !== s.language) updateAppMenu()
 }
 
 function handleWatchSourceDisabled(source: WatchSource): void {
@@ -485,12 +488,15 @@ function applyMonitoringSettings(previous: AppSettings, next: AppSettings): void
 }
 
 function applyAutoStart(): void {
-  if (testHarness) return
-  try {
-    app.setLoginItemSettings({ openAtLogin: settings.runAtStartup })
-  } catch {
-    /* best effort; surfaced in README as manual fallback */
-  }
+  applyPlatformAutoStart({
+    platform: process.platform,
+    packaged: IS_PACKAGED,
+    testHarness: !!testHarness,
+    openAtLogin: settings.runAtStartup,
+    loginItem: app,
+    env: process.env,
+    paths: { execPath: process.execPath, homeDir: app.getPath('home') }
+  })
 }
 
 // ---------------------------------------------------------------- health
@@ -1452,8 +1458,15 @@ function applyCspPolicy(session: Session): void {
   })
 }
 
+function windowIcon(): string | undefined {
+  if (process.platform === 'win32') return iconPath('icon.ico')
+  if (process.platform === 'linux') return iconPath('icon.png')
+  return undefined
+}
+
 function attachWindowChrome(window: BrowserWindow): void {
-  window.setIcon(iconPath('icon.ico'))
+  const icon = windowIcon()
+  if (icon) window.setIcon(icon)
   if (process.platform === 'win32') window.setAppDetails(taskbarDetails(IS_PACKAGED, process.execPath, join(__dirname, 'index.js'), iconPath('icon.ico')))
   const emit = (): void => { if (!window.isDestroyed()) window.webContents.send(IPC.windowState, { maximized: window.isMaximized() }) }
   window.on('maximize', emit)
@@ -1469,6 +1482,7 @@ function guardNavigation(window: BrowserWindow): void {
 }
 
 function createWindow(): void {
+  const icon = windowIcon()
   win = new BrowserWindow({
     width: 1220,
     height: 820,
@@ -1476,7 +1490,7 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#14171c',
     autoHideMenuBar: true,
-    icon: iconPath('icon.ico'),
+    ...(icon ? { icon } : {}),
     frame: false,
     show: false,
     webPreferences: {
@@ -1538,6 +1552,41 @@ function trayLabel(): string {
   return `RASED — ${state}`
 }
 
+function requestQuit(): void {
+  if (win && !win.isDestroyed()) { win.show(); win.webContents.send(IPC.requestClose, { quit: true }) }
+  else doQuit()
+}
+
+function updateAppMenu(): void {
+  if (process.platform !== 'darwin') return
+  const ar = settings.language === 'ar'
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { label: ar ? 'خروج' : 'Quit', accelerator: 'CmdOrCtrl+Q', click: requestQuit }
+        ]
+      },
+      { role: 'editMenu' },
+      {
+        label: ar ? 'عرض' : 'View',
+        submenu: [
+          { role: 'togglefullscreen' },
+          ...(!IS_PACKAGED ? [{ role: 'toggleDevTools' as const }] : [])
+        ]
+      },
+      { role: 'windowMenu' }
+    ])
+  )
+}
+
 function updateTray(): void {
   if (!tray) return
   tray.setToolTip(trayLabel())
@@ -1567,14 +1616,15 @@ function updateTray(): void {
       },
       { label: ar ? 'الإعدادات' : 'Settings', click: () => { win?.show(); win?.webContents.send(IPC.openSettings) } },
       { type: 'separator' },
-      { label: ar ? 'خروج' : 'Quit', click: () => { if (win && !win.isDestroyed()) { win.show(); win.webContents.send(IPC.requestClose, { quit: true }) } else doQuit() } }
+      { label: ar ? 'خروج' : 'Quit', click: requestQuit }
     ])
   )
 }
 
 function createTray(): void {
-  const img = nativeImage.createFromPath(iconPath('tray.png'))
-  tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img)
+  const loaded = nativeImage.createFromPath(iconPath('tray.png'))
+  const img = loaded.isEmpty() ? nativeImage.createEmpty() : process.platform === 'darwin' ? loaded.resize({ width: 18, height: 18 }) : loaded
+  tray = new Tray(img)
   tray.on('double-click', () => win?.show())
   updateTray()
 }
@@ -1632,6 +1682,7 @@ function openCompact(): void {
     return
   }
   const saved = saneCompactBounds()
+  const icon = windowIcon()
   compactWin = new BrowserWindow({
     width: saved?.width ?? 380,
     height: saved?.height ?? 560,
@@ -1642,7 +1693,7 @@ function openCompact(): void {
     backgroundColor: settings.ui.theme === 'light' ? '#faf7f0' : '#14171c',
     autoHideMenuBar: true,
     alwaysOnTop: settings.ui.compactAlwaysOnTop,
-    icon: iconPath('icon.ico'),
+    ...(icon ? { icon } : {}),
     frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -1933,7 +1984,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.saveAiKey, (event, v) => {
     const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.saveKey(v.provider, v?.key))
     if (ok) quickAssistant?.cancel()
-    return { ok, error: ok ? undefined : 'key-save-failed' }
+    return { ok, error: ok ? undefined : process.platform === 'linux' && !keyStorageAvailable() ? 'keyring-unavailable' : 'key-save-failed' }
   })
   ipcMain.handle(IPC.deleteAiKey, (event, v) => {
     const ok = !!(mainSender(event) && isAiProvider(v?.provider) && aiService?.deleteKey(v.provider))
@@ -2832,6 +2883,7 @@ async function boot(): Promise<void> {
   }
   registerIpc()
   kaf.start(!!testHarness)
+  updateAppMenu()
   createWindow()
   createTray()
   analyticsServicesReady = true

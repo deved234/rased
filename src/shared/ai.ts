@@ -58,6 +58,7 @@ export function aiErrorText(code: string | undefined, ar: boolean, retryAfterSec
     'key-missing': ['احفظ مفتاح الموفر من الإعدادات أولًا.', 'Save this provider’s API key in Settings first.'],
     'key-unreadable': ['تعذر فك تشفير المفتاح. أعد حفظه على هذا الجهاز.', 'Cannot decrypt the key. Save it again on this device.'],
     'key-save-failed': ['تعذر حفظ المفتاح أو حذفه بأمان.', 'Could not safely save or delete the key.'],
+    'keyring-unavailable': ['يتطلب حفظ المفتاح خزنة مفاتيح النظام (GNOME Keyring أو KWallet). فعّلها ثم أعد المحاولة.', 'Saving keys needs the system keyring (GNOME Keyring or KWallet). Enable it and try again.'],
     'auth-rejected': ['الموفر رفض مفتاح المصادقة.', 'The provider rejected authentication.'],
     'access-denied': ['حسابك لا يملك إذنًا لهذا الطلب. راجع صلاحياته والمنطقة.', 'Access denied. Check account permissions and region.'],
     'model-unavailable': ['الموديل غير متاح. راجع معرفه وإتاحته لحسابك.', 'Model unavailable. Check its ID and account access.'],
